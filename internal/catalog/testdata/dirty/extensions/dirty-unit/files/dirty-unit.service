@@ -1,0 +1,10 @@
+[Unit]
+Description=грязная фикстура dirty-unit
+# ExecStartPre=/usr/bin/cream run dirty-unit render — в комментарии не считается
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/bin/cream run --lock-timeout 20s dirty-unit render
+ExecStart=/usr/bin/cream run -q dirty-unit status
+ExecReload=/usr/bin/cream run other-ext render
+ExecStop=/usr/bin/cream run dirty-unit render

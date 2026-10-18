@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+cream set dirty-set LEVEL=1
