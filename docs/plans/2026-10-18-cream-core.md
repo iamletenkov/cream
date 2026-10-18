@@ -19,7 +19,7 @@
 
 - [ ] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
 
-- [ ] Task 5: Домен настроек (`config`)
+- [x] Task 5: Домен настроек (`config`)
 
 - [ ] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
 
