@@ -23,7 +23,8 @@ type Command struct {
 	Flags func(*flag.FlagSet)
 	Run   func(*Context, []string) (result any, err error)
 	// PermuteUntil > 0 stops flag permutation after that many positionals:
-	// for `run <ext> <action> args…` it is 2 (§7.2).
+	// for `run <ext> <action> args…` it is 1, cream flags only before <ext>
+	// (§7.2, ruling Р13).
 	PermuteUntil int
 }
 
