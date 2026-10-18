@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -22,10 +21,14 @@ import (
 //	L <path>\0<link target>\n
 //	D <path>\n
 //
+// The encoding is unambiguous because neither a path nor a link target may
+// contain NUL (the kernel forbids it) or a newline (refused here): every
+// record is exactly one line and its fields are split by NUL.
+//
 // The file mode is reduced to the execute bit; owners, times and other
-// permission bits do not count. Links are recorded, not followed. root must
-// be a directory, not a link; special files and names with a newline are
-// refused.
+// permission bits do not count. Links are recorded, not followed. The tree
+// is read through os.Root, so a link swapped in mid-walk cannot lead outside.
+// root must be a directory, not a link; special files are refused.
 func TreeDigest(root string) (string, error) {
 	st, err := os.Lstat(root)
 	if err != nil {
@@ -34,24 +37,23 @@ func TreeDigest(root string) (string, error) {
 	if !st.IsDir() {
 		return "", fmt.Errorf("отпечаток %s: не каталог", root)
 	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return "", fmt.Errorf("отпечаток %s: %w", root, err)
+	}
+	defer func() { _ = r.Close() }()
 	type entry struct {
-		rel  string
-		full string
-		typ  fs.FileMode
+		rel string
+		typ fs.FileMode
 	}
 	var entries []entry
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, werr error) error {
+	err = fs.WalkDir(r.FS(), ".", func(rel string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			return werr
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
 		}
 		if rel == "." {
 			return nil
 		}
-		rel = filepath.ToSlash(rel)
 		if strings.ContainsRune(rel, '\n') {
 			return fmt.Errorf("%q: перевод строки в имени", rel)
 		}
@@ -59,7 +61,7 @@ func TreeDigest(root string) (string, error) {
 		if !t.IsDir() && !t.IsRegular() && t&fs.ModeSymlink == 0 {
 			return fmt.Errorf("%s: особый файл (%v) не поддерживается", rel, t)
 		}
-		entries = append(entries, entry{rel: rel, full: p, typ: t})
+		entries = append(entries, entry{rel: rel, typ: t})
 		return nil
 	})
 	if err != nil {
@@ -73,15 +75,18 @@ func TreeDigest(root string) (string, error) {
 		case e.typ.IsDir():
 			rec = "D " + e.rel + "\n"
 		case e.typ&fs.ModeSymlink != 0:
-			target, err := os.Readlink(e.full)
+			target, err := r.Readlink(e.rel)
 			if err != nil {
-				return "", fmt.Errorf("отпечаток %s: %w", e.full, err)
+				return "", fmt.Errorf("отпечаток %s/%s: %w", root, e.rel, err)
+			}
+			if strings.ContainsRune(target, '\n') {
+				return "", fmt.Errorf("отпечаток %s/%s: перевод строки в цели ссылки", root, e.rel)
 			}
 			rec = "L " + e.rel + "\x00" + target + "\n"
 		default:
-			sum, mode, err := fileDigest(e.full)
+			sum, mode, err := fileDigest(r, e.rel)
 			if err != nil {
-				return "", fmt.Errorf("отпечаток %s: %w", e.full, err)
+				return "", fmt.Errorf("отпечаток %s/%s: %w", root, e.rel, err)
 			}
 			rec = fmt.Sprintf("F %s\x00%04o\x00%s\n", e.rel, mode, sum)
 		}
@@ -90,8 +95,8 @@ func TreeDigest(root string) (string, error) {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func fileDigest(p string) (sum string, mode fs.FileMode, err error) {
-	f, err := os.OpenFile(p, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+func fileDigest(r *os.Root, rel string) (sum string, mode fs.FileMode, err error) {
+	f, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", 0, err
 	}

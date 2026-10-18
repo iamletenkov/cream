@@ -135,8 +135,10 @@ func TestTreeDigestRefuses(t *testing.T) {
 		{kind: 'd', path: "real"},
 		{kind: 'l', path: "rootlink", target: "real"},
 		{kind: 'f', path: "file", mode: 0o644},
+		{kind: 'l', path: "nltarget/a", target: "x\nD y"},
+		{kind: 'f', path: "nlname/x\ny", mode: 0o644},
 	})
-	for _, p := range []string{"withfifo", "rootlink", "file", "missing"} {
+	for _, p := range []string{"withfifo", "rootlink", "file", "missing", "nltarget", "nlname"} {
 		if d, err := TreeDigest(filepath.Join(base, p)); err == nil {
 			t.Errorf("TreeDigest(%s) = %s, want error", p, d)
 		}

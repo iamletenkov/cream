@@ -9,7 +9,7 @@ import (
 
 // mkTree builds a tree under root from a compact spec:
 // "d:path" dir, "f:path:mode:content" file, "l:path:target" symlink,
-// "p:path" FIFO.
+// "p:path" FIFO, "h:path:target" hard link to target (relative to root).
 type node struct {
 	kind    byte
 	path    string
@@ -37,6 +37,8 @@ func mkTree(t *testing.T, root string, nodes []node) {
 			err = os.Symlink(n.target, p)
 		case 'p':
 			err = syscall.Mkfifo(p, 0o644)
+		case 'h':
+			err = os.Link(filepath.Join(root, filepath.FromSlash(n.target)), p)
 		}
 		if err != nil {
 			t.Fatalf("mkTree %c %s: %v", n.kind, n.path, err)
@@ -117,6 +119,8 @@ func TestCopyTreeRefuses(t *testing.T) {
 		}},
 		{name: "dot then dot-dot escape", nodes: []node{{kind: 'l', path: "a", target: "./../src/x"}}},
 		{name: "FIFO", nodes: []node{{kind: 'p', path: "fifo"}}},
+		{name: "newline in link target", nodes: []node{{kind: 'f', path: "x\nD y", mode: 0o644}, {kind: 'l', path: "a", target: "x\nD y"}}},
+		{name: "hard link inside", nodes: []node{{kind: 'f', path: "f", mode: 0o644, content: "x"}, {kind: 'h', path: "g", target: "f"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -156,5 +160,19 @@ func TestCopyTreeBadRoots(t *testing.T) {
 		if err := CopyTree(filepath.Join(base, tc.src), filepath.Join(base, tc.dst)); err == nil {
 			t.Errorf("%s: want error", tc.name)
 		}
+	}
+}
+
+// A file hard-linked from outside the tree is refused: its content belongs
+// to someone else and may change under the copy.
+func TestCopyTreeRefusesHardLinkFromOutside(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	mkTree(t, base, []node{{kind: 'f', path: "outside", mode: 0o644, content: "x"}, {kind: 'd', path: "src"}})
+	if err := os.Link(filepath.Join(base, "outside"), filepath.Join(base, "src", "in")); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTree(filepath.Join(base, "src"), filepath.Join(base, "dst")); err == nil {
+		t.Fatal("CopyTree: want error for a hard link")
 	}
 }
