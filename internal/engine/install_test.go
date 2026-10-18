@@ -431,12 +431,43 @@ func TestInstallFilesMode(t *testing.T) {
 	}
 }
 
+// installPatched — каталог из одного расширения-фикстуры name (src — его
+// каталог), в манифесте которого edit правит текст extension.yaml.
+func installPatched(t *testing.T, src, name string, edit func(string) string) string {
+	t.Helper()
+	dir := installCatalog(t, "1.0.0", map[string]string{name: src})
+	mf := filepath.Join(dir, "extensions", name, "extension.yaml")
+	data, err := os.ReadFile(mf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := edit(string(data))
+	if out == string(data) {
+		t.Fatalf("%s: правка манифеста ничего не изменила", name)
+	}
+	if err := os.WriteFile(mf, []byte(out), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// installAppend — правка манифеста: дописать tail в конец.
+func installAppend(tail string) func(string) string {
+	return func(s string) string { return s + tail }
+}
+
 func TestInstallFileUnowned(t *testing.T) {
 	t.Parallel()
-	te := installEngine(t)
+	// Расширение с files и параметром: при 67 домен не пишется (§6.5: параметры — после files).
+	dir := installPatched(t, fixtureDir(t, "files-mode"), "files-mode",
+		installAppend("config:\n  keys:\n    LEVEL: {type: \"enum:low,high\", default: low, description: \"уровень\"}\n"))
+	te := installEngine(t, installSrc{"fixtures", dir})
 	writeFile(t, te, "/etc/files-mode/plain.conf", "чужой\n", 0o600)
-	_, err := installRun(t, te, "files-mode")
+	_, err := installRun(t, te, "files-mode", "LEVEL=high")
 	wantCode(t, err, cerr.ExitGraph, "conflict.file_unowned")
+	if installExists(te.L.ConfigFile("files-mode")) {
+		t.Error("домен записан при конфликте файла")
+	}
 	if _, ok, _ := te.Store.Get("files-mode"); ok {
 		t.Error("запись реестра при конфликте файла")
 	}
