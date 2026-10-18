@@ -15,7 +15,7 @@
 
 - [x] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
 
-- [ ] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
+- [x] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
 
 - [ ] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
 
@@ -154,7 +154,10 @@ func Quote(v string) string               // значение, которое Pa
 func WriteAtomic(path string, data []byte, perm fs.FileMode) error // tmp в том же каталоге, fsync, rename, fsync dir
 func CopyTree(src, dst string) error        // без следования ссылкам; ссылка наружу дерева — ошибка
 func TreeDigest(root string) (string, error) // "sha256:<hex>" по §9.5 (F/L/D, режим 0644|0755)
-func CheckOwnerPerm(path string, wantMode fs.FileMode) error // не-root/группа на запись → cerr 77
+func CheckOwnerPerm(path string, wantMode fs.FileMode) error // = OpenTrusted(path, 0, …) + Close
+func OpenTrusted(path string, uid int, wantMode fs.FileMode) (*os.File, error) // openat+O_NOFOLLOW от /, каждый каталог — владелец uid, без записи группе/всем; читать через этот fd
+func CheckOwnerPermFile(f *os.File, uid int, wantMode fs.FileMode) error // по открытому fd
+// всё это → sentinel fsx.ErrUnsafePerm (у потребителя — cerr 77); CopyTree/TreeDigest — через os.Root
 ```
 **`internal/manifest`** (T4)
 ```go

@@ -1,0 +1,114 @@
+package envfile
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+// Reference fixtures: every testdata/cases/<case>.env is fed to a real
+// systemd as EnvironmentFile= and the resulting environment is stored as
+// testdata/systemd-<ver>/<case>.json (captured once in containers, Task 19):
+//
+//	{"env": ["KEY=VALUE", ...]}   // variables systemd passed to the unit
+//	{"error": true}               // systemd refused the file (unit failed)
+//
+// Only keys assigned by the case file are listed; order is not significant.
+// systemd < 254 lets a comment ending in `\` swallow the next line, so the
+// versions in legacyComment are checked against the legacy dialect.
+var legacyComment = map[string]bool{"249": true, "252": true}
+
+type reference struct {
+	Env   []string `json:"env"`
+	Error bool     `json:"error"`
+}
+
+func TestReferenceSystemd(t *testing.T) {
+	t.Parallel()
+	dirs, err := filepath.Glob(filepath.Join("testdata", "systemd-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dirs) == 0 {
+		t.Skip("эталоны systemd снимает Task 19 (testdata/systemd-<ver>/ пока нет)")
+	}
+	cases := caseFiles(t)
+	for _, dir := range dirs {
+		ver := strings.TrimPrefix(filepath.Base(dir), "systemd-")
+		for _, c := range cases {
+			name := strings.TrimSuffix(filepath.Base(c), ".env")
+			t.Run(ver+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				raw, err := os.ReadFile(filepath.Join(dir, name+".json"))
+				if err != nil {
+					t.Fatalf("нет эталона для случая %s: %v", name, err)
+				}
+				var ref reference
+				if err := json.Unmarshal(raw, &ref); err != nil {
+					t.Fatalf("эталон %s: %v", name, err)
+				}
+				data, err := os.ReadFile(c)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, err := parse(data, legacyComment[ver])
+				if ref.Error {
+					if err == nil {
+						t.Fatalf("systemd %s отверг файл, разборщик принял: %v", ver, f.Keys())
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("systemd %s принял файл, разборщик отверг: %v", ver, err)
+				}
+				want := map[string]string{}
+				for _, kv := range ref.Env {
+					k, v, ok := strings.Cut(kv, "=")
+					if !ok {
+						t.Fatalf("эталон %s: строка без '=': %q", name, kv)
+					}
+					want[k] = v
+				}
+				got := map[string]string{}
+				for _, k := range f.Keys() {
+					got[k], _ = f.Get(k)
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("systemd %s: %s\nразборщик: %q\nэталон:    %q", ver, name, got, want)
+				}
+			})
+		}
+	}
+}
+
+// Every case file must at least be handled without panicking; the only case
+// that is refused is the invalid UTF-8 one.
+func TestCaseFilesParse(t *testing.T) {
+	t.Parallel()
+	for _, c := range caseFiles(t) {
+		data, err := os.ReadFile(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Parse(data)
+		wantErr := strings.HasPrefix(filepath.Base(c), "invalid-")
+		if (err != nil) != wantErr {
+			t.Errorf("%s: err = %v, want error: %v", c, err, wantErr)
+		}
+	}
+}
+
+func caseFiles(t *testing.T) []string {
+	t.Helper()
+	cases, err := filepath.Glob(filepath.Join("testdata", "cases", "*.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) == 0 {
+		t.Fatal("testdata/cases/*.env пуст")
+	}
+	return cases
+}
