@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "config",
+  "ok": true,
+  "result": {
+    "ext": "with-config",
+    "format": "shell",
+    "text": "COUNT='42'\nDATA_DIR='/var/tmp/with-config'\nFLAG='0'\nGREETING='привет'\nLISTEN_PORT='8080'\nMODE='fast'\nNOTE=''\nPORTS='80 443'\nRO_KEY=''\nTAG='alpha'\nUPSTREAM='proxy.example:443'\n"
+  },
+  "warnings": [],
+  "error": null
+}

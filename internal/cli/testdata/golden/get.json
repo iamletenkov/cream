@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "get",
+  "ok": true,
+  "result": {
+    "ext": "with-config",
+    "key": "COUNT",
+    "value": "42"
+  },
+  "warnings": [],
+  "error": null
+}
