@@ -2,6 +2,7 @@ package envfile
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,9 +18,10 @@ import (
 //	{"error": true}               // systemd refused the file (unit failed)
 //
 // Only keys assigned by the case file are listed; order is not significant.
-// systemd < 254 lets a comment ending in `\` swallow the next line, so the
-// versions in legacyComment are checked against the legacy dialect.
-var legacyComment = map[string]bool{"249": true, "252": true}
+// Every version is checked against the production Parse: it either reads the
+// same environment as systemd or refuses the file because systemd < 254 and
+// v254+ read it differently (a comment ending in `\`); refusing is safe,
+// reading something else is not.
 
 type reference struct {
 	Env   []string `json:"env"`
@@ -54,7 +56,10 @@ func TestReferenceSystemd(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				f, err := parse(data, legacyComment[ver])
+				f, err := Parse(data)
+				if errors.Is(err, errDialect) {
+					return
+				}
 				if ref.Error {
 					if err == nil {
 						t.Fatalf("systemd %s отверг файл, разборщик принял: %v", ver, f.Keys())
@@ -84,8 +89,9 @@ func TestReferenceSystemd(t *testing.T) {
 	}
 }
 
-// Every case file must at least be handled without panicking; the only case
-// that is refused is the invalid UTF-8 one.
+// Every case file must at least be handled without panicking; refused are
+// the invalid UTF-8 case and the comment-backslash case, which systemd < 254
+// and v254+ read differently.
 func TestCaseFilesParse(t *testing.T) {
 	t.Parallel()
 	for _, c := range caseFiles(t) {
@@ -94,6 +100,12 @@ func TestCaseFilesParse(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = Parse(data)
+		if filepath.Base(c) == "comment-backslash.env" {
+			if !errors.Is(err, errDialect) {
+				t.Errorf("%s: err = %v, want the dialect error", c, err)
+			}
+			continue
+		}
 		wantErr := strings.HasPrefix(filepath.Base(c), "invalid-")
 		if (err != nil) != wantErr {
 			t.Errorf("%s: err = %v, want error: %v", c, err, wantErr)
