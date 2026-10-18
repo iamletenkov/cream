@@ -5,12 +5,15 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/lock"
+	"github.com/iamletenkov/cream/internal/paths"
+	"github.com/iamletenkov/cream/internal/systemd"
 )
 
 func TestSetApplyHook(t *testing.T) {
@@ -209,4 +212,40 @@ func TestSetRefusals(t *testing.T) {
 			t.Errorf("%+v, %v", res, err)
 		}
 	})
+}
+
+// lockProbeSystemctl — фейковый systemctl, который в Restart проверяет,
+// свободна ли lock/<ext>: юнит configure берёт её сам, держать её при
+// перезапуске — взаимная блокировка.
+type lockProbeSystemctl struct {
+	*systemd.Fake
+	l    paths.Layout
+	ext  string
+	held atomic.Bool
+}
+
+func (s *lockProbeSystemctl) Restart(ctx context.Context, unit string, noBlock bool) error {
+	h, err := lock.NewLocker(s.l, 0, nil).Ext(ctx, s.ext, lock.Exclusive)
+	if err != nil {
+		s.held.Store(true)
+	} else {
+		h.Release()
+	}
+	return s.Fake.Restart(ctx, unit, noBlock)
+}
+
+func TestSetConfigureReleasesLockBeforeRestart(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	te.systemdRunning("running")
+	probe := &lockProbeSystemctl{Fake: te.Sys, l: te.L, ext: "configure-system"}
+	te.Systemctl = probe
+	seedInstalled(t, te, fixtureDir(t, "configure-system"))
+	res, err := te.Set(context.Background(), "configure-system", []config.Change{{Key: "MESSAGE", Value: "hi"}}, SetOptions{Wait: true})
+	if err != nil || res.Apply != ApplyRestart {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if probe.held.Load() {
+		t.Error("lock/configure-system занята во время перезапуска cream-configure@")
+	}
 }

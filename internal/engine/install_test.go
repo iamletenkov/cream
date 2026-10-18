@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -493,8 +495,17 @@ func TestInstallSecretNotLeaked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	out, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warns strings.Builder
+	for _, w := range te.Warn.List() {
+		fmt.Fprintf(&warns, "%s %s %v\n", w.Code, w.Message, w.Details)
+	}
 	for what, s := range map[string]string{"реестр": string(reg), "history": installHistory(t, te),
-		"stdout": te.Out.String(), "stderr": te.Err.String(), "результат": res.ParamsDigest} {
+		"stdout": te.Out.String(), "stderr": te.Err.String(), "результат": string(out),
+		"предупреждения": warns.String(), "config": readPath(t, te.L.ConfigFile("with-config"))} {
 		if strings.Contains(s, secret) {
 			t.Errorf("секрет в %s", what)
 		}
@@ -600,4 +611,87 @@ func TestInstallVersionChecks(t *testing.T) {
 			t.Errorf("install новой версии: %+v", res)
 		}
 	})
+}
+
+// readPath читает файл p ("" — файла нет).
+func readPath(t *testing.T, p string) string {
+	t.Helper()
+	data, err := os.ReadFile(p)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestInstallSecretScopeKey(t *testing.T) {
+	t.Parallel()
+	dir := installPatched(t, fixtureDir(t, "install-scope"), "install-scope", func(s string) string {
+		return strings.Replace(s, "    LEVEL:", "    TOKEN: {type: str, default: \"\", empty: true, secret: file, scope: install, description: \"секрет установки\"}\n    LEVEL:", 1)
+	})
+	te := installEngine(t, installSrc{"fixtures", dir})
+	run := func(secret string) *InstallResult {
+		t.Helper()
+		r := installReq([]string{"install-scope"}, "TOKEN=-")
+		r.Params.Stdin = strings.NewReader(secret + "\n")
+		res, err := te.Install(context.Background(), r)
+		if err != nil {
+			t.Fatalf("install TOKEN=%s: %v", secret, err)
+		}
+		return res
+	}
+	run("first")
+	tests := []struct {
+		secret    string
+		changed   bool
+		wantCount int
+	}{
+		{secret: "first", wantCount: 1},
+		{secret: "second", changed: true, wantCount: 2},
+		{secret: "second", wantCount: 2},
+	}
+	for _, tc := range tests {
+		res := run(tc.secret)
+		if res.Changed != tc.changed {
+			t.Errorf("TOKEN=%s: changed = %v", tc.secret, res.Changed)
+		}
+		if n := hookCount(t, te, "install-scope", "install"); n != tc.wantCount {
+			t.Errorf("TOKEN=%s: install.count = %d, ждали %d", tc.secret, n, tc.wantCount)
+		}
+	}
+	if v, err := te.Get("install-scope", "TOKEN", true); err != nil || v != "second" {
+		t.Errorf("TOKEN = %q, %v", v, err)
+	}
+}
+
+func TestInstallCandidateOutOfRange(t *testing.T) {
+	t.Parallel()
+	only := installPatched(t, fixtureDir(t, "depends-lib"), "depends-lib",
+		func(s string) string { return strings.Replace(s, `version: ">=1.0.0 <2"`, `version: ">=2.0.0"`, 1) })
+	te := installEngine(t, installSrc{"only", only}, installSrc{"fixtures", testdataDir(t, "catalog")})
+	_, err := installRun(t, te, "depends-lib")
+	wantCode(t, err, cerr.ExitGraph, "deps.missing")
+	want := []installCandidate{{Name: "lib-fixture", Version: "1.0.0", Source: "fixtures", Matches: false}}
+	if got, _ := cerr.DetailsOf(err)["candidates"].([]installCandidate); !slices.Equal(got, want) {
+		t.Errorf("candidates = %#v, ждали %#v", cerr.DetailsOf(err)["candidates"], want)
+	}
+}
+
+func TestInstallFilesReloadWithoutConfigure(t *testing.T) {
+	t.Parallel()
+	te := installEngine(t)
+	te.systemdRunning("running")
+	installMust(t, te, "files-mode")
+	if !slices.Contains(te.Sys.Calls(), "daemon-reload") {
+		t.Errorf("files без configure: нет daemon-reload, вызовы %q", te.Sys.Calls())
+	}
+	// Без files и без configure перечитывать юниты незачем.
+	te2 := installEngine(t)
+	te2.systemdRunning("running")
+	installMust(t, te2, "noop")
+	if slices.Contains(te2.Sys.Calls(), "daemon-reload") {
+		t.Errorf("noop: лишний daemon-reload, вызовы %q", te2.Sys.Calls())
+	}
 }

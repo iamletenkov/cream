@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/state"
 )
 
@@ -163,5 +165,27 @@ func TestConfigureRebootRequired(t *testing.T) {
 	}
 	if rec, _, _ := te.Store.Get("configure-system"); !rec.RebootRequired {
 		t.Error("reboot_required не в реестре")
+	}
+}
+
+func TestConfigureFromUnitTakesDomainLock(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "configure-system"))
+	release := holdExtLock(t, te, "configure-system", lock.Shared)
+	te.Locks = lock.NewLocker(te.L, 50*time.Millisecond, te.Env)
+	_, err := te.ConfigureReport(context.Background(), "configure-system", "", ConfigureOptions{FromUnit: true})
+	wantCode(t, err, cerr.ExitLock, "lock.timeout")
+	if n := hookCount(t, te, "configure-system", "configure"); n != 0 {
+		t.Errorf("configure вызван без lock/configure-system: %d", n)
+	}
+	release()
+	// Хук получает блокировку домена (CREAM_LOCK_FD).
+	writeHook(t, te, "configure-system", "configure", `printf '%s %s\n' "${CREAM_LOCK_FD:-}" "${CREAM_LOCK_MODE:-}" > "$CREAM_STATE_DIR/lock"`)
+	if _, err := te.ConfigureReport(context.Background(), "configure-system", "", ConfigureOptions{FromUnit: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(readState(t, te, "configure-system", "lock")); got != "3 exclusive" {
+		t.Errorf("CREAM_LOCK_FD/MODE хука: %q", got)
 	}
 }

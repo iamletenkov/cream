@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/manifest"
@@ -186,4 +189,215 @@ func TestUpgradeErrors(t *testing.T) {
 			wantCode(t, err, tc.wantExit, tc.wantCode)
 		})
 	}
+}
+
+// upgradeFrom ставит name из каталога first (источник fixtures) и переключает
+// тот же источник на каталог next.
+func upgradeFrom(t *testing.T, first, next, name string) *testEngine {
+	t.Helper()
+	te := installEngine(t, installSrc{"fixtures", first})
+	installMust(t, te, name)
+	installSync(t, te, installSrc{"fixtures", next})
+	return te
+}
+
+// catalogWrite пишет файл rel в дерево расширения name каталога dir: hooks/ —
+// с режимом 0755, остальное — 0644.
+func catalogWrite(t *testing.T, dir, name, rel, body string) {
+	t.Helper()
+	p := filepath.Join(dir, "extensions", name, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mode := os.FileMode(0o644)
+	if strings.HasPrefix(rel, "hooks/") {
+		mode = 0o755
+	}
+	if err := os.WriteFile(p, []byte(body), mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// upgradeFilesCatalog — каталог с upgrade-fixture из src, раскладывающим
+// files/<base> в каждый dst; failHook — хук upgrade завершается 1.
+func upgradeFilesCatalog(t *testing.T, src string, failHook bool, dsts ...string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("files:\n")
+	for _, d := range dsts {
+		b.WriteString("  - {src: files/" + filepath.Base(d) + ", dst: " + d + ", mode: \"0644\"}\n")
+	}
+	dir := installPatched(t, src, "upgrade-fixture", installAppend(b.String()))
+	for _, d := range dsts {
+		catalogWrite(t, dir, "upgrade-fixture", "files/"+filepath.Base(d), d+"\n")
+	}
+	if failHook {
+		catalogWrite(t, dir, "upgrade-fixture", "hooks/upgrade", "#!/bin/sh\nexit 1\n")
+	}
+	return dir
+}
+
+func upgradeDsts(rec state.Record) []string {
+	out := make([]string, 0, len(rec.Files))
+	for _, f := range rec.Files {
+		out = append(out, f.Dst)
+	}
+	return out
+}
+
+func TestUpgradeFailedTwiceKeepsPrev(t *testing.T) {
+	t.Parallel()
+	te := upgradeInstalled(t, upgradeCatalog(t, "exit 1"))
+	for i := range 2 {
+		_, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+		wantCode(t, err, cerr.ExitHook, "hook.failed")
+		if v := upgradeTreeVersion(t, te, te.L.ExtPrev("upgrade-fixture")); v != "1.0.0" {
+			t.Fatalf("попытка %d: .prev = %s, ждали 1.0.0", i+1, v)
+		}
+		rec := installRecord(t, te, "upgrade-fixture")
+		if rec.Status != state.StatusFailedUpgrade || rec.Version != "1.0.0" {
+			t.Fatalf("попытка %d: запись %+v", i+1, rec)
+		}
+	}
+	if n := hookCount(t, te, "upgrade-fixture", "install"); n != 1 {
+		t.Errorf("install.count = %d", n)
+	}
+}
+
+func TestUpgradeRemovesStaleFiles(t *testing.T) {
+	t.Parallel()
+	first := upgradeFilesCatalog(t, fixtureDir(t, "upgrade-fixture"), false, "/etc/upg/keep.conf", "/etc/upg/stale.conf")
+	next := upgradeFilesCatalog(t, testdataDir(t, "catalog-next", "extensions", "upgrade-fixture"), false, "/etc/upg/keep.conf")
+	te := upgradeFrom(t, first, next, "upgrade-fixture")
+	if !installExists(filepath.Join(te.Root, "/etc/upg/stale.conf")) {
+		t.Fatal("1.0.0 не разложила stale.conf")
+	}
+	if _, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if installExists(filepath.Join(te.Root, "/etc/upg/stale.conf")) {
+		t.Error("устаревший файл остался после upgrade")
+	}
+	if !installExists(filepath.Join(te.Root, "/etc/upg/keep.conf")) {
+		t.Error("файл новой версии удалён")
+	}
+	if got := upgradeDsts(installRecord(t, te, "upgrade-fixture")); !slices.Equal(got, []string{"/etc/upg/keep.conf"}) {
+		t.Errorf("files в реестре: %v", got)
+	}
+}
+
+func TestUpgradeFailedRecordsNewFiles(t *testing.T) {
+	t.Parallel()
+	next := upgradeFilesCatalog(t, testdataDir(t, "catalog-next", "extensions", "upgrade-fixture"), true, "/etc/upg/new.conf")
+	te := upgradeFrom(t, testdataDir(t, "catalog"), next, "upgrade-fixture")
+	_, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+	wantCode(t, err, cerr.ExitHook, "hook.failed")
+	rec := installRecord(t, te, "upgrade-fixture")
+	if rec.Status != state.StatusFailedUpgrade {
+		t.Fatalf("запись: %+v", rec)
+	}
+	// Разложенные новой версией файлы принадлежат расширению: remove их уберёт.
+	if got := upgradeDsts(rec); !slices.Equal(got, []string{"/etc/upg/new.conf"}) {
+		t.Errorf("files в записи failed-upgrade: %v", got)
+	}
+}
+
+func TestUpgradeConfigureReason(t *testing.T) {
+	t.Parallel()
+	next := installPatched(t, fixtureDir(t, "configure-system"), "configure-system",
+		func(s string) string { return strings.Replace(s, "version: 1.0.0", "version: 2.0.0", 1) })
+	te := upgradeFrom(t, testdataDir(t, "catalog"), next, "configure-system")
+	if _, err := te.Upgrade(context.Background(), []string{"configure-system"}, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(readState(t, te, "configure-system", "configure.log")), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], "reason=install ") || !strings.Contains(lines[1], "reason=upgrade ") {
+		t.Errorf("configure.log: %q", lines)
+	}
+}
+
+func TestUpgradeDropsConfigure(t *testing.T) {
+	t.Parallel()
+	next := installPatched(t, fixtureDir(t, "configure-system"), "configure-system", func(s string) string {
+		s = strings.Replace(s, "version: 1.0.0", "version: 2.0.0", 1)
+		return strings.Replace(s, "  configure: {stage: system, after: [network-online.target], wants: [network-online.target]}\n", "", 1)
+	})
+	if err := os.Remove(filepath.Join(next, "extensions", "configure-system", "hooks", "configure")); err != nil {
+		t.Fatal(err)
+	}
+	te := upgradeFrom(t, testdataDir(t, "catalog"), next, "configure-system")
+	link := filepath.Join(te.L.WantsDir("multi-user.target"), "cream-configure@configure-system.service")
+	if !installExists(link) {
+		t.Fatal("1.0.0 не включила configure")
+	}
+	res, err := te.Upgrade(context.Background(), []string{"configure-system"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res[0].Configure != nil || installRecord(t, te, "configure-system").Configure != nil {
+		t.Errorf("configure остался в записи: %+v", res[0].Configure)
+	}
+	if installExists(link) || installExists(te.L.DropIn("configure-system")) {
+		t.Error("юнит configure не снят новой версией без configure")
+	}
+}
+
+// upgradeClock — часы теста, которые можно двигать.
+type upgradeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *upgradeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *upgradeClock) Add(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+func TestUpgradeKeepsInstalledAtAndPhase(t *testing.T) {
+	t.Parallel()
+	te := installEngine(t, installSrc{"fixtures", testdataDir(t, "catalog-next")})
+	clock := &upgradeClock{now: testNow}
+	te.Now, te.Store = clock.Now, state.NewStore(te.L, clock.Now)
+	seedInstalled(t, te, fixtureDir(t, "upgrade-fixture"), func(r *state.Record) {
+		r.Source = state.SourceRef{Name: "fixtures", Type: "path"}
+		r.Phase = PhaseBuild
+	})
+	clock.Add(time.Hour)
+	if _, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false); err != nil {
+		t.Fatal(err)
+	}
+	rec := installRecord(t, te, "upgrade-fixture")
+	if rec.Version != "2.0.0" || !rec.InstalledAt.Equal(testNow) || !rec.UpdatedAt.Equal(testNow.Add(time.Hour)) {
+		t.Errorf("installed_at %v updated_at %v (версия %s)", rec.InstalledAt, rec.UpdatedAt, rec.Version)
+	}
+	if rec.Phase != PhaseBuild {
+		t.Errorf("phase = %q, ждали унаследованную build", rec.Phase)
+	}
+}
+
+func TestUpgradeAllSkipsWithoutSource(t *testing.T) {
+	t.Parallel()
+	te := installEngine(t)
+	installMust(t, te, "noop")
+	seedInstalled(t, te, fixtureDir(t, "lib-fixture"), func(r *state.Record) { r.Source = state.SourceRef{} })
+	res, err := te.Upgrade(context.Background(), nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || res[0].Name != "noop" {
+		t.Errorf("результат --all: %+v", res)
+	}
+	if !slices.Contains(warningCodes(te), "upgrade.no_source") {
+		t.Errorf("предупреждения %v", warningCodes(te))
+	}
+	// Поимённо — не пропуск, а 69.
+	_, err = te.Upgrade(context.Background(), []string{"lib-fixture"}, false)
+	wantCode(t, err, cerr.ExitSource, "source.missing")
 }
