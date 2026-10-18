@@ -1,0 +1,29 @@
+{
+  "cream": "dev",
+  "command": "remove",
+  "ok": true,
+  "result": {
+    "ext": "lib-fixture",
+    "version": "1.0.0",
+    "hook": false,
+    "purged": false,
+    "forgotten": false,
+    "dependents": [
+      "depends-lib"
+    ],
+    "reboot_required": false
+  },
+  "warnings": [
+    {
+      "code": "deps.dependents_forced",
+      "message": "lib-fixture удалено с --force, хотя его ждут: depends-lib",
+      "details": {
+        "dependents": [
+          "depends-lib"
+        ],
+        "ext": "lib-fixture"
+      }
+    }
+  ],
+  "error": null
+}
