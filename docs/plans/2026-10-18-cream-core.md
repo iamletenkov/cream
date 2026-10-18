@@ -15,7 +15,7 @@
 
 - [ ] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
 
-- [ ] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
+- [x] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
 
 - [ ] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
 
