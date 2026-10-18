@@ -267,3 +267,107 @@ func TestUnplaceNotRegular(t *testing.T) {
 		t.Errorf("warnings = %+v", list)
 	}
 }
+
+// Р21: a dst that exists on disk but is listed in no registry is somebody
+// else's file: 67 conflict.file_unowned before anything is written. A symlink
+// occupies the place too.
+func TestPlaceUnowned(t *testing.T) {
+	t.Parallel()
+	tree := fixture(t, map[string]src{"a": {"A\n", 0o644}, "b": {"B\n", 0o644}})
+	tests := []struct {
+		name string
+		prep func(p string) error
+	}{
+		{"regular file", func(p string) error { return os.WriteFile(p, []byte("admin\n"), 0o644) }},
+		{"symlink", func(p string) error { return os.Symlink("/nonexistent", p) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			l := paths.Layout{Root: t.TempDir()}
+			taken := onDisk(l, "/etc/taken.conf")
+			if err := os.MkdirAll(filepath.Dir(taken), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.prep(taken); err != nil {
+				t.Fatal(err)
+			}
+			before, _ := os.Lstat(taken)
+			files := []manifest.File{{Src: "a", Dst: "/etc/ok.conf"}, {Src: "b", Dst: "/etc/taken.conf"}}
+			recs, err := Place(l, "x", tree, files, registry(nil))
+			if cerr.ExitCode(err) != cerr.ExitGraph || cerr.CodeOf(err) != CodeFileUnowned {
+				t.Fatalf("err = %v (exit %d, code %q)", err, cerr.ExitCode(err), cerr.CodeOf(err))
+			}
+			if len(recs) != 0 {
+				t.Errorf("recs = %+v", recs)
+			}
+			if d := cerr.DetailsOf(err); d["dst"] != "/etc/taken.conf" {
+				t.Errorf("details = %v", d)
+			}
+			if _, err := os.Lstat(onDisk(l, "/etc/ok.conf")); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("file written before conflict check: %v", err)
+			}
+			after, err := os.Lstat(taken)
+			if err != nil || after.Mode() != before.Mode() || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+				t.Errorf("foreign file changed: %v", err)
+			}
+		})
+	}
+}
+
+// The extension's own record (whatever its status, failed included — the
+// caller builds Owner from all records) lets Place replace the file.
+func TestPlaceOwnExisting(t *testing.T) {
+	t.Parallel()
+	tree := fixture(t, map[string]src{"a": {"new\n", 0o644}})
+	l := paths.Layout{Root: t.TempDir()}
+	p := onDisk(l, "/etc/a.conf")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := []manifest.File{{Src: "a", Dst: "/etc/a.conf"}}
+	if _, err := Place(l, "x", tree, files, registry(map[string]string{"/etc/a.conf": "x"})); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(p); string(got) != "new\n" {
+		t.Errorf("content %q", got)
+	}
+}
+
+// Unplace never overwrites an earlier .cream-modified copy: the next free
+// numbered suffix is taken.
+func TestUnplaceKeepsEarlierModified(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	p := onDisk(l, "/etc/b.conf")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"", ".1"} {
+		if err := os.WriteFile(p+ModifiedSuffix+s, []byte("old"+s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(p, []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var w cerr.Warnings
+	if err := Unplace(l, []state.FileRec{{Dst: "/etc/b.conf", SHA256: sum("B\n")}}, &w); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		p + ModifiedSuffix:        "old",
+		p + ModifiedSuffix + ".1": "old.1",
+		p + ModifiedSuffix + ".2": "edited\n",
+	} {
+		if got, err := os.ReadFile(name); err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v; want %q", name, got, err, want)
+		}
+	}
+	if list := w.List(); len(list) != 1 || list[0].Code != CodeFileModified {
+		t.Errorf("warnings = %+v", list)
+	}
+}

@@ -28,6 +28,8 @@ import (
 const (
 	// CodeFileOwner (exit 67): dst is recorded in another extension's registry.
 	CodeFileOwner = "conflict.file_owner"
+	// CodeFileUnowned (exit 67): dst exists on disk but no registry lists it (ruling Р21).
+	CodeFileUnowned = "conflict.file_unowned"
 	// CodeFileModified (warning): a file changed since placement was kept as <dst>.cream-modified.
 	CodeFileModified = "file.modified"
 	// CodeFileNotRegular (warning): the recorded dst is not a regular file any more; left alone.
@@ -38,27 +40,49 @@ const (
 const ModifiedSuffix = ".cream-modified"
 
 // Owner reports which extension's registry lists dst. The caller builds it
-// from all registry records (ruling Р11: ownership is the registry, not the
-// directory the file lies in); nil means an empty registry.
+// from all registry records of every status, the extension's own included
+// (a failed install leaves its placed files there, and they stay its own);
+// ruling Р11: ownership is the registry, not the directory the file lies in.
+// nil means an empty registry.
 type Owner func(dst string) (ext string, ok bool)
 
 // Place copies files from the extension tree to their destinations under
 // l.Root, for extension ext. Ownership of every dst is checked before
 // anything is written: a dst listed by another extension is exit 67
-// conflict.file_owner; a dst of ext itself is simply replaced. Parent
+// conflict.file_owner; a dst of ext itself is simply replaced; a dst that
+// exists on disk (by Lstat, a symlink included) and is listed in no registry
+// is exit 67 conflict.file_unowned (ruling Р21). Parent
 // directories are created (0755) when missing. The mode is File.Mode, or
 // 0755/0644 by the execute bit of the source. The returned records carry the
 // hex sha256 of the content written; on an error in the middle they list the
 // files already placed, so the caller can record or remove them.
+//
+// Parent directories are created with MkdirAll, which follows symlinks: an
+// absolute symlink among the parents under a --root other than "/" leads out
+// of the root. The build phase owns the guest tree, so this is accepted.
 func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) {
 	for _, f := range files {
-		if owner == nil {
-			break
+		var other string
+		var ok bool
+		if owner != nil {
+			other, ok = owner(f.Dst)
 		}
-		if other, ok := owner(f.Dst); ok && other != ext {
+		if ok && other != ext {
 			e := cerr.New(cerr.ExitGraph, CodeFileOwner, "файл %s уже принадлежит расширению %s", f.Dst, other)
 			e.Details = map[string]any{"dst": f.Dst, "owner": other}
 			return nil, e
+		}
+		if ok {
+			continue
+		}
+		_, err := os.Lstat(onDisk(l, f.Dst))
+		if err == nil {
+			e := cerr.New(cerr.ExitGraph, CodeFileUnowned, "файл %s уже есть на машине и не принадлежит ни одному расширению", f.Dst)
+			e.Details = map[string]any{"dst": f.Dst}
+			return nil, e
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("раскладка files %s: %w", ext, err)
 		}
 	}
 	src, err := os.OpenRoot(tree)
@@ -162,11 +186,32 @@ func unplaceOne(l paths.Layout, r state.FileRec, w *cerr.Warnings) error {
 		}
 		return nil
 	}
-	if err := os.Rename(p, p+ModifiedSuffix); err != nil {
+	keep, err := freeModifiedName(p)
+	if err != nil {
 		return err
 	}
-	warn(w, CodeFileModified, "%s изменён после установки, сохранён как %s", r.Dst, r.Dst+ModifiedSuffix)
+	if err := os.Rename(p, keep); err != nil {
+		return err
+	}
+	kept := r.Dst + keep[len(p):]
+	warn(w, CodeFileModified, "%s изменён после установки, сохранён как %s", r.Dst, kept)
 	return nil
+}
+
+// freeModifiedName is <p>.cream-modified, or <p>.cream-modified.N with the
+// first free N when earlier copies exist: an older kept copy is never replaced.
+func freeModifiedName(p string) (string, error) {
+	name := p + ModifiedSuffix
+	for n := 1; ; n++ {
+		_, err := os.Lstat(name)
+		if errors.Is(err, fs.ErrNotExist) {
+			return name, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		name = fmt.Sprintf("%s%s.%d", p, ModifiedSuffix, n)
+	}
 }
 
 func warn(w *cerr.Warnings, code, format string, a ...any) {
