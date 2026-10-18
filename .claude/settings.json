@@ -2,7 +2,13 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(make:*)",
+      "Bash(make help)",
+      "Bash(make fmt)",
+      "Bash(make lint)",
+      "Bash(make test)",
+      "Bash(make build)",
+      "Bash(make build-all)",
+      "Bash(make ci)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -30,9 +36,7 @@
       "mcp__knowledge-graph__aim_memory_search",
       "mcp__knowledge-graph__aim_memory_get",
       "mcp__context7__resolve-library-id",
-      "mcp__context7__query-docs",
-      "Bash(docker run --rm * golang:1.25.11 *)",
-      "Bash(docker run --rm * golangci/golangci-lint:v2.14.0 *)"
+      "mcp__context7__query-docs"
     ]
   },
   "hooks": {

@@ -1,7 +1,7 @@
 ---
 name: fullcheck
 description: Полная проверка перед коммитом/PR — make ci (линт, тесты, сборка) с полным логом в .scratchpad/test-runs/ и коротким вердиктом.
-allowed-tools: Bash(make *), Bash(mkdir -p .scratchpad/test-runs), Bash(git status*), Bash(git diff*), Read, Grep, Glob
+allowed-tools: Bash(make ci), Bash(mkdir -p .scratchpad/test-runs), Bash(git status*), Bash(git diff*), Read, Grep, Glob
 ---
 # /fullcheck
 
