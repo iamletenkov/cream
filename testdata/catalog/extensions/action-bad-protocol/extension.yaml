@@ -1,0 +1,15 @@
+schema: cream/v1
+name: action-bad-protocol
+version: 1.0.0
+summary: фикстура action-bad-protocol
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Действия, нарушающие протокол §7.2 (код 76).
+hooks:
+  install: {}
+  remove: {}
+actions:
+  bad-json: {summary: "output json, а печатает текст", lock: none, output: json}
+  two-objects: {summary: "два JSON-объекта вместо одного", lock: none, output: json}
+  json-array: {summary: "JSON-массив вместо объекта", lock: none, output: json}
+  exit-high: {summary: "код вне 0–63", lock: none}

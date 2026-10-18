@@ -1,0 +1,12 @@
+#!/bin/sh
+# Фикстура cream: хук apply считает вызовы в $CREAM_STATE_DIR/apply.count
+# и дописывает окружение вызова в apply.log.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+f="$CREAM_STATE_DIR/apply.count"
+n=0
+if [ -f "$f" ]; then n=$(cat "$f"); fi
+echo $((n + 1)) > "$f"
+printf 'phase=%s reason=%s prev=%s changed=%s version=%s\n' \
+    "${CREAM_PHASE:-}" "${CREAM_REASON:-}" "${CREAM_PREV_VERSION:-}" \
+    "${CREAM_CHANGED_KEYS:-}" "${CREAM_EXT_VERSION:-}" >> "$CREAM_STATE_DIR/apply.log"

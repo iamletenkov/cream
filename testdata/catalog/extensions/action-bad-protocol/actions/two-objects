@@ -1,0 +1,5 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+echo '{"a":1}'
+echo '{"b":2}'

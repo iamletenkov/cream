@@ -1,0 +1,4 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+printf '{"ok":true,"ext":"%s","phase":"%s"}\n' "$CREAM_EXT" "$CREAM_PHASE"

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+exit 100

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+for a in "$@"; do printf '%s\n' "$a"; done

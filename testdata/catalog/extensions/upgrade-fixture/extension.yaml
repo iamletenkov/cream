@@ -1,0 +1,12 @@
+schema: cream/v1
+name: upgrade-fixture
+version: 1.0.0
+summary: фикстура upgrade-fixture
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Версия 1.0.0 в testdata/catalog, 2.0.0 — в testdata/catalog-next; upgrade
+# получает CREAM_PREV_VERSION.
+hooks:
+  install: {}
+  upgrade: {}
+  remove: {}

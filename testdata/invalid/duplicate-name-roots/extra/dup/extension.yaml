@@ -1,0 +1,9 @@
+schema: cream/v1
+name: dup
+version: 1.0.0
+summary: дубль имени в двух roots
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект каталога: имя dup повторяется в roots (extra).
+hooks:
+  install: {}

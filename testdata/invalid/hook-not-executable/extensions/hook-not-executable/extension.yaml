@@ -1,0 +1,9 @@
+schema: cream/v1
+name: hook-not-executable
+version: 1.0.0
+summary: хук без бита исполнения
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект дерева: hooks/install без бита исполнения.
+hooks:
+  install: {}

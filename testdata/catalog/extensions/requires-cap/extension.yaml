@@ -1,0 +1,11 @@
+schema: cream/v1
+name: requires-cap
+version: 1.0.0
+summary: фикстура requires-cap
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Требует способность fixture-runtime у установленного (apply-hook или conflict-cap).
+requires: [fixture-runtime]
+hooks:
+  install: {}
+  remove: {}

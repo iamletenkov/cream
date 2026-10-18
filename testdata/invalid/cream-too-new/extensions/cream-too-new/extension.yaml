@@ -1,0 +1,9 @@
+schema: cream/v1
+name: cream-too-new
+version: 1.0.0
+summary: требует cream новее исполнителя
+cream: ">=1.99.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект манифеста: cream: выше версии исполнителя — 68 platform.cream_version.
+hooks:
+  install: {}

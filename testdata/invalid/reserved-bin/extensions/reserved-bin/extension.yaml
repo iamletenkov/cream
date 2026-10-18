@@ -1,0 +1,10 @@
+schema: cream/v1
+name: reserved-bin
+version: 1.0.0
+summary: зарезервированное поле bin
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект манифеста: bin зарезервировано в cream/v1 (§17).
+bin: [{name: reserved-bin, target: files/tool}]
+hooks:
+  install: {}

@@ -1,0 +1,10 @@
+schema: cream/v1
+name: not-applicable
+version: 1.0.0
+summary: фикстура not-applicable
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# install возвращает 20 — неприменимо (§6.2): 68 или skipped с --allow-skip.
+hooks:
+  install: {}
+  remove: {}
