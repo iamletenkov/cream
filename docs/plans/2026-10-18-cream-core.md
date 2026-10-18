@@ -13,7 +13,7 @@
 
 - [x] Task 1: Каркас CLI, коды ошибок, раскладка путей, зависимость yaml
 
-- [ ] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
+- [x] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
 
 - [ ] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
 
