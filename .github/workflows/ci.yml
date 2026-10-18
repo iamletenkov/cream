@@ -1,7 +1,7 @@
 name: CI
 
 # Проверки — те же make-цели, что запускают руками (make lint / test /
-# build-all = make ci): Go в контейнере golang:1.25.11, линтер закреплён
+# build-all = make ci): Go в контейнере golang:1.26.9, линтер закреплён
 # в Makefile. CI и локальный прогон не расходятся.
 #
 # Выпуск — release-please: на main после зелёных проверок он ведёт PR

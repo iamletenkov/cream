@@ -3,7 +3,7 @@
 **Фаза:** старт — каркас (2026-10-18).
 
 ## Сделано
-- Каркас Go-модуля: `cream version`, `make build/build-all/test/lint/ci` в контейнере `golang:1.25.11`.
+- Каркас Go-модуля: `cream version`, `make build/build-all/test/lint/ci` в контейнере `golang:1.26.9`.
 - CI (lint, test, build-all) и release-please (`release-type: go`, первая версия — 0.1.0).
 - Обвязка Claude Code: AGENTS.md, CLAUDE.md, `.claude/` (агенты, skills, правила, хуки), lefthook.
 

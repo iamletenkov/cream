@@ -1,11 +1,11 @@
 # cream — публичный API репозитория. Go на хосте не нужен: всё в контейнере.
 # Кэш модулей, сборки и линтера — в .cache/ (gitignored), бинари — в dist/.
 
-GO_IMAGE       ?= golang:1.25.11
+GO_IMAGE       ?= golang:1.26.9
 GOLANGCI_IMAGE ?= golangci/golangci-lint:v2.14.0
 NFPM_IMAGE     ?= goreleaser/nfpm:v2.47.0
 DEBIAN_IMAGE   ?= debian:13
-GOVULNCHECK    ?= golang.org/x/vuln/cmd/govulncheck@v1.7.0
+GOVULNCHECK    ?= golang.org/x/vuln/cmd/govulncheck@v1.8.0
 MODULE         := github.com/iamletenkov/cream
 VERSION        ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 ARCHES         ?= amd64 arm64
@@ -115,8 +115,7 @@ repro-check: ## две сборки dist-release с одним SOURCE_DATE_EPOCH
 	$(HEAVY) env MAKE="$(MAKE)" sh scripts/repro-check.sh
 
 # go run …@версия собирает govulncheck вне модуля: go.mod/go.sum не меняются,
-# модули инструмента — в отдельном .cache/vuln-mod. v1.7.0 — последняя версия
-# под go 1.25 (v1.8.0 требует go >= 1.26, а GOTOOLCHAIN=local).
+# модули инструмента — в отдельном .cache/vuln-mod.
 vuln: cache ## govulncheck по модулю (версия закреплена в GOVULNCHECK)
 	$(DOCKER_RUN) -e GOMODCACHE=/cache/vuln-mod -e GOFLAGS="-buildvcs=false -mod=mod" \
 		$(GO_IMAGE) go run $(GOVULNCHECK) ./...
