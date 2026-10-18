@@ -1,0 +1,8 @@
+[Unit]
+Description=cream: configure %i
+ConditionPathExists=/var/lib/cream/installed/%i.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/cream configure --from-unit %i

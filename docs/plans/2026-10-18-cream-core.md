@@ -27,7 +27,7 @@
 
 - [x] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
 
-- [ ] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
+- [x] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
 
 - [ ] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
 
