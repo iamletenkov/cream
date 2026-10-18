@@ -1,0 +1,18 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "action.phase",
+    "message": "lock-restart/set-managed: действие недопустимо в фазе build",
+    "details": {
+      "action": "lock-restart/set-managed",
+      "phase": "build",
+      "phases": [
+        "live"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": false,
+  "result": {
+    "action": "action-json/exit-code",
+    "exit_code": 3,
+    "output": null
+  },
+  "warnings": [],
+  "error": null
+}

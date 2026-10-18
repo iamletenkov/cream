@@ -1,0 +1,15 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "action.protocol",
+    "message": "action-bad-protocol/exit-high: код возврата 100 вне диапазона действий 0–63",
+    "details": {
+      "action": "action-bad-protocol/exit-high",
+      "exit_code": 100
+    }
+  }
+}
