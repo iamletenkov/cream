@@ -103,8 +103,9 @@ func DetailsOf(err error) map[string]any {
 
 // Warning is a non-fatal message for the warnings list of the envelope (§11.4).
 type Warning struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // Warnings collects warnings of one command run. It is passed explicitly
@@ -119,6 +120,14 @@ func (w *Warnings) Add(code, format string, a ...any) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.list = append(w.list, Warning{Code: code, Message: fmt.Sprintf(format, a...)})
+}
+
+// AddDetails appends a warning with a formatted message and machine-readable
+// details (ruling Р20: the extension of a corrupt registry record).
+func (w *Warnings) AddDetails(code string, details map[string]any, format string, a ...any) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.list = append(w.list, Warning{Code: code, Message: fmt.Sprintf(format, a...), Details: details})
 }
 
 // List returns a copy of the warnings in the order they were added; never nil.

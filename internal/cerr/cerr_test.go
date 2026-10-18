@@ -1,9 +1,11 @@
 package cerr
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"testing"
 )
 
@@ -82,12 +84,38 @@ func TestWarnings(t *testing.T) {
 		t.Fatalf("List() = %v, want %v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("List()[%d] = %v, want %v", i, got[i], want[i])
 		}
 	}
 	got[0].Code = "mutated"
 	if w.List()[0].Code != "source.shadowed" {
 		t.Errorf("List() must return a copy")
+	}
+}
+
+// Р20: a warning may carry details (the extension of a corrupt record); the
+// JSON of a warning without details is unchanged.
+func TestWarningDetails(t *testing.T) {
+	t.Parallel()
+	var w Warnings
+	w.Add("x.plain", "просто")
+	w.AddDetails("state.corrupt", map[string]any{"ext": "broken"}, "запись %s повреждена", "broken")
+	got := w.List()
+	if len(got) != 2 || got[1].Details["ext"] != "broken" || got[1].Message != "запись broken повреждена" {
+		t.Fatalf("List() = %+v", got)
+	}
+	tests := []struct {
+		w    Warning
+		want string
+	}{
+		{got[0], `{"code":"x.plain","message":"просто"}`},
+		{got[1], `{"code":"state.corrupt","message":"запись broken повреждена","details":{"ext":"broken"}}`},
+	}
+	for _, tc := range tests {
+		b, err := json.Marshal(tc.w)
+		if err != nil || string(b) != tc.want {
+			t.Errorf("json = %s, %v; want %s", b, err, tc.want)
+		}
 	}
 }

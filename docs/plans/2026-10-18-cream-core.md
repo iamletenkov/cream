@@ -106,7 +106,7 @@ type Error struct{ Exit int; Code, Message string; Details map[string]any; Err e
 func New(exit int, code, format string, a ...any) *Error
 func Wrap(err error, exit int, code, format string, a ...any) *Error
 func ExitCode(err error) int          // nil→0, *Error (errors.As)→Exit, иначе 70
-type Warning struct{ Code, Message string }
+type Warning struct{ Code, Message string; Details map[string]any /* omitempty */ } // AddDetails(code, details, fmt, …) — Р20
 type Warnings struct{ list []Warning }   // Add(code, fmt, …), List() []Warning; передаётся явно
 ```
 **`internal/paths`** (T1)
@@ -361,7 +361,7 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.
   Запрос `exclusive` при унаследованном `shared` — 75 `lock.upgrade`.
 - **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
-  в тексте предупреждения; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
+  в тексте предупреждения и в `details.ext`; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
 - **Р21.** `place.Place`: `dst`, который уже есть на диске (по `Lstat`, симлинк — тоже занято) и не числится ни в
   одном реестре, — 67 `conflict.file_unowned` (`details.dst`); проверка — в цикле владельцев, до первой записи.
   Свой `dst` определяется по реестру этого расширения при любом статусе, `failed` тоже: движок строит `Owner` из
