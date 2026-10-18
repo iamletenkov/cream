@@ -97,7 +97,6 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		exit int
 		code string
 	}{
-		{dir: "too-new-cream", exit: cerr.ExitNotApplicable, code: "platform.cream_version"},
 		{dir: "dir-name-mismatch", exit: cerr.ExitData, code: "manifest.dir_name"},
 		{dir: "duplicate-name-roots", exit: cerr.ExitData, code: "catalog.duplicate_name"},
 		{dir: "hook-declared-missing", exit: cerr.ExitData, code: "manifest.hook_missing"},
@@ -106,6 +105,7 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		{dir: "link-outside", exit: cerr.ExitData, code: "manifest.link_outside"},
 		{dir: "not-elf-no-shebang", exit: cerr.ExitData, code: "manifest.bad_executable"},
 		{dir: "reserved-bin", exit: cerr.ExitData, code: "manifest.reserved"},
+		{dir: "too-new-cream", exit: cerr.ExitNotApplicable, code: "platform.cream_version"},
 		{dir: "unknown-field", exit: cerr.ExitData, code: "manifest.invalid"},
 	}
 	entries, err := os.ReadDir(filepath.Join(fixturesRoot, "invalid"))
