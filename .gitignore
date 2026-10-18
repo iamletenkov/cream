@@ -1,0 +1,19 @@
+# Сборка и кэш (Makefile)
+/dist/
+/.cache/
+
+# Временное агентов и людей
+/.scratchpad/
+
+# Локальное окружение и секреты
+.env
+.env.*
+!.env.example
+/.mcp.json
+/.aim/
+/.claude/settings.local.json
+
+# Редакторы
+.idea/
+.vscode/
+*.swp
