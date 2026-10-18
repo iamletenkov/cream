@@ -29,6 +29,30 @@ PATTERNS=(
     'docker[[:space:]]+volume[[:space:]]+(rm|prune)'
 )
 
+# git-флаги, которые исполняют произвольную команду или пишут в произвольный
+# файл: --upload-pack/--receive-pack/--exec (fetch, clone, push, ls-remote,
+# rebase), --ext-diff (внешний diff-драйвер), --output (запись файла), и
+# глобальный `git -c key=value` (core.sshCommand, core.pager, alias.* …).
+# shellcheck disable=SC2016
+GIT_EXEC_PATTERNS=(
+    '(^|[^[:alnum:]_-])git([[:space:]]+[^;&|]*)?[[:space:]]--(upload-pack|receive-pack|output|ext-diff|exec)([=[:space:]]|$)'
+    '(^|[^[:alnum:]_-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+-c([[:space:]]|$)'
+)
+for pattern in "${GIT_EXEC_PATTERNS[@]}"; do
+    if printf '%s' "$COMMAND" | grep -Eq -e "$pattern"; then
+        cat >&2 <<MSG
+БЛОКИРОВКА: git с флагом, который запускает произвольную команду или пишет
+в произвольный файл (--upload-pack, --receive-pack, --exec, --ext-diff,
+--output, глобальный -c key=value).
+Команда: $COMMAND
+
+Выполни git без этих флагов; если они действительно нужны — пусть команду
+запустит пользователь вручную. Хук: .claude/hooks/deny-destructive.sh
+MSG
+        exit 2
+    fi
+done
+
 for pattern in "${PATTERNS[@]}"; do
     if printf '%s' "$COMMAND" | grep -Eq -e "$pattern"; then
         cat >&2 <<MSG
