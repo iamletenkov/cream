@@ -34,7 +34,7 @@ func CopyTree(src, dst string) (err error) {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("копия в %s: %w", dst, err)
 	}
-	sr, err := os.OpenRoot(src)
+	sr, err := openRootSame(src, st)
 	if err != nil {
 		return fmt.Errorf("копия %s: %w", src, err)
 	}
@@ -90,6 +90,25 @@ func CopyTree(src, dst string) (err error) {
 	})
 }
 
+// openRootSame opens dir as os.Root and checks that the opened directory is
+// the one st describes (an earlier Lstat of dir): a directory swapped for a
+// link or another directory between the two is refused.
+func openRootSame(dir string, st fs.FileInfo) (*os.Root, error) {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	got, err := r.Stat(".")
+	if err == nil && !os.SameFile(got, st) {
+		err = errors.New("каталог подменён во время открытия")
+	}
+	if err != nil {
+		_ = r.Close()
+		return nil, err
+	}
+	return r, nil
+}
+
 // checkLink accepts a link at rel (slash-separated, relative to the tree
 // root) pointing at target only when the target is relative, has no
 // newline, uses `..` only as leading components and does not climb above
@@ -126,18 +145,14 @@ func checkLink(rel, target string) error {
 	return nil
 }
 
-// copyFile copies the regular file rel from sr to dr. The source is opened
-// with O_NOFOLLOW and checked on the same descriptor.
+// copyFile copies the regular file rel from sr to dr, reading the
+// descriptor openRegular checked.
 func copyFile(sr, dr *os.Root, rel string) error {
-	in, err := openRegular(sr, rel)
+	in, st, err := openRegular(sr, rel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	st, err := in.Stat()
-	if err != nil {
-		return err
-	}
 	mode := normMode(st.Mode())
 	out, err := dr.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
@@ -154,28 +169,43 @@ func copyFile(sr, dr *os.Root, rel string) error {
 	return out.Close()
 }
 
-// openRegular opens rel inside r without following a final link and checks,
-// on the opened descriptor, that it is a regular file with one hard link: a
-// second link could tie the content to a file outside the tree.
-func openRegular(r *os.Root, rel string) (*os.File, error) {
+// openRegular opens rel inside r with openInRoot and also requires one hard
+// link: a second link could tie the content to a file outside the tree.
+func openRegular(r *os.Root, rel string) (*os.File, fs.FileInfo, error) {
+	f, st, err := openInRoot(r, rel)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sys, ok := st.Sys().(*syscall.Stat_t); !ok || sys.Nlink != 1 {
+		_ = f.Close()
+		return nil, nil, errors.New("у файла несколько жёстких ссылок")
+	}
+	return f, st, nil
+}
+
+// openInRoot opens the regular file rel inside r for reading. os.Root
+// resolves links that stay inside the root even with O_NOFOLLOW (Go 1.25),
+// so a file swapped for such a link mid-walk would be opened through it:
+// after the open, rel itself is Lstat'ed and must be a regular file and the
+// same file as the descriptor. A link or a swap leaves them different.
+func openInRoot(r *os.Root, rel string) (*os.File, fs.FileInfo, error) {
 	f, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	st, err := f.Stat()
-	if err == nil && !st.Mode().IsRegular() {
-		err = errors.New("файл подменён во время обхода")
-	}
 	if err == nil {
-		if sys, ok := st.Sys().(*syscall.Stat_t); !ok || sys.Nlink != 1 {
-			err = errors.New("у файла несколько жёстких ссылок")
+		var lst fs.FileInfo
+		lst, err = r.Lstat(rel)
+		if err == nil && (!st.Mode().IsRegular() || !lst.Mode().IsRegular() || !os.SameFile(st, lst)) {
+			err = errors.New("файл подменён во время обхода")
 		}
 	}
 	if err != nil {
 		_ = f.Close()
-		return nil, err
+		return nil, nil, err
 	}
-	return f, nil
+	return f, st, nil
 }
 
 // normMode maps a file mode to the only two modes cream keeps: 0755 when

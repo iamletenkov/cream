@@ -2,10 +2,12 @@ package fsx
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -13,13 +15,16 @@ func TestOpenTrusted(t *testing.T) {
 	t.Parallel()
 	me := os.Getuid()
 	tests := []struct {
-		name    string
-		mode    fs.FileMode
-		want    fs.FileMode
-		owner   int
-		setup   func(t *testing.T, top string) string // returns the path to open
-		unsafe  bool
-		missing bool
+		name  string
+		mode  fs.FileMode
+		want  fs.FileMode
+		owner int
+		// foreignFile: the file must belong to owner+1 while the directories
+		// stay trusted for owner, so the file's own owner check is what fails.
+		foreignFile bool
+		setup       func(t *testing.T, top string) string // returns the path to open
+		unsafe      bool
+		missing     bool
 	}{
 		{name: "secret 0600", mode: 0o600, want: 0o600, owner: me},
 		{name: "config 0644", mode: 0o644, want: 0o644, owner: me},
@@ -28,7 +33,15 @@ func TestOpenTrusted(t *testing.T) {
 		{name: "world writable", mode: 0o666, want: 0o666, owner: me, unsafe: true},
 		{name: "group writable", mode: 0o620, want: 0o660, owner: me, unsafe: true},
 		{name: "other writable", mode: 0o602, want: 0o606, owner: me, unsafe: true},
-		{name: "foreign owner", mode: 0o600, want: 0o600, owner: me + 1, unsafe: true},
+		{name: "foreign owner of file and directories", mode: 0o600, want: 0o600, owner: me + 1, unsafe: true},
+		{name: "foreign file owner, trusted directories", mode: 0o600, want: 0o600, owner: me, foreignFile: true, unsafe: true},
+		{name: "second hard link", mode: 0o600, want: 0o600, owner: me, unsafe: true, setup: func(t *testing.T, top string) string {
+			p := filepath.Join(top, "etc", "secrets")
+			if err := os.Link(p, filepath.Join(top, "etc", "copy")); err != nil {
+				t.Fatal(err)
+			}
+			return p
+		}},
 		{name: "symlink", mode: 0o600, want: 0o600, owner: me, unsafe: true, setup: func(t *testing.T, top string) string {
 			p := filepath.Join(top, "etc", "link")
 			if err := os.Symlink("secrets", p); err != nil {
@@ -77,7 +90,11 @@ func TestOpenTrusted(t *testing.T) {
 			if tc.setup != nil {
 				path = tc.setup(t, top)
 			}
-			f, err := openTrusted(path, tc.owner, tc.want, top)
+			fileOwner := tc.owner
+			if tc.foreignFile {
+				fileOwner = tc.owner + 1
+			}
+			f, err := openTrusted(path, tc.owner, fileOwner, tc.want, top)
 			if f != nil {
 				defer func() { _ = f.Close() }()
 			}
@@ -92,6 +109,9 @@ func TestOpenTrusted(t *testing.T) {
 				}
 				if f != nil {
 					t.Error("file returned together with an error")
+				}
+				if tc.foreignFile && !strings.HasPrefix(fmt.Sprint(err), path+":") {
+					t.Errorf("err = %v, want the file's own owner check to fail", err)
 				}
 			default:
 				if err != nil {

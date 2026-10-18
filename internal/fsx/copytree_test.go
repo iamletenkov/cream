@@ -176,3 +176,59 @@ func TestCopyTreeRefusesHardLinkFromOutside(t *testing.T) {
 		t.Fatal("CopyTree: want error for a hard link")
 	}
 }
+
+// The root opened by path must be the directory vetted by Lstat: a root
+// swapped between the two is refused.
+func TestOpenRootSame(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	mkTree(t, base, []node{{kind: 'd', path: "a"}, {kind: 'd', path: "b"}})
+	stA, err := os.Lstat(filepath.Join(base, "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := openRootSame(filepath.Join(base, "a"), stA)
+	if err != nil {
+		t.Fatalf("same directory: %v", err)
+	}
+	_ = r.Close()
+	if r, err := openRootSame(filepath.Join(base, "b"), stA); err == nil {
+		_ = r.Close()
+		t.Fatal("swapped root: want error")
+	}
+}
+
+// os.Root.OpenFile follows a link that stays inside the root even with
+// O_NOFOLLOW, so a file swapped for such a link mid-walk must be refused
+// after the open.
+func TestOpenRegularRefusesInRootLink(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	mkTree(t, base, []node{
+		{kind: 'f', path: "file", mode: 0o644, content: "x"},
+		{kind: 'l', path: "link", target: "file"},
+		{kind: 'l', path: "sub/link", target: "../file"},
+	})
+	r, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	for _, rel := range []string{"link", "sub/link"} {
+		if f, _, err := openRegular(r, rel); err == nil {
+			_ = f.Close()
+			t.Errorf("openRegular(%s): want error", rel)
+		}
+		if _, _, err := fileDigest(r, rel); err == nil {
+			t.Errorf("fileDigest(%s): want error", rel)
+		}
+	}
+	f, _, err := openRegular(r, "file")
+	if err != nil {
+		t.Fatalf("openRegular(file): %v", err)
+	}
+	_ = f.Close()
+	if _, _, err := fileDigest(r, "file"); err != nil {
+		t.Fatalf("fileDigest(file): %v", err)
+	}
+}
