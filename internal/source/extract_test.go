@@ -90,6 +90,16 @@ func TestExtractTarGz(t *testing.T) {
 			want:    map[string]string{"cream-catalog.yaml": "cat"},
 		},
 		{
+			// git archive starts with a pax_global_header carrying the commit id;
+			// it is metadata, not an entry, and must not count as a top name.
+			name: "pax global header is skipped",
+			entries: []tarEntry{{name: "pax_global_header", typ: tar.TypeXGlobalHeader,
+				pax: map[string]string{"comment": "0123456789abcdef0123456789abcdef01234567"}},
+				{name: "cream-extensions-4.0.0/", typ: tar.TypeDir},
+				{name: "cream-extensions-4.0.0/cream-catalog.yaml", body: "cat"}},
+			want: map[string]string{"cream-catalog.yaml": "cat"},
+		},
+		{
 			name: "hardlink inside becomes a copy",
 			entries: []tarEntry{{name: "a", body: "same"}, {name: "b/", typ: tar.TypeDir},
 				{name: "b/h", typ: tar.TypeLink, link: "a"}},
@@ -165,6 +175,10 @@ func TestExtractTarGzLimits(t *testing.T) {
 		{name: "fits", lim: extractLimits{bytes: 101, entries: 2}, ok: true},
 		{name: "too many bytes", lim: extractLimits{bytes: 100, entries: 2}},
 		{name: "too many entries", lim: extractLimits{bytes: 1000, entries: 1}},
+	}
+	hard := makeTarGz(t, []tarEntry{{name: "a", body: strings.Repeat("x", 60)}, {name: "h", typ: tar.TypeLink, link: "a"}})
+	if err := extractTarGz(bytes.NewReader(hard), filepath.Join(t.TempDir(), "tree"), extractLimits{bytes: 100, entries: 10}); err == nil {
+		t.Error("жёсткая ссылка сверх лимита байт принята")
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
