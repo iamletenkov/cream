@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 )
@@ -106,5 +107,41 @@ func TestHTTPFetcherDoesNotMutateClient(t *testing.T) {
 	}
 	if NewHTTPFetcher(nil) == nil {
 		t.Error("NewHTTPFetcher(nil) = nil")
+	}
+}
+
+// A server that sends part of the body and then goes silent is cut off after
+// the idle timeout: 69 source.fetch, not a hang until the overall timeout.
+func TestHTTPFetcherIdleTimeout(t *testing.T) {
+	t.Parallel()
+	stop := make(chan struct{})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		_, _ = w.Write([]byte("partial"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-stop:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(stop) })
+	f, ok := NewHTTPFetcher(srv.Client()).(*httpFetcher)
+	if !ok {
+		t.Fatal("не *httpFetcher")
+	}
+	f.idle = 200 * time.Millisecond
+	start := time.Now()
+	var buf bytes.Buffer
+	err := f.Fetch(context.Background(), srv.URL+"/slow", &buf, MaxArchiveSize)
+	wantCerr(t, err, cerr.ExitSource, "source.fetch")
+	if el := time.Since(start); el > 10*time.Second {
+		t.Errorf("обрыв через %v", el)
+	}
+	if !strings.Contains(err.Error(), "нет данных") {
+		t.Errorf("ошибка %v: ждали упоминание простоя", err)
+	}
+	if buf.String() != "partial" {
+		t.Errorf("получено %q", buf.String())
 	}
 }
