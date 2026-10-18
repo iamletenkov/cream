@@ -10,10 +10,15 @@
 // nothing (the engine simply does not call the Locker).
 //
 // A nested cream started by a hook or an action inherits the domain lock: the
-// parent passes the descriptor of lock/<ext> in CREAM_LOCK_FD, and the child
-// uses it without waiting once it has checked that the descriptor is the same
-// file (device and inode). Only the domain lock is inherited (ruling Р2):
-// a nested operation that needs global waits for it and fails with 75.
+// parent passes the descriptor of lock/<ext> in CREAM_LOCK_FD and the mode it
+// holds in CREAM_LOCK_MODE. The child checks that the descriptor is the same
+// file (device and inode), then tries LOCK_EX|LOCK_NB on a descriptor of its
+// own: success means nobody holds the lock — the inheritance is false and the
+// child keeps a real lock on its descriptor; EWOULDBLOCK means the lock is
+// held and the child takes it over without waiting, unless it asks for
+// exclusive while the parent holds shared (75 lock.upgrade, ruling Р19).
+// Only the domain lock is inherited (ruling Р2): a nested operation that
+// needs global waits for it and fails with 75.
 package lock
 
 import (
@@ -33,6 +38,10 @@ import (
 
 // EnvLockFD is the variable a parent sets to the descriptor of lock/<ext>.
 const EnvLockFD = "CREAM_LOCK_FD"
+
+// EnvLockMode is the mode the parent holds lock/<ext> in: "shared" or
+// "exclusive"; anything else (or nothing) counts as shared (ruling Р19).
+const EnvLockMode = "CREAM_LOCK_MODE"
 
 // GlobalName is the reserved name of the global lock file (ruling Р15).
 const GlobalName = "global"
@@ -116,15 +125,16 @@ func (l *Locker) Global(ctx context.Context) (*Handle, error) {
 }
 
 // Ext takes the domain lock of ext in mode m. A CREAM_LOCK_FD that refers to
-// the same lock file is taken over without waiting, whatever mode the parent
-// holds; any other value is ignored.
+// the same, actually held lock file is taken over without waiting when the
+// parent's CREAM_LOCK_MODE covers m; any other value is ignored.
 func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) {
 	if err := checkName(ext); err != nil {
 		return nil, err
 	}
 	path := l.layout.ExtLock(ext)
-	if h := l.inherit(path); h != nil {
-		return h, nil
+	h, err := l.inherit(ext, path, m)
+	if h != nil || err != nil {
+		return h, err
 	}
 	return l.acquire(ctx, ext, path, m)
 }
@@ -137,36 +147,71 @@ func checkName(ext string) error {
 	return nil
 }
 
-// inherit returns a handle over a duplicate of CREAM_LOCK_FD when it refers to
-// path, or nil. The original descriptor gets close-on-exec so that it does not
-// leak into hooks unless passed explicitly.
-func (l *Locker) inherit(path string) *Handle {
+// inherit handles CREAM_LOCK_FD. It returns (nil, nil) when the variable is
+// absent or refers to another file — the caller then waits as usual. When the
+// file is the same it probes a descriptor of its own with LOCK_EX|LOCK_NB:
+// taken — nobody held the lock, the probe descriptor becomes the real lock in
+// mode m; busy — the lock is held, and the handle is a duplicate of the
+// inherited descriptor, provided the parent's mode covers m. The original
+// descriptor gets close-on-exec so that it does not leak into hooks unless
+// passed explicitly.
+func (l *Locker) inherit(name, path string, m Mode) (*Handle, error) {
 	v := l.env(EnvLockFD)
 	if v == "" {
-		return nil
+		return nil, nil
 	}
 	fd, err := strconv.Atoi(v)
 	if err != nil || fd < 0 {
-		return nil
+		return nil, nil
 	}
 	var fst, pst syscall.Stat_t
 	if syscall.Fstat(fd, &fst) != nil || syscall.Stat(path, &pst) != nil {
-		return nil
+		return nil, nil
 	}
 	if fst.Dev != pst.Dev || fst.Ino != pst.Ino || fst.Mode&syscall.S_IFMT != syscall.S_IFREG {
-		return nil
+		return nil, nil
+	}
+	syscall.CloseOnExec(fd)
+	probe, err := os.OpenFile(path, os.O_RDWR|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_file", "файл блокировки %s", path)
+	}
+	err = flock(int(probe.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	switch {
+	case err == nil:
+		// False inheritance: nobody holds the lock, keep ours.
+		if m == Shared {
+			if err := flock(int(probe.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+				_ = probe.Close()
+				return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_file", "flock %s", name)
+			}
+		}
+		return &Handle{f: probe}, nil
+	case !errors.Is(err, syscall.EWOULDBLOCK):
+		_ = probe.Close()
+		return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_file", "flock %s", name)
+	}
+	_ = probe.Close()
+	held := Shared
+	if l.env(EnvLockMode) == Exclusive.String() {
+		held = Exclusive
+	}
+	if m == Exclusive && held == Shared {
+		e := cerr.New(cerr.ExitLock, "lock.upgrade",
+			"блокировка %s унаследована разделяемой: эксклюзивный захват невозможен", name)
+		e.Details = map[string]any{"lock": name, "mode": m.String(), "held": held.String()}
+		return nil, e
 	}
 	syscall.ForkLock.RLock()
 	dup, err := syscall.Dup(fd)
 	if err == nil {
 		syscall.CloseOnExec(dup)
-		syscall.CloseOnExec(fd)
 	}
 	syscall.ForkLock.RUnlock()
 	if err != nil {
-		return nil
+		return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_file", "dup %s", EnvLockFD)
 	}
-	return &Handle{f: os.NewFile(uintptr(dup), path), inherited: true}
+	return &Handle{f: os.NewFile(uintptr(dup), path), inherited: true}, nil
 }
 
 func (l *Locker) acquire(ctx context.Context, name, path string, m Mode) (*Handle, error) {

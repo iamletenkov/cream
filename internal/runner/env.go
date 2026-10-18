@@ -19,7 +19,7 @@ const FirstExtraFD = 3
 
 // EnvInput is everything BuildEnv puts into a hook or action environment.
 // Empty optional fields (PrevVersion, Reason, ChangedKeys, Action, Output,
-// LockFD <= 0) are left out of the environment.
+// LockFD <= 0, and LockMode with it) are left out of the environment.
 //
 // Values are the non-secret keys of the settings domain (config.Domain.Values):
 // secrets never go here — the caller is responsible, BuildEnv has no way to
@@ -30,7 +30,10 @@ type EnvInput struct {
 	Reason, Action, Output                                  string
 	ChangedKeys                                             []string
 	LockFD                                                  int
-	Values                                                  map[string]string
+	// LockMode is the mode the lock behind LockFD is held in: "exclusive" or
+	// "shared"; anything else is passed as "shared" (ruling Р19).
+	LockMode string
+	Values   map[string]string
 }
 
 // BuildEnv returns the complete, clean environment of a hook or action
@@ -66,7 +69,11 @@ func BuildEnv(in EnvInput) []string {
 	optional("CREAM_ACTION", in.Action)
 	optional("CREAM_OUTPUT", in.Output)
 	if in.LockFD > 0 {
-		env = append(env, "CREAM_LOCK_FD="+strconv.Itoa(in.LockFD))
+		mode := "shared"
+		if in.LockMode == "exclusive" {
+			mode = "exclusive"
+		}
+		env = append(env, "CREAM_LOCK_FD="+strconv.Itoa(in.LockFD), "CREAM_LOCK_MODE="+mode)
 	}
 	keys := make([]string, 0, len(in.Values))
 	for k, v := range in.Values {

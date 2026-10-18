@@ -217,7 +217,7 @@ type Mode int // Exclusive | Shared
 type Locker struct{ /* Layout, Timeout, inherited *os.File из CREAM_LOCK_FD */ }
 func NewLocker(l paths.Layout, timeout time.Duration, env func(string) string) *Locker
 func (l *Locker) Global(ctx context.Context) (*Handle, error)
-func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же файла → без ожидания
+func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же занятого файла → без ожидания (Р19)
 type Handle struct{ /* *os.File */ }; func (h *Handle) Release(); func (h *Handle) File() *os.File
 ```
 **`internal/source`** (T7)
@@ -246,7 +246,8 @@ type Runner interface{ Run(ctx context.Context, s Spec) (Result, error) }
 type Exec struct{}                              // Setpgid, kill группы по таймауту, без shell
 func NewSecretFilter(w io.Writer, secrets []string) io.WriteCloser // потоковая замена на "***", стыки чанков
 type EnvInput struct{ Phase, Ext, ExtVersion, PrevVersion, ExtDir, EtcDir, StateDir, Root, ConfigFile,
-  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; Values map[string]string }
+  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; LockMode string; Values map[string]string }
+// LockFD > 0 → CREAM_LOCK_FD и CREAM_LOCK_MODE (LockMode "exclusive", иначе "shared") — Р19
 func BuildEnv(in EnvInput) []string             // чистое окружение §6.3 + несекретные ключи
 type Outcome int // OK | Reboot (10) | NotApplicable (20) | Failed
 func Classify(code int) Outcome
@@ -347,6 +348,10 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   проверка каталогов пути); `CopyTree` — через `os.Root` (ревью безопасности T3).
 
 Рулинги контроллера после ревью волны 2 (2026-10-18):
+- **Р19.** Родитель передаёт вместе с `CREAM_LOCK_FD` режим `CREAM_LOCK_MODE=shared|exclusive` (`runner.EnvInput.LockMode`;
+  иное — `shared`). Вложенный после сверки (dev, ino) открывает свой дескриптор файла и пробует `LOCK_EX|LOCK_NB`:
+  удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.
+  Запрос `exclusive` при унаследованном `shared` — 75 `lock.upgrade`.
 - **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
   в тексте предупреждения; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
 

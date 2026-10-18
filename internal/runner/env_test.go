@@ -26,6 +26,7 @@ func fullInput() EnvInput {
 		Output:      "json",
 		ChangedKeys: []string{"TELEPORT_PROXY", "NODE_NAME"},
 		LockFD:      3,
+		LockMode:    "exclusive",
 		Values:      map[string]string{"TELEPORT_PROXY": "proxy.example:443", "NODE_NAME": "n1", "EMPTY": ""},
 	}
 }
@@ -50,6 +51,7 @@ func TestBuildEnvGolden(t *testing.T) {
 		"CREAM_ACTION=set-managed",
 		"CREAM_OUTPUT=json",
 		"CREAM_LOCK_FD=3",
+		"CREAM_LOCK_MODE=exclusive",
 		"EMPTY=",
 		"NODE_NAME=n1",
 		"TELEPORT_PROXY=proxy.example:443",
@@ -69,7 +71,7 @@ func TestBuildEnvOmitsOptional(t *testing.T) {
 	t.Parallel()
 	got := BuildEnv(EnvInput{Phase: "build", Ext: "noop", ExtVersion: "1.0.0", Root: "/"})
 	for _, name := range []string{"CREAM_PREV_VERSION", "CREAM_REASON", "CREAM_CHANGED_KEYS", "CREAM_ACTION",
-		"CREAM_OUTPUT", "CREAM_LOCK_FD"} {
+		"CREAM_OUTPUT", "CREAM_LOCK_FD", "CREAM_LOCK_MODE"} {
 		if hasVar(got, name) {
 			t.Errorf("%s задан без значения: %v", name, got)
 		}
@@ -130,3 +132,35 @@ func hasVar(env []string, name string) bool {
 }
 
 func kv(name, value string) string { return name + "=" + value }
+
+// Р19: CREAM_LOCK_MODE goes with CREAM_LOCK_FD only; anything but "exclusive"
+// is passed as "shared", the mode a child can never upgrade.
+func TestBuildEnvLockMode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		fd   int
+		mode string
+		want string // "" — no CREAM_LOCK_MODE
+	}{
+		{name: "exclusive", fd: 3, mode: "exclusive", want: "CREAM_LOCK_MODE=exclusive"},
+		{name: "shared", fd: 3, mode: "shared", want: "CREAM_LOCK_MODE=shared"},
+		{name: "empty mode is shared", fd: 3, mode: "", want: "CREAM_LOCK_MODE=shared"},
+		{name: "no fd — no mode", fd: 0, mode: "exclusive"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := BuildEnv(EnvInput{Phase: "live", Ext: "x", LockFD: tc.fd, LockMode: tc.mode})
+			if tc.want == "" {
+				if hasVar(got, "CREAM_LOCK_MODE") {
+					t.Errorf("CREAM_LOCK_MODE без CREAM_LOCK_FD: %v", got)
+				}
+				return
+			}
+			if !slices.Contains(got, tc.want) {
+				t.Errorf("нет %s: %v", tc.want, got)
+			}
+		})
+	}
+}
