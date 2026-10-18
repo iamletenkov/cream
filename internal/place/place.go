@@ -32,6 +32,8 @@ const (
 	CodeFileUnowned = "conflict.file_unowned"
 	// CodeFileModified (warning): a file changed since placement was kept as <dst>.cream-modified.
 	CodeFileModified = "file.modified"
+	// CodeFileStat (exit 74): dst could not be checked on disk (Lstat failed, not ENOENT).
+	CodeFileStat = "file.stat"
 	// CodeFileNotRegular (warning): the recorded dst is not a regular file any more; left alone.
 	CodeFileNotRegular = "file.not_regular"
 )
@@ -82,7 +84,9 @@ func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner)
 			return nil, e
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("раскладка files %s: %w", ext, err)
+			e := cerr.Wrap(err, cerr.ExitState, CodeFileStat, "раскладка files %s: проверка %s", ext, f.Dst)
+			e.Details = map[string]any{"dst": f.Dst}
+			return nil, e
 		}
 	}
 	src, err := os.OpenRoot(tree)

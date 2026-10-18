@@ -371,3 +371,32 @@ func TestUnplaceKeepsEarlierModified(t *testing.T) {
 		t.Errorf("warnings = %+v", list)
 	}
 }
+
+// A Lstat failure other than ENOENT (a directory without x) is 74 file.stat,
+// not a raw error and not "free": Place writes nothing.
+func TestPlaceStatError(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root обходит права каталога")
+	}
+	tree := fixture(t, map[string]src{"a": {"A\n", 0o644}})
+	l := paths.Layout{Root: t.TempDir()}
+	dir := filepath.Dir(onDisk(l, "/etc/locked/x.conf"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	recs, err := Place(l, "x", tree, []manifest.File{{Src: "a", Dst: "/etc/locked/x.conf"}}, registry(nil))
+	if cerr.ExitCode(err) != cerr.ExitState || cerr.CodeOf(err) != CodeFileStat {
+		t.Fatalf("err = %v (exit %d, code %q)", err, cerr.ExitCode(err), cerr.CodeOf(err))
+	}
+	if len(recs) != 0 {
+		t.Errorf("recs = %+v", recs)
+	}
+	if d := cerr.DetailsOf(err); d["dst"] != "/etc/locked/x.conf" {
+		t.Errorf("details = %v", d)
+	}
+}
