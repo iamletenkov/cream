@@ -21,7 +21,7 @@
 
 - [x] Task 5: Домен настроек (`config`)
 
-- [ ] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
+- [x] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
 
 - [ ] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
 
