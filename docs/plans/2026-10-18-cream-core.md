@@ -45,7 +45,7 @@
 
 - [x] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
 
-- [ ] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
+- [x] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
 
 - [ ] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
 
@@ -381,6 +381,11 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   обязателен (§4), а машину без os-release cream не опознаёт. `Host`, собранный вызывающим (`cream resolve` без
   `--family`), по-прежнему пропускает проверку семейства. os-release читается через `os.OpenInRoot(Root, …)`;
   `HasCommand` под чужим `--root` смотрит PATH хоста.
+- **Р26.** Toolchain — `golang:1.26.9` во всём репозитории (`go 1.26` в `go.mod`, `Makefile`, lefthook, CI, хук
+  `lint-after-edit`, `AGENTS.md`, `README.md`, правило `go.md`); `govulncheck@v1.8.0`. Ветка 1.25 больше не получает
+  исправлений: на `golang:1.25.11` `make vuln` находит 16 уязвимостей stdlib с достижимыми вызовами, на 1.25.14 — 10,
+  исправленных только в go1.26.9; на 1.26.9 — ни одной. Правило «образ не моложе двух недель» ввёл контроллер, на
+  патч-релизы Go с исправлениями безопасности оно не распространяется (1.26.9 вышел 2026-10-08).
 
 ## Задачи
 

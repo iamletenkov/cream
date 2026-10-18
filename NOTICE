@@ -2,5 +2,12 @@ cream
 Copyright 2026 Letenkov Maksim
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
-It bundles no third-party code: the binary is built from this repository and
-the Go standard library only.
+The binary is built from this repository, the Go standard library (BSD-3-Clause,
+Copyright 2009 The Go Authors) and one third-party module, statically linked:
+
+go.yaml.in/yaml/v3
+  Copyright 2011-2019 Canonical Ltd — Apache License, Version 2.0.
+  The files ported from libyaml (apic.go, emitterc.go, parserc.go, readerc.go,
+  scannerc.go, writerc.go, yamlh.go, yamlprivateh.go) are also
+  Copyright 2006-2011 Kirill Simonov — MIT License.
+The full license texts are in packaging/copyright (/usr/share/doc/cream/copyright).
