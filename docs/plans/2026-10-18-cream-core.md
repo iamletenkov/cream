@@ -41,7 +41,7 @@
 
 - [x] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
 
-- [ ] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
+- [x] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
 
 - [ ] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
 

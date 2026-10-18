@@ -1,0 +1,17 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "record.mismatch",
+    "message": "configure-system: params_digest в госте sha256:def87a0a00ebb6995b5d945db579a33efa6c87dfae69b062c8a5e7d409b909db, а в record.json sha256:911c8fcaff51798bdc625df49b418daa4a1bbb853504fe073064141d197953c0",
+    "details": {
+      "ext": "configure-system",
+      "field": "params_digest",
+      "found": "sha256:def87a0a00ebb6995b5d945db579a33efa6c87dfae69b062c8a5e7d409b909db",
+      "record": "sha256:911c8fcaff51798bdc625df49b418daa4a1bbb853504fe073064141d197953c0"
+    }
+  }
+}
