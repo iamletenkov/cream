@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -247,5 +248,32 @@ func TestSetConfigureReleasesLockBeforeRestart(t *testing.T) {
 	}
 	if probe.held.Load() {
 		t.Error("lock/configure-system занята во время перезапуска cream-configure@")
+	}
+}
+
+// TestSetReadsManifestUnderLock — set, ждавший lock/<ext> (её держит upgrade),
+// проверяет ключи по манифесту, установленному к моменту захвата.
+func TestSetReadsManifestUnderLock(t *testing.T) {
+	t.Parallel()
+	next := installPatched(t, fixtureDir(t, "with-config"), "with-config", func(s string) string {
+		return strings.Replace(s, "    FLAG:", "    NEW_KEY: {type: str, default: a, description: \"ключ новой версии\"}\n    FLAG:", 1)
+	})
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "with-config"))
+	release := holdExtLock(t, te, "with-config", lock.Exclusive)
+	done := make(chan error, 1)
+	go func() {
+		_, err := te.Set(context.Background(), "with-config", []config.Change{{Key: "NEW_KEY", Value: "b"}}, SetOptions{})
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	// «upgrade» под блокировкой: новое дерево до её снятия.
+	seedInstalled(t, te, filepath.Join(next, "extensions", "with-config"))
+	release()
+	if err := <-done; err != nil {
+		t.Fatalf("set после upgrade: %v", err)
+	}
+	if v, err := te.Get("with-config", "NEW_KEY", false); err != nil || v != "b" {
+		t.Errorf("NEW_KEY = %q, %v", v, err)
 	}
 }

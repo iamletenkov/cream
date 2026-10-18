@@ -43,8 +43,7 @@ type SetResult struct {
 // after the write, and the result still describes the write.
 func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetOptions) (SetResult, error) {
 	res := SetResult{Ext: ext, ChangedKeys: []string{}, Apply: ApplyNone}
-	in, err := e.Find(ext)
-	if err != nil {
+	if err := CheckExtName(ext); err != nil {
 		return res, err
 	}
 	h, err := e.Locks.Ext(ctx, ext, lock.Exclusive)
@@ -52,6 +51,12 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 		return res, err
 	}
 	defer h.Release()
+	// The record and the manifest are read under the lock: an upgrade the set
+	// waited for has already replaced them.
+	in, err := e.Find(ext)
+	if err != nil {
+		return res, err
+	}
 
 	changed, err := e.Domain(in).Set(ch, config.SetOpts{AllowReadonly: o.AllowReadonly})
 	if err != nil {
