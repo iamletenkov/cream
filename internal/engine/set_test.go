@@ -3,14 +3,18 @@ package engine
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/lock"
+	"github.com/iamletenkov/cream/internal/paths"
+	"github.com/iamletenkov/cream/internal/systemd"
 )
 
 func TestSetApplyHook(t *testing.T) {
@@ -209,4 +213,67 @@ func TestSetRefusals(t *testing.T) {
 			t.Errorf("%+v, %v", res, err)
 		}
 	})
+}
+
+// lockProbeSystemctl — фейковый systemctl, который в Restart проверяет,
+// свободна ли lock/<ext>: юнит configure берёт её сам, держать её при
+// перезапуске — взаимная блокировка.
+type lockProbeSystemctl struct {
+	*systemd.Fake
+	l    paths.Layout
+	ext  string
+	held atomic.Bool
+}
+
+func (s *lockProbeSystemctl) Restart(ctx context.Context, unit string, noBlock bool) error {
+	h, err := lock.NewLocker(s.l, 0, nil).Ext(ctx, s.ext, lock.Exclusive)
+	if err != nil {
+		s.held.Store(true)
+	} else {
+		h.Release()
+	}
+	return s.Fake.Restart(ctx, unit, noBlock)
+}
+
+func TestSetConfigureReleasesLockBeforeRestart(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	te.systemdRunning("running")
+	probe := &lockProbeSystemctl{Fake: te.Sys, l: te.L, ext: "configure-system"}
+	te.Systemctl = probe
+	seedInstalled(t, te, fixtureDir(t, "configure-system"))
+	res, err := te.Set(context.Background(), "configure-system", []config.Change{{Key: "MESSAGE", Value: "hi"}}, SetOptions{Wait: true})
+	if err != nil || res.Apply != ApplyRestart {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if probe.held.Load() {
+		t.Error("lock/configure-system занята во время перезапуска cream-configure@")
+	}
+}
+
+// TestSetReadsManifestUnderLock — set, ждавший lock/<ext> (её держит upgrade),
+// проверяет ключи по манифесту, установленному к моменту захвата.
+func TestSetReadsManifestUnderLock(t *testing.T) {
+	t.Parallel()
+	next := installPatched(t, fixtureDir(t, "with-config"), "with-config", func(s string) string {
+		return strings.Replace(s, "    FLAG:", "    NEW_KEY: {type: str, default: a, description: \"ключ новой версии\"}\n    FLAG:", 1)
+	})
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "with-config"))
+	release := holdExtLock(t, te, "with-config", lock.Exclusive)
+	done := make(chan error, 1)
+	go func() {
+		_, err := te.Set(context.Background(), "with-config", []config.Change{{Key: "NEW_KEY", Value: "b"}}, SetOptions{})
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	// «upgrade» под блокировкой: новое дерево до её снятия.
+	seedInstalled(t, te, filepath.Join(next, "extensions", "with-config"))
+	release()
+	if err := <-done; err != nil {
+		t.Fatalf("set после upgrade: %v", err)
+	}
+	if v, err := te.Get("with-config", "NEW_KEY", false); err != nil || v != "b" {
+		t.Errorf("NEW_KEY = %q, %v", v, err)
+	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"io"
 	"time"
@@ -48,6 +49,9 @@ type Context struct {
 	// Out is for human-readable output: stdout in text mode, stderr with --json
 	// (stdout then carries only the envelope).
 	Out io.Writer
+	// Ctx is the invocation's context (App.Context): every engine call and
+	// lock wait gets it, so a signal stops them.
+	Ctx context.Context
 }
 
 // Stderr is the diagnostics stream.

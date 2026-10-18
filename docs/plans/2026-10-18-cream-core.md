@@ -382,6 +382,19 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   `--family`), по-прежнему пропускает проверку семейства. os-release читается через `os.OpenInRoot(Root, …)`;
   `HasCommand` под чужим `--root` смотрит PATH хоста.
 
+Рулинги контроллера после ревью волн 4–5 (2026-10-18):
+- **Р24.** Свои источники (XDG или `--sources` вместе с `--cache`) не берут `lock/global` машины, но `source add`,
+  `remove` и `sync` сериализуются: `source.LockCache` — `flock` (exclusive, ожидание по `--lock-timeout`, сигнал
+  прерывает) на `<CacheRoot>/.lock`. Источники машины — по-прежнему root и `lock/global`.
+- **Р25.** `remove` при работающем systemd останавливает экземпляр `cream-configure@<ext>` (`systemctl stop`; в
+  `systemd.Systemctl` добавлен `Stop`) до снятия юнита и drop-in; сбой остановки — предупреждение
+  `systemd.stop_failed`, не отказ. `remove --forget` снимает и битую запись реестра (Р20: `Get` — 74
+  `state.corrupt`): предупреждение `state.corrupt`, `files` такой записи неизвестны и не убираются, дерево и
+  артефакты cream — убираются. Поле `target_version` в записи `failed-upgrade` **не вводится**: формат реестра
+  §10 — контракт, а целевая версия уже есть в `history.jsonl` (`to` записи `failed-upgrade`) и в манифесте дерева
+  `/opt/cream/ext/<ext>` (прежняя лежит в `.<ext>.prev`); вернуться — после MVP, через спеку, если понадобится
+  `cream show`/stvor-agent.
+
 ## Задачи
 
 ### Волна 1 — фундамент (T1 ∥ T2 ∥ T3)

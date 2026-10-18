@@ -18,6 +18,8 @@ type Systemctl interface {
 	DaemonReload(ctx context.Context) error
 	// Restart runs `systemctl [--no-block] restart <unit>`.
 	Restart(ctx context.Context, unit string, noBlock bool) error
+	// Stop runs `systemctl stop <unit>`.
+	Stop(ctx context.Context, unit string) error
 }
 
 // ExecFunc runs a command without a shell and returns its stdout and exit
@@ -86,6 +88,10 @@ func (s *systemctl) Restart(ctx context.Context, unit string, noBlock bool) erro
 		return s.call(ctx, "--no-block", "restart", unit)
 	}
 	return s.call(ctx, "restart", unit)
+}
+
+func (s *systemctl) Stop(ctx context.Context, unit string) error {
+	return s.call(ctx, "stop", unit)
 }
 
 func (s *systemctl) call(ctx context.Context, args ...string) error {

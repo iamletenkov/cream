@@ -1,8 +1,20 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/iamletenkov/cream/internal/lock"
+	"github.com/iamletenkov/cream/internal/paths"
 )
 
 // TestGoldenAction — формы result `cream run` и `cream actions` (§7.2, §11.4).
@@ -95,4 +107,75 @@ func TestRunActionCLIText(t *testing.T) {
 	if out := runCLI(t, cliIn{Root: root, Euid: 1000}, "run", "action-json", "status"); out.Code != 0 {
 		t.Errorf("не-root на временном корне: %+v", out)
 	}
+}
+
+// pidDead сообщает, что процесса pid нет или он уже зомби (в контейнере
+// осиротевших потомков может никто не пожинать).
+func pidDead(pid int) bool {
+	if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		return true
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return true
+	}
+	_, rest, _ := strings.Cut(string(data), ") ")
+	return strings.HasPrefix(rest, "Z")
+}
+
+// TestRunActionCanceled — сигнал (отмена App.Context) во время действия:
+// группа процессов действия убита, cream завершается, lock/<ext> свободна.
+func TestRunActionCanceled(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	seedRoot(t, root, "action-json")
+	l := paths.Layout{Root: root}
+	pidFile := filepath.Join(root, "child.pid")
+	writeRootFile(t, root, "/opt/cream/ext/action-json/actions/echo-args",
+		"#!/bin/sh\nsleep 60 &\necho $! > "+pidFile+"\nwait\n", 0o755)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	app := App{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr,
+		Env: func(string) string { return "" }, Euid: func() int { return 0 },
+		Now: func() time.Time { return cliNow }, Context: ctx}
+	done := make(chan int, 1)
+	go func() { done <- Run([]string{"--root", root, "run", "action-json", "echo-args"}, app) }()
+
+	var pid int
+	for deadline := time.Now().Add(10 * time.Second); pid == 0; {
+		if data, err := os.ReadFile(pidFile); err == nil && strings.HasSuffix(string(data), "\n") {
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("действие не запустилось")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if h, err := lock.NewLocker(l, 0, nil).Ext(context.Background(), "action-json", lock.Exclusive); err == nil {
+		h.Release()
+		t.Error("lock/action-json свободна во время действия")
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code == 0 {
+			t.Errorf("отменённое действие — код 0; stderr:\n%s", stderr.String())
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("cream не завершился после отмены")
+	}
+	for deadline := time.Now().Add(5 * time.Second); !pidDead(pid); {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("потомок действия %d жив после отмены", pid)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h, err := lock.NewLocker(l, 0, nil).Ext(context.Background(), "action-json", lock.Exclusive)
+	if err != nil {
+		t.Fatalf("lock/action-json не освобождена: %v", err)
+	}
+	h.Release()
 }

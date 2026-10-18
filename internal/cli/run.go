@@ -5,6 +5,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,10 @@ type App struct {
 	Env    func(string) string
 	Euid   func() int
 	Now    func() time.Time
+	// Context ends on SIGINT, SIGTERM or SIGHUP (main, signal.NotifyContext):
+	// lock waits stop, hooks and actions get their process group killed.
+	// nil — context.Background().
+	Context context.Context
 }
 
 // Run executes one cream invocation and returns the process exit code.
@@ -128,7 +133,10 @@ func (inv *invocation) dispatch(args []string) (result any, err error) {
 	}
 	inv.usage = ""
 	ctx := &Context{App: inv.app, Command: name, Globals: inv.globals, Layout: layout, Warn: inv.warn,
-		Out: inv.app.Stdout}
+		Out: inv.app.Stdout, Ctx: inv.app.Context}
+	if ctx.Ctx == nil {
+		ctx.Ctx = context.Background()
+	}
 	if inv.json {
 		// stdout belongs to the envelope only: a command writing to Out or to
 		// App.Stdout by mistake still cannot break "exactly one object".

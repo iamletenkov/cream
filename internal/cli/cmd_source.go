@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -103,23 +102,24 @@ func runSource(ctx *Context, d catalogDeps, f sourceFlags, args []string) (any, 
 // sourcePrivate reports sources that are the caller's own, not the
 // machine's: XDG user mode or both sources.yaml and the cache overridden
 // (bisquite: --sources … --cache …). They need neither root nor the
-// machine's lock/global.
+// machine's lock/global: they are serialized by <cache>/.lock (Р24).
 func sourcePrivate(ctx *Context) bool {
 	l := ctx.Layout
 	return l.User || (l.SourcesFile != "" && l.CacheDir != "")
 }
 
-// sourceLock checks root and takes lock/global for a change of the
-// machine's sources (add, remove, sync); a no-op for private ones.
-// source.Sync and source.Forget do not lock: the caller serializes.
+// sourceLock serializes a change of sources (add, remove, sync): the
+// machine's — root and lock/global; private ones — the flock of their cache
+// (source.LockCache, Р24). source.Sync and source.Forget do not lock: the
+// caller serializes.
 func sourceLock(ctx *Context, what string) (release func(), err error) {
 	if sourcePrivate(ctx) {
-		return func() {}, nil
+		return source.LockCache(ctx.Ctx, ctx.Layout, ctx.Globals.LockTimeout)
 	}
 	if err := requireRoot(ctx, what); err != nil {
 		return nil, err
 	}
-	h, err := lock.NewLocker(ctx.Layout, ctx.Globals.LockTimeout, ctx.App.Env).Global(context.Background())
+	h, err := lock.NewLocker(ctx.Layout, ctx.Globals.LockTimeout, ctx.App.Env).Global(ctx.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func sourceAdd(ctx *Context, d catalogDeps, f sourceFlags, args []string) (any, 
 	s, _ = file.Get(s.Name)
 	if f.sync {
 		// Синхронизация до записи: при её сбое sources.yaml не меняется (§9.1).
-		if _, err := sourceSyncer(ctx, d).Sync(context.Background(), s); err != nil {
+		if _, err := sourceSyncer(ctx, d).Sync(ctx.Ctx, s); err != nil {
 			return nil, err
 		}
 	}
@@ -419,7 +419,7 @@ func sourceSync(ctx *Context, d catalogDeps, args []string) (any, error) {
 	var first error
 	failed := []string{}
 	for _, s := range todo {
-		e, err := syncer.Sync(context.Background(), s)
+		e, err := syncer.Sync(ctx.Ctx, s)
 		if err != nil {
 			_, _ = fmt.Fprintf(ctx.Stderr(), "cream: источник %s: %v\n", s.Name, err)
 			failed = append(failed, s.Name)

@@ -6,14 +6,16 @@ import (
 )
 
 // Fake is a Systemctl for tests of the engine: it answers Running with
-// State/OK, fails with ReloadErr/RestartErr and records every call as
-// "is-system-running", "daemon-reload", "restart [--no-block] <unit>".
+// State/OK, fails with ReloadErr/RestartErr/StopErr and records every call as
+// "is-system-running", "daemon-reload", "restart [--no-block] <unit>",
+// "stop <unit>".
 // Set the fields before use; Calls is safe for concurrent use.
 type Fake struct {
 	State      string
 	OK         bool
 	ReloadErr  error
 	RestartErr error
+	StopErr    error
 
 	mu    sync.Mutex
 	calls []string
@@ -54,4 +56,10 @@ func (f *Fake) Restart(_ context.Context, unit string, noBlock bool) error {
 		f.record("restart " + unit)
 	}
 	return f.RestartErr
+}
+
+// Stop returns StopErr.
+func (f *Fake) Stop(_ context.Context, unit string) error {
+	f.record("stop " + unit)
+	return f.StopErr
 }

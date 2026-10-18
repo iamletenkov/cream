@@ -48,8 +48,9 @@ type ActionResult struct {
 
 // RunAction runs an action of an installed extension (§7.1–§7.2). Before the
 // start: the extension and the action (66), the phase (68 action.phase), root
-// (77), the arguments (64/65), then lock/<ext> by the action's lock (75). The
-// action's own code 0–63 is ActionResult.ExitCode with a nil error; a code
+// (77), the arguments (64/65), then lock/<ext> by the action's lock (75);
+// under the lock the extension and its domain are read again (an upgrade
+// that changed the action's lock is 75 lock.changed). The action's own code 0–63 is ActionResult.ExitCode with a nil error; a code
 // outside that range or stdout that is not exactly one JSON object for
 // output: json is 76 action.protocol; a timeout is 79 action.timeout.
 //
@@ -58,28 +59,42 @@ type ActionResult struct {
 // and then written to e.Stdout unchanged (without Envelope).
 func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, error) {
 	res := ActionResult{Action: r.Ext + "/" + r.Action}
-	in, err := e.Find(r.Ext)
+	phase := e.Phase()
+	in, a, err := e.actionFind(r, phase)
 	if err != nil {
 		return res, err
-	}
-	a, ok := in.Manifest.Actions[r.Action]
-	if !ok {
-		ce := cerr.New(cerr.ExitNotFound, "not_found.action", "у расширения %s нет действия %q", r.Ext, r.Action)
-		ce.Details = map[string]any{"ext": r.Ext, "action": r.Action}
-		return res, ce
-	}
-	phase := e.Phase()
-	if !slices.Contains(a.Phases, manifest.Phase(phase)) {
-		ce := cerr.New(cerr.ExitNotApplicable, "action.phase", "%s: действие недопустимо в фазе %s", res.Action, phase)
-		ce.Details = map[string]any{"action": res.Action, "phase": phase, "phases": a.Phases}
-		return res, ce
-	}
-	if a.Root && e.L.NeedsRoot() && r.Euid != 0 {
-		return res, cerr.New(cerr.ExitPerm, "perm.root", "%s: нужен root", res.Action)
 	}
 	args, err := actionParseArgs(a, r.Args, e.Stdin)
 	if err != nil {
 		return res, err
+	}
+
+	var held *lock.Handle
+	var heldMode lock.Mode
+	if a.Lock != manifest.LockNone {
+		heldMode = lock.Exclusive
+		if a.Lock == manifest.LockShared {
+			heldMode = lock.Shared
+		}
+		h, err := e.Locks.Ext(ctx, r.Ext, heldMode)
+		if err != nil {
+			return res, err
+		}
+		defer h.Release()
+		held = h
+		// The record, the manifest and the domain are read under the lock: a
+		// set or an upgrade the action waited for is already visible.
+		again, a2, err := e.actionFind(r, phase)
+		if err != nil {
+			return res, err
+		}
+		if a2.Lock != a.Lock {
+			ce := cerr.New(cerr.ExitLock, "lock.changed",
+				"%s: расширение обновлено во время ожидания блокировки (lock: %s → %s) — повторите", res.Action, a.Lock, a2.Lock)
+			ce.Details = map[string]any{"action": res.Action, "lock": string(a.Lock), "found": string(a2.Lock)}
+			return res, ce
+		}
+		in, a = again, a2
 	}
 
 	dom := e.Domain(in)
@@ -117,18 +132,9 @@ func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, 
 		spec.Stdin = e.Stdin
 	}
 
-	if a.Lock != manifest.LockNone {
-		mode := lock.Exclusive
-		if a.Lock == manifest.LockShared {
-			mode = lock.Shared
-		}
-		h, err := e.Locks.Ext(ctx, r.Ext, mode)
-		if err != nil {
-			return res, err
-		}
-		defer h.Release()
-		spec.ExtraFiles = []*os.File{h.File()}
-		env.LockFD, env.LockMode = runner.FirstExtraFD, mode.String()
+	if held != nil {
+		spec.ExtraFiles = []*os.File{held.File()}
+		env.LockFD, env.LockMode = runner.FirstExtraFD, heldMode.String()
 	}
 	spec.Env = runner.BuildEnv(env)
 
@@ -193,6 +199,31 @@ func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, 
 		return res, cerr.Wrap(err, cerr.ExitState, "io.stderr", "%s: запись stderr", res.Action)
 	}
 	return res, nil
+}
+
+// actionFind finds the action of r on the installed extension and checks
+// the phase (68 action.phase) and root (77).
+func (e *Engine) actionFind(r ActionRequest, phase string) (Installed, manifest.Action, error) {
+	name := r.Ext + "/" + r.Action
+	in, err := e.Find(r.Ext)
+	if err != nil {
+		return in, manifest.Action{}, err
+	}
+	a, ok := in.Manifest.Actions[r.Action]
+	if !ok {
+		ce := cerr.New(cerr.ExitNotFound, "not_found.action", "у расширения %s нет действия %q", r.Ext, r.Action)
+		ce.Details = map[string]any{"ext": r.Ext, "action": r.Action}
+		return in, a, ce
+	}
+	if !slices.Contains(a.Phases, manifest.Phase(phase)) {
+		ce := cerr.New(cerr.ExitNotApplicable, "action.phase", "%s: действие недопустимо в фазе %s", name, phase)
+		ce.Details = map[string]any{"action": name, "phase": phase, "phases": a.Phases}
+		return in, a, ce
+	}
+	if a.Root && e.L.NeedsRoot() && r.Euid != 0 {
+		return in, a, cerr.New(cerr.ExitPerm, "perm.root", "%s: нужен root", name)
+	}
+	return in, a, nil
 }
 
 // actionCheckJSON checks the stdout of an output: json action: exactly one

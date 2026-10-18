@@ -123,6 +123,12 @@ func TestDaemonReloadAndRestart(t *testing.T) {
 		{"restart fails", func(s Systemctl) error {
 			return s.Restart(context.Background(), "cream-configure@docker.service", false)
 		}, 1, nil, []string{"restart", "cream-configure@docker.service"}, true},
+		{"stop", func(s Systemctl) error {
+			return s.Stop(context.Background(), "cream-configure@docker.service")
+		}, 0, nil, []string{"stop", "cream-configure@docker.service"}, false},
+		{"stop fails", func(s Systemctl) error {
+			return s.Stop(context.Background(), "cream-configure@docker.service")
+		}, 5, nil, []string{"stop", "cream-configure@docker.service"}, true},
 		{"exec fails", func(s Systemctl) error { return s.DaemonReload(context.Background()) }, -1,
 			errors.New("boom"), []string{"daemon-reload"}, true},
 	}
@@ -152,12 +158,17 @@ func TestFake(t *testing.T) {
 	_ = f.DaemonReload(ctx)
 	_ = f.Restart(ctx, "cream-configure@a.service", true)
 	_ = f.Restart(ctx, "cream-configure@b.service", false)
-	want := "is-system-running|daemon-reload|restart --no-block cream-configure@a.service|restart cream-configure@b.service"
+	_ = f.Stop(ctx, "cream-configure@c.service")
+	want := "is-system-running|daemon-reload|restart --no-block cream-configure@a.service|restart cream-configure@b.service|stop cream-configure@c.service"
 	if got := strings.Join(f.Calls(), "|"); got != want {
 		t.Errorf("calls = %q", got)
 	}
 	f.RestartErr = errors.New("x")
 	if err := f.Restart(ctx, "u", true); err == nil {
 		t.Error("RestartErr ignored")
+	}
+	f.StopErr = errors.New("y")
+	if err := f.Stop(ctx, "u"); err == nil {
+		t.Error("StopErr ignored")
 	}
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -32,7 +31,7 @@ func runAction(ctx *Context, args []string) (any, error) {
 	if len(args) < 2 {
 		return nil, ctx.Usagef("run: нужны <ext> <action>")
 	}
-	res, err := newEngine(ctx).RunAction(context.Background(), engine.ActionRequest{Ext: args[0], Action: args[1],
+	res, err := newEngine(ctx).RunAction(ctx.Ctx, engine.ActionRequest{Ext: args[0], Action: args[1],
 		Args: args[2:], Envelope: ctx.Globals.JSON, Euid: ctx.App.Euid()})
 	if err != nil {
 		return nil, err

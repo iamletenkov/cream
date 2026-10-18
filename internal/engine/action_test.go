@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/lock"
 )
 
@@ -354,4 +356,53 @@ func TestActions(t *testing.T) {
 	}
 	_, err = te.Actions("absent")
 	wantCode(t, err, 66, "not_found.extension")
+}
+
+func TestRunActionJSONOverLimit(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "action-json"))
+	// Объект в начале и пробелы за пределом: обрезанный буфер сам по себе — валидный
+	// JSON, отказ даёт только признак переполнения.
+	actionWrite(t, te, "status", `printf '{"ok":true}'; head -c 5000000 /dev/zero | tr '\0' ' '`)
+	res, err := actionRun(te, "action-json", "status")
+	wantCode(t, err, cerr.ExitProtocol, "action.protocol")
+	if res.Output != nil {
+		t.Errorf("output при переполнении: %s", res.Output)
+	}
+	if n := len(te.Out.String()); n != 0 {
+		t.Errorf("stdout при переполнении: %d байт", n)
+	}
+}
+
+// TestRunActionSeesValueWrittenWhileWaiting — exclusive-действие, ждавшее
+// lock/<ext> (её держит set), читает домен уже после неё: видит новое значение.
+func TestRunActionSeesValueWrittenWhileWaiting(t *testing.T) {
+	t.Parallel()
+	dir := installPatched(t, fixtureDir(t, "action-json"), "action-json", func(s string) string {
+		return strings.Replace(s, `exit-code: {summary: "завершается кодом из аргумента", args: free, lock: none}`,
+			`exit-code: {summary: "завершается кодом из аргумента", args: free, lock: exclusive}`, 1)
+	})
+	te := newTestEngine(t)
+	in := seedInstalled(t, te, filepath.Join(dir, "extensions", "action-json"))
+	actionWrite(t, te, "exit-code", `printf '%s\n' "$FIXTURE_PROXY"`)
+	release := holdExtLock(t, te, "action-json", lock.Exclusive)
+	done := make(chan error, 1)
+	go func() {
+		_, err := actionRun(te, "action-json", "exit-code")
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	// «set» под блокировкой: новое значение до её снятия.
+	if _, err := te.Domain(in).Set([]config.Change{{Key: "FIXTURE_PROXY", Value: "proxy.example:443"}},
+		config.SetOpts{AllowReadonly: true}); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := te.Out.String(); got != "proxy.example:443\n" {
+		t.Errorf("действие видит %q, ждали значение, записанное до снятия блокировки", got)
+	}
 }

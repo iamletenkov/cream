@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -27,7 +28,7 @@ func TestRun(t *testing.T) {
 			t.Parallel()
 			var stdout, stderr bytes.Buffer
 			env := func(string) string { return "" }
-			code := run(tc.args, strings.NewReader(""), &stdout, &stderr, env)
+			code := run(context.Background(), tc.args, strings.NewReader(""), &stdout, &stderr, env)
 			if code != tc.wantCode {
 				t.Errorf("exit code = %d, want %d", code, tc.wantCode)
 			}

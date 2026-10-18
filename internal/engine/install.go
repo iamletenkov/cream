@@ -374,12 +374,10 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 	}
 
+	// Parameters are checked before the tree and written after files (§6.5,
+	// steps 3–4): a refusal of files (67) leaves the domain untouched.
 	if len(j.changes) > 0 {
-		only := make([]string, 0, len(j.changes))
-		for _, c := range j.changes {
-			only = append(only, c.Key)
-		}
-		if _, err := dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only}); err != nil {
+		if _, err := dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: []string{}}); err != nil {
 			return nil, err
 		}
 	}
@@ -421,7 +419,16 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 	}
 	outcome := runner.OK
 	var herr error
-	if hasHook(m, hook) {
+	if len(j.changes) > 0 {
+		only := make([]string, 0, len(j.changes))
+		for _, c := range j.changes {
+			only = append(only, c.Key)
+		}
+		// A write that fails after the tree and files are in place is a failed
+		// operation in the registry, like a failed hook: the retry repeats it.
+		_, herr = dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only})
+	}
+	if herr == nil && hasHook(m, hook) {
 		outcome, herr = e.RunHook(WithLock(ctx, h, lock.Exclusive), Installed{Record: rec, Manifest: m}, hook, env)
 	}
 	switch {
