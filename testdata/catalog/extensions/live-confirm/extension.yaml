@@ -1,0 +1,11 @@
+schema: cream/v1
+name: live-confirm
+version: 1.0.0
+summary: фикстура live-confirm
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# targets.live: confirm — на живой машине только с --accept-risk.
+targets: {build: exec, live: confirm, live_note: "фикстура: на живой машине нужен --accept-risk"}
+hooks:
+  install: {}
+  remove: {}

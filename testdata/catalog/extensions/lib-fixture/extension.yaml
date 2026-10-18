@@ -1,0 +1,8 @@
+schema: cream/v1
+name: lib-fixture
+version: 1.0.0
+summary: фикстура lib-fixture
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# kind: library — только файлы, без хуков (§4.5).
+kind: library

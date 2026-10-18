@@ -1,0 +1,7 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+printf '%s\n' "$@" > "$CREAM_STATE_DIR/labels"
+systemctl daemon-reload
+systemctl restart lock-restart.service
+printf '{"applied":true,"count":%d}\n' "$#"

@@ -1,0 +1,16 @@
+schema: cream/v1
+name: lock-restart-exclusive
+version: 1.0.0
+summary: фикстура lock-restart-exclusive
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Негативный вариант §14 п.7: render — lock: exclusive, поэтому set-managed
+# ждёт restart, а restart ждёт блокировку — падение по --lock-timeout.
+hooks:
+  install: {}
+  remove: {}
+actions:
+  render: {summary: "рендер перед стартом юнита", lock: exclusive, phases: [build, live]}
+  set-managed: {summary: "пишет метки и синхронно перезапускает юнит", args: free, lock: exclusive, output: json, timeout: 3m}
+files:
+  - {src: files/lock-restart-exclusive.service, dst: /etc/systemd/system/lock-restart-exclusive.service, mode: "0644"}

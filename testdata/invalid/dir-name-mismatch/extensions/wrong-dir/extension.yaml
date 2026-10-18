@@ -1,0 +1,9 @@
+schema: cream/v1
+name: right-name
+version: 1.0.0
+summary: каталог не равен name
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект дерева: имя каталога wrong-dir ≠ name.
+hooks:
+  install: {}

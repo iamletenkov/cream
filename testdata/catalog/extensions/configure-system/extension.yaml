@@ -1,0 +1,14 @@
+schema: cream/v1
+name: configure-system
+version: 1.0.0
+summary: фикстура configure-system
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure стадии system: юнит cream-configure@configure-system после сети.
+hooks:
+  install: {}
+  configure: {stage: system, after: [network-online.target], wants: [network-online.target]}
+  remove: {}
+config:
+  keys:
+    MESSAGE: {type: str, default: "hello", description: "что configure пишет в состояние"}

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+date +%s >> "$CREAM_STATE_DIR/render.log"

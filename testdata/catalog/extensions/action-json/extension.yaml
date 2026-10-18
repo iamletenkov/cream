@@ -1,0 +1,26 @@
+schema: cream/v1
+name: action-json
+version: 1.0.0
+summary: фикстура action-json
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Действия: output json, args pairs/free, секрет через stdin, lock shared/none.
+hooks:
+  install: {}
+  remove: {}
+config:
+  keys:
+    FIXTURE_PROXY: {type: host, default: "", empty: true, readonly: true, description: "адрес; пишет join"}
+actions:
+  status: {summary: "состояние одним JSON-объектом", lock: none, output: json, phases: [build, live]}
+  join:
+    summary: "регистрация: секрет со stdin"
+    args: pairs
+    params:
+      FIXTURE_PROXY: {required: true}
+      FIXTURE_SECRET: {type: str, secret: true, required: true}
+    stdin: secret
+    output: json
+    timeout: 30s
+  echo-args: {summary: "печатает аргументы как есть", args: free, lock: shared}
+  exit-code: {summary: "завершается кодом из аргумента", args: free, lock: none}

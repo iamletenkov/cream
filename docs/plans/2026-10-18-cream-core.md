@@ -17,7 +17,7 @@
 
 - [x] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
 
-- [ ] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
+- [x] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
 
 - [ ] Task 5: Домен настроек (`config`)
 

@@ -1,0 +1,8 @@
+[Unit]
+Description=cream fixture lock-restart: ExecStartPre вызывает действие render
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/cream run lock-restart render
+ExecStart=/bin/true

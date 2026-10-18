@@ -1,0 +1,7 @@
+#!/bin/sh
+# Фикстура cream: действие.
+set -eu
+# Секрет приходит на stdin и никуда не пишется; печатается только длина.
+secret=$(cat)
+echo "join: proxy=$FIXTURE_PROXY" >&2
+printf '{"joined":true,"proxy":"%s","secret_len":%d}\n' "$FIXTURE_PROXY" "${#secret}"
