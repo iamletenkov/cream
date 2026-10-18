@@ -42,6 +42,12 @@ var reservedNames = []string{"cream", "lib", "ext", "installed", "lock", "global
 // до кода хука — ключ домена с таким именем исполнил бы чужой код.
 var reservedKeys = []string{"PATH", "LANG", "HOME", "PWD", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "IFS"}
 
+// reservedName сообщает, занято ли имя ключа домена или параметра действия
+// окружением хука и действия (CREAM_*, reservedKeys, рулинг A10).
+func reservedName(name string) bool {
+	return strings.HasPrefix(name, "CREAM_") || slices.Contains(reservedKeys, name)
+}
+
 // ValidName сообщает, годится ли s в имена расширений: регэксп §4.2, кроме
 // зарезервированных имён и префикса "cream-" (рулинг Р15).
 func ValidName(s string) bool {
@@ -380,7 +386,7 @@ func validateKeys(in map[string]rawKey) (keytype.Schema, error) {
 			return nil, invalid(field, "шаблон ключа — PREFIX_* из A-Z, 0-9, _")
 		case !isPattern && !reKey.MatchString(name):
 			return nil, invalid(field, "имя ключа — [A-Z][A-Z0-9_]*")
-		case strings.HasPrefix(name, "CREAM_") || slices.Contains(reservedKeys, name):
+		case reservedName(name):
 			return nil, invalid(field, "имя занято окружением хука (CREAM_*, %s)", strings.Join(reservedKeys, ", "))
 		case isPattern != r.Pattern:
 			return nil, invalid(field, "pattern: true ставится ровно у ключей вида PREFIX_*")
@@ -516,6 +522,9 @@ func validateActions(in map[string]rawAction, keys keytype.Schema) (map[string]A
 func validateParam(field, name string, r rawParam, keys keytype.Schema) (Param, error) {
 	if !reKey.MatchString(name) {
 		return Param{}, invalid(field, "имя параметра — [A-Z][A-Z0-9_]*")
+	}
+	if reservedName(name) {
+		return Param{}, invalid(field, "имя занято окружением действия (CREAM_*, %s)", strings.Join(reservedKeys, ", "))
 	}
 	p := Param{Required: r.Required, Secret: r.Secret}
 	spec, inKeys := keys.Lookup(name)

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -119,4 +120,19 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.n += n
 	return n, err
+}
+
+// Второй рубеж A10: даже если манифест пропустил параметр с занятым именем
+// (валидация манифеста — первый), в окружение действия он не попадает.
+func TestActionEnvValuesDenied(t *testing.T) {
+	t.Parallel()
+	pairs := map[string]string{"PROXY": "p:1"}
+	for _, k := range []string{"PATH", "LANG", "HOME", "PWD", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "IFS", "CREAM_EXT"} {
+		pairs[k] = "evil"
+	}
+	got := actionEnvValues(map[string]string{"PROXY": "old", "LEVEL": "low"}, pairs)
+	want := map[string]string{"PROXY": "p:1", "LEVEL": "low"}
+	if !maps.Equal(got, want) {
+		t.Errorf("окружение действия: %v, ждали %v", got, want)
+	}
 }
