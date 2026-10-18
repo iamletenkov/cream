@@ -737,6 +737,9 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 
 \* Хук `check` запускается от root; без root `status` показывает только реестр.
 
+Байтовая воспроизводимость `cream catalog pack` гарантируется при одной версии Go toolchain: от неё зависит
+вывод `compress/gzip`, поэтому архивы, собранные бинарями на разных версиях Go, могут различаться по sha256.
+
 Глобальные флаги: `--json`, `--root DIR`, `--sources FILE`, `--cache DIR`, `--lock-timeout D`, `-q`, `-v`.
 Окружение: `CREAM_ROOT`, `CREAM_SOURCES`, `CREAM_CACHE`.
 
