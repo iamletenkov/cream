@@ -102,18 +102,19 @@ func runSource(ctx *Context, d catalogDeps, f sourceFlags, args []string) (any, 
 // sourcePrivate reports sources that are the caller's own, not the
 // machine's: XDG user mode or both sources.yaml and the cache overridden
 // (bisquite: --sources … --cache …). They need neither root nor the
-// machine's lock/global.
+// machine's lock/global: they are serialized by <cache>/.lock (Р24).
 func sourcePrivate(ctx *Context) bool {
 	l := ctx.Layout
 	return l.User || (l.SourcesFile != "" && l.CacheDir != "")
 }
 
-// sourceLock checks root and takes lock/global for a change of the
-// machine's sources (add, remove, sync); a no-op for private ones.
-// source.Sync and source.Forget do not lock: the caller serializes.
+// sourceLock serializes a change of sources (add, remove, sync): the
+// machine's — root and lock/global; private ones — the flock of their cache
+// (source.LockCache, Р24). source.Sync and source.Forget do not lock: the
+// caller serializes.
 func sourceLock(ctx *Context, what string) (release func(), err error) {
 	if sourcePrivate(ctx) {
-		return func() {}, nil
+		return source.LockCache(ctx.Ctx, ctx.Layout, ctx.Globals.LockTimeout)
 	}
 	if err := requireRoot(ctx, what); err != nil {
 		return nil, err

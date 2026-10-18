@@ -382,6 +382,11 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   `--family`), по-прежнему пропускает проверку семейства. os-release читается через `os.OpenInRoot(Root, …)`;
   `HasCommand` под чужим `--root` смотрит PATH хоста.
 
+Рулинги контроллера после ревью волн 4–5 (2026-10-18):
+- **Р24.** Свои источники (XDG или `--sources` вместе с `--cache`) не берут `lock/global` машины, но `source add`,
+  `remove` и `sync` сериализуются: `source.LockCache` — `flock` (exclusive, ожидание по `--lock-timeout`, сигнал
+  прерывает) на `<CacheRoot>/.lock`. Источники машины — по-прежнему root и `lock/global`.
+
 ## Задачи
 
 ### Волна 1 — фундамент (T1 ∥ T2 ∥ T3)

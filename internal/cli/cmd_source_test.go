@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -427,5 +428,42 @@ func TestSourcePrivateNoRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(cache, "sources.lock")); err != nil {
 		t.Errorf("sources.lock в --cache (Р12): %v", err)
+	}
+}
+
+// Р24: свои источники сериализуются flock на <кеш>/.lock: sync ждёт
+// занятую блокировку (75 по --lock-timeout), два sync сразу — оба успешны.
+func TestSourcePrivateCacheLock(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	d := sourceTestDeps()
+	cat := filepath.Join(dir, "catalog")
+	if err := fsx.CopyTree(cliTestdataDir(t, "catalog"), cat); err != nil {
+		t.Fatal(err)
+	}
+	sources := filepath.Join(dir, "sources.yaml")
+	cache := filepath.Join(dir, "cache")
+	flags := []string{"--sources", sources, "--cache", cache}
+	in := cliIn{Euid: 1000}
+	if out := sourceRunCLI(t, d, in, append(flags, "source", "add", "fx", "--path", cat)...); out.Code != 0 {
+		t.Fatalf("add: %+v", out)
+	}
+	release, err := source.LockCache(context.Background(), paths.Layout{SourcesFile: sources, CacheDir: cache}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := sourceRunCLI(t, d, in, append(flags, "--lock-timeout", "100ms", "source", "sync", "--json")...)
+	release()
+	if out.Code != 75 || sourceErrCode(t, out) != "lock.timeout" {
+		t.Fatalf("sync при занятом кеше: %+v", out)
+	}
+	codes := make(chan cliOut, 2)
+	for range 2 {
+		go func() { codes <- sourceRunCLI(t, d, in, append(flags, "source", "sync", "--json")...) }()
+	}
+	for range 2 {
+		if out := <-codes; out.Code != 0 {
+			t.Errorf("параллельный sync: %+v", out)
+		}
 	}
 }
