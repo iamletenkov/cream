@@ -54,7 +54,7 @@ const (
 // refuses (67 deps.dependents) while installed extensions need ext, unless
 // Force; runs the remove hook (an extension without one is 65
 // hook.missing_remove, a library has nothing to undo; Forget skips the
-// hook); disables configure; removes the files of the registry (a modified
+// hook and also drops a broken record, Р20); stops and disables configure; removes the files of the registry (a modified
 // one is kept as <dst>.cream-modified with a warning, ruling Р11 for missing
 // ones), the tree, with Purge the domain and the state directory, and the
 // registry record; writes history. A failed hook leaves everything as it was.
@@ -125,7 +125,15 @@ func (e *Engine) Remove(ctx context.Context, ext string, o RemoveOptions) (*Remo
 func (e *Engine) removeTarget(ext string, forget bool) (Installed, error) {
 	rec, ok, err := e.Store.Get(ext)
 	if err != nil {
-		return Installed{}, err
+		// Р20: a broken record is removed by --forget alone; its files are unknown.
+		if !forget || cerr.CodeOf(err) != "state.corrupt" {
+			return Installed{}, err
+		}
+		if e.Warn != nil {
+			e.Warn.AddDetails("state.corrupt", map[string]any{"ext": ext},
+				"%s: запись реестра повреждена, снимается без неё (files не убираются): %v", ext, err)
+		}
+		rec, ok = &state.Record{Name: ext}, true
 	}
 	if !ok {
 		ce := cerr.New(cerr.ExitNotFound, "not_found.extension", "расширение %s не установлено", ext)
@@ -193,18 +201,25 @@ func (e *Engine) removeHook(ctx context.Context, in Installed, res *RemoveResult
 }
 
 // removeArtifacts removes what cream put on the machine for in: the
-// configure instance and its drop-in (daemon-reload with a running
-// systemd), the reason marker, the files of the registry, the tree with its
+// configure instance (stopped with a running systemd) and its drop-in
+// (daemon-reload with a running systemd), the reason marker, the files of the registry, the tree with its
 // .new/.prev leftovers and, with purge, the domain and the state directory.
 func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) error {
 	ext := in.Record.Name
+	_, up := e.Systemctl.Running(ctx)
+	if up && (in.Record.Configure != nil || (in.Manifest != nil && hasHook(in.Manifest, manifest.HookConfigure))) {
+		// A running configure instance would outlive its unit file.
+		if err := e.Systemctl.Stop(ctx, systemd.UnitName(ext)); err != nil {
+			e.warn("systemd.stop_failed", "%s: systemctl stop %s: %v", ext, systemd.UnitName(ext), err)
+		}
+	}
 	if err := systemd.Disable(e.L, ext); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: снятие configure", ext)
 	}
 	if err := place.Unplace(e.L, in.Record.Files, e.Warn); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: удаление files", ext)
 	}
-	if _, up := e.Systemctl.Running(ctx); up {
+	if up {
 		if err := e.Systemctl.DaemonReload(ctx); err != nil {
 			e.warn("systemd.reload_failed", "systemctl daemon-reload: %v", err)
 		}

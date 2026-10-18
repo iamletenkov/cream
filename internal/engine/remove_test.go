@@ -433,7 +433,48 @@ func TestRemoveDisablesConfigure(t *testing.T) {
 			if got := slices.Contains(te.Sys.Calls(), "daemon-reload"); got != running {
 				t.Errorf("daemon-reload = %v, calls %v", got, te.Sys.Calls())
 			}
+			// Работающий экземпляр cream-configure@ останавливается до снятия юнита.
+			stop := "stop " + systemd.UnitName("configure-system")
+			if i := slices.Index(te.Sys.Calls(), stop); (i >= 0) != running ||
+				(running && i > slices.Index(te.Sys.Calls(), "daemon-reload")) {
+				t.Errorf("stop экземпляра: calls %v", te.Sys.Calls())
+			}
 		})
+	}
+}
+
+// Сбой остановки экземпляра — предупреждение, remove доводится до конца.
+func TestRemoveStopFailedWarns(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "configure-system"))
+	te.systemdRunning("running")
+	te.Sys.StopErr = os.ErrDeadlineExceeded
+	if _, err := te.Remove(context.Background(), "configure-system", RemoveOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(warningCodes(te), "systemd.stop_failed") || removeHasRecord(t, te, "configure-system") {
+		t.Errorf("предупреждения %v", warningCodes(te))
+	}
+}
+
+// Р20: битая запись реестра (Get — 74 state.corrupt) снимается remove --forget.
+func TestRemoveForgetCorruptRecord(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "noop"))
+	writeFile(t, te, te.L.InstalledFile("noop")[len(te.Root):], "{не json", 0o644)
+	_, err := te.Remove(context.Background(), "noop", RemoveOptions{})
+	wantCode(t, err, cerr.ExitState, "state.corrupt")
+	res, err := te.Remove(context.Background(), "noop", RemoveOptions{Forget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Forgotten || removeHasRecord(t, te, "noop") || removeExists(t, te.L.ExtTree("noop")) {
+		t.Errorf("--forget не снял битую запись: %+v", res)
+	}
+	if !slices.Contains(warningCodes(te), "state.corrupt") {
+		t.Errorf("предупреждения %v", warningCodes(te))
 	}
 }
 
