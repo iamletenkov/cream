@@ -29,6 +29,16 @@ func TestSecretFilter(t *testing.T) {
 		{"Close сбрасывает хвост-префикс", []string{"secret"}, []string{"data secr"}, "data secr"},
 		{"многострочный секрет", []string{"line1\nline2"}, []string{"k=line1\n", "line2\nend\n"}, "k=***\nend\n"},
 		{"повторяющийся префикс", []string{"aab"}, []string{"aaab"}, "a***"},
+		// Маскируется объединение всех вхождений всех секретов: ни один байт
+		// ни одного из перекрывающихся секретов не уходит наружу.
+		{"перекрытие abcdef/defxyz", []string{"abcdef", "defxyz"}, []string{"abcdefxyz"}, "***"},
+		{"перекрытие в обратном порядке", []string{"defxyz", "abcdef"}, []string{"<abcdefxyz>"}, "<***>"},
+		{"перекрытие разной длины", []string{"abc", "bcdefg"}, []string{"abcdefg!"}, "***!"},
+		{"вложенный bc в abcd", []string{"bc", "abcd"}, []string{"abcd"}, "***"},
+		{"вложенный bc без внешнего", []string{"bc"}, []string{"abcd"}, "a***d"},
+		{"перекрытие на стыке двух Write", []string{"abcdef", "defxyz"}, []string{"abcd", "efxyz"}, "***"},
+		{"перекрытие на стыке, хвост до Close", []string{"abcdef", "defxyz"}, []string{"abcdefx", "y"}, "***xy"},
+		{"смежные вхождения сливаются", []string{"ab"}, []string{"a", "bab"}, "***"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
