@@ -1,49 +1,26 @@
-// Command cream is the extension runner. For now it only reports its version;
-// the domain commands come with the spec (docs/specs/).
+// Command cream is the extension runner (docs/specs/2026-10-18-cream-core.md).
+// main only sets the process umask and hands over to internal/cli.
 package main
 
 import (
-	"fmt"
 	"io"
 	"os"
+	"syscall"
+	"time"
 
-	"github.com/iamletenkov/cream/internal/version"
+	"github.com/iamletenkov/cream/internal/cli"
 )
 
-const usage = `usage: cream <command>
-
-commands:
-  version   print the cream version
-`
-
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	// umask 022 once per process; hooks and actions inherit it (spec §6.3, ruling Р7).
+	syscall.Umask(0o022)
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv))
 }
 
-// run executes one command and returns the process exit code:
-// 0 on success, 1 if stdout cannot be written, 2 on a usage error.
-// Write errors to stderr are ignored: there is nowhere left to report them.
-func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		_, _ = fmt.Fprint(stderr, usage)
-		return 2
-	}
-	switch args[0] {
-	case "version", "--version":
-		return writeOut(stdout, version.Line(version.Version)+"\n")
-	case "help", "-h", "--help":
-		return writeOut(stdout, usage)
-	default:
-		_, _ = fmt.Fprintf(stderr, "cream: unknown command %q\n\n%s", args[0], usage)
-		return 2
-	}
-}
-
-// writeOut writes s to stdout and maps a write failure (closed pipe, full disk)
-// to exit code 1.
-func writeOut(stdout io.Writer, s string) int {
-	if _, err := io.WriteString(stdout, s); err != nil {
-		return 1
-	}
-	return 0
+// run builds the process App and returns the exit code of cli.Run.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) int {
+	return cli.Run(args, cli.App{
+		Stdin: stdin, Stdout: stdout, Stderr: stderr,
+		Env: env, Euid: os.Geteuid, Now: time.Now,
+	})
 }

@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 )
 
+// main — только umask и cli.Run; здесь проверяется, что run собирает App и
+// отдаёт код выхода диспетчера. Сам диспетчер покрыт internal/cli.
 func TestRun(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -16,44 +17,26 @@ func TestRun(t *testing.T) {
 		wantStdout string
 		wantStderr string
 	}{
-		{name: "no args prints usage", args: nil, wantCode: 2, wantStderr: "usage: cream"},
 		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "cream dev\n"},
-		{name: "version flag", args: []string{"--version"}, wantCode: 0, wantStdout: "cream dev\n"},
-		{name: "help", args: []string{"help"}, wantCode: 0, wantStdout: "usage: cream"},
-		{name: "unknown command", args: []string{"frobnicate"}, wantCode: 2, wantStderr: `unknown command "frobnicate"`},
+		{name: "version json", args: []string{"version", "--json"}, wantCode: 0, wantStdout: `"contract": "cream/v1"`},
+		{name: "no args", args: nil, wantCode: 64, wantStderr: "cream <команда>"},
+		{name: "unknown command", args: []string{"frobnicate"}, wantCode: 64, wantStderr: `"frobnicate"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var stdout, stderr bytes.Buffer
-			code := run(tc.args, &stdout, &stderr)
+			env := func(string) string { return "" }
+			code := run(tc.args, strings.NewReader(""), &stdout, &stderr, env)
 			if code != tc.wantCode {
 				t.Errorf("exit code = %d, want %d", code, tc.wantCode)
 			}
 			if !strings.Contains(stdout.String(), tc.wantStdout) {
 				t.Errorf("stdout = %q, want it to contain %q", stdout.String(), tc.wantStdout)
 			}
-			if tc.wantStdout == "" && stdout.Len() != 0 {
-				t.Errorf("stdout = %q, want empty", stdout.String())
-			}
 			if !strings.Contains(stderr.String(), tc.wantStderr) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), tc.wantStderr)
 			}
-			if tc.wantStderr == "" && stderr.Len() != 0 {
-				t.Errorf("stderr = %q, want empty", stderr.String())
-			}
 		})
-	}
-}
-
-type failingWriter struct{}
-
-func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("closed pipe") }
-
-func TestRunStdoutWriteError(t *testing.T) {
-	t.Parallel()
-	var stderr bytes.Buffer
-	if code := run([]string{"version"}, failingWriter{}, &stderr); code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
 	}
 }

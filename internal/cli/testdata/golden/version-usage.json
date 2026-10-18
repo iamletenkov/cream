@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "version",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "usage.args",
+    "message": "version: лишние аргументы [\"extra\"]",
+    "details": null
+  }
+}
