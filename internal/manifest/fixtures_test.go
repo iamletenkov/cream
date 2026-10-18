@@ -243,7 +243,7 @@ func TestFixturesInvalid(t *testing.T) {
 		{dir: "duplicate-name-roots"},
 		{dir: "unknown-field", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
 		{dir: "reserved-bin", wantExit: cerr.ExitData, wantCode: "manifest.reserved"},
-		{dir: "cream-too-new", wantExit: cerr.ExitNotApplicable, wantCode: "platform.cream_version"},
+		{dir: "too-new-cream", wantExit: cerr.ExitNotApplicable, wantCode: "platform.cream_version"},
 	}
 	entries, err := os.ReadDir(filepath.Join(fixturesRoot, "invalid"))
 	if err != nil {

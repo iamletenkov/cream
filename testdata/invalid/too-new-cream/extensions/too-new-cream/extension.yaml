@@ -1,5 +1,5 @@
 schema: cream/v1
-name: cream-too-new
+name: too-new-cream
 version: 1.0.0
 summary: требует cream новее исполнителя
 cream: ">=1.99.0"

@@ -97,7 +97,7 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		exit int
 		code string
 	}{
-		{dir: "cream-too-new", exit: cerr.ExitNotApplicable, code: "platform.cream_version"},
+		{dir: "too-new-cream", exit: cerr.ExitNotApplicable, code: "platform.cream_version"},
 		{dir: "dir-name-mismatch", exit: cerr.ExitData, code: "manifest.dir_name"},
 		{dir: "duplicate-name-roots", exit: cerr.ExitData, code: "catalog.duplicate_name"},
 		{dir: "hook-declared-missing", exit: cerr.ExitData, code: "manifest.hook_missing"},
@@ -528,7 +528,7 @@ func TestLoadExtension(t *testing.T) {
 	if cerr.CodeOf(err) != "manifest.hook_undeclared" {
 		t.Errorf("дефект дерева: %v", err)
 	}
-	_, err = LoadExtension(filepath.Join(fixturesRoot, "invalid", "cream-too-new", "extensions", "cream-too-new"), cream)
+	_, err = LoadExtension(filepath.Join(fixturesRoot, "invalid", "too-new-cream", "extensions", "too-new-cream"), cream)
 	if cerr.ExitCode(err) != cerr.ExitNotApplicable {
 		t.Errorf("cream старее манифеста: %v", err)
 	}
