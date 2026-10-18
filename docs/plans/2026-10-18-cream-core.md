@@ -29,7 +29,7 @@
 
 - [x] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
 
-- [ ] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
+- [x] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
 
 - [ ] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
 
