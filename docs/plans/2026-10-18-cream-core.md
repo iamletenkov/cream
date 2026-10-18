@@ -235,7 +235,7 @@ type Syncer struct{ Layout paths.Layout; Fetch Fetcher; Validate func(dir string
 func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error)
 func ReadLock(path string) ([]LockEntry, error)
 type SourceDir struct{ Source Source; Dir string; Synced bool; Lock *LockEntry }
-func Dirs(l paths.Layout, f *File, lock []LockEntry) []SourceDir  // в порядке приоритета
+func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) // в порядке приоритета; при --root / кеш чужой или доступен на запись группе/всем → 77 perm.cache (§13)
 func ExtractTarGz(r io.Reader, dst string) error   // враждебные архивы — отказ
 func Pack(dir string, w io.Writer, epoch time.Time) error // детерминированный tar.gz
 ```

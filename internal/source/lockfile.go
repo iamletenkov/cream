@@ -55,9 +55,20 @@ func ReadLock(path string) ([]LockEntry, error) {
 // updateLock replaces (or, with e == nil, removes) the entry called name
 // and writes the file atomically, entries sorted by name.
 func updateLock(path, name string, e *LockEntry) error {
+	data, changed, err := prepareLock(path, name, e)
+	if err != nil || !changed {
+		return err
+	}
+	return writeLockFile(path, data, fsx.WriteAtomic)
+}
+
+// prepareLock reads sources.lock and returns its new content with the entry
+// called name replaced (or removed with e == nil); changed is false when
+// there is nothing to remove.
+func prepareLock(path, name string, e *LockEntry) (data []byte, changed bool, err error) {
 	cur, err := ReadLock(path)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	out := make([]LockEntry, 0, len(cur)+1)
 	for _, c := range cur {
@@ -66,20 +77,33 @@ func updateLock(path, name string, e *LockEntry) error {
 		}
 	}
 	if e == nil && len(out) == len(cur) {
-		return nil
+		return nil, false, nil
 	}
 	if e != nil {
 		out = append(out, *e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	data, err := json.MarshalIndent(lockFile{Sources: out}, "", "  ")
+	data, err = json.MarshalIndent(lockFile{Sources: out}, "", "  ")
 	if err != nil {
-		return cerr.Wrap(err, cerr.ExitInternal, cerr.CodeInternal, "кодирование sources.lock")
+		return nil, false, cerr.Wrap(err, cerr.ExitInternal, cerr.CodeInternal, "кодирование sources.lock")
 	}
+	return append(data, '\n'), true, nil
+}
+
+// lockDir creates the directory of sources.lock.
+func lockDir(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, "state.write", "каталог %s", filepath.Dir(path))
 	}
-	if err := fsx.WriteAtomic(path, append(data, '\n'), 0o644); err != nil {
+	return nil
+}
+
+// writeLockFile writes prepared sources.lock content with write (fsx.WriteAtomic).
+func writeLockFile(path string, data []byte, write func(string, []byte, fs.FileMode) error) error {
+	if err := lockDir(path); err != nil {
+		return err
+	}
+	if err := write(path, data, 0o644); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, "state.write", "sources.lock %s", path)
 	}
 	return nil
