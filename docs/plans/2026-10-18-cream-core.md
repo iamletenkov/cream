@@ -275,7 +275,7 @@ func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // и
 type Entry struct{ Source source.SourceDir; Dir string; Manifest *manifest.Manifest; Digest string }
 type Ref struct{ Source, Name string; Version *semver.Version }
 func ParseRef(s string) (Ref, error)            // [source/]name[@version]
-func Validate(root string, cream manifest.CreamBuild) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
+func Validate(root string, cream manifest.CreamBuild) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4; cream новее — Р22
 func LoadExtension(dir string, cream manifest.CreamBuild) (Entry, error) // для --from-dir
 func Lookup(dirs []source.SourceDir, ref Ref, cream manifest.CreamBuild, w *cerr.Warnings) (Entry, error)
 
@@ -369,6 +369,11 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   первый свободный `.cream-modified.N`.
 
 Рулинги контроллера после повторного ревью (2026-10-18):
+- **Р22.** `catalog.Validate`: расширение, которому нужен cream новее текущего (68 `platform.cream_version` из
+  `manifest.Load`), не делает каталог невалидным — оно попадает в `Report.NotApplicable` (не в `Extensions`) и в
+  `Report.Warnings` с кодом `catalog.cream_newer` (`details`: `ext`, `required`, `cream`); остальные ошибки каталога —
+  как были. `ValidateDir` (отдельный каталог расширения) и установка (`LoadExtension`, `Lookup`) по-прежнему дают 68.
+  Так источник, опубликованный под более новый cream, синхронизируется, а ставится из него только применимое.
 - **Р23.** `resolve.Probe.Detect`: при наличии os-release `Family` не пустой — `deb` для debian-подобных (по `ID` или
   `ID_LIKE`), `rpm`/`apk`/`openwrt` для известных чужих, иначе значение `ID` (`linux`, если `ID` нет, как в
   os-release(5)); пустой — только если os-release нет вовсе. Хост от `Detect` помечен `Host.Detected`: на нём пустой
@@ -635,7 +640,9 @@ system-init}*.json`.
 **Тесты первыми.** На фикстурах `testdata/catalog` (синхронизированных в тесте через `source.Syncer` с `path`):
 таблица сценариев — первая установка `noop` (`changed:true`, реестр по §10); двойная → `changed:false`, хук не
 вызван (счётчик в `CREAM_STATE_DIR`); `failing-install` → `status: failed`, повтор вызывает хук; `install-scope`
-с новым значением → хук вызван, со старым — нет; `depends-lib` без `lib-fixture` → 67, после — успех и порядок;
+с новым значением → хук вызван, со старым — нет; `depends-lib` без `lib-fixture` → 67, после — успех и порядок; `deps.missing`: кандидаты ищутся по `details.missing`
+через `catalog.Lookup` по всем источникам и кладутся в `details.candidates` (§9.4; тест — `depends-lib` с
+`lib-fixture` в источнике и без него);
 `conflict-*`, `requires-cap`, `live-confirm` без/с `--accept-risk`, `not-applicable` без/с `--allow-skip`
 (`status: skipped`), `reboot-required` → поле и файл; `files-mode` — режим и sha256; файл A в `/etc/cream/<B>/…` (Р11) — в реестре A, повторный install A не
 конфликтует сам с собой; `upgrade-fixture` 1.0.0 →
@@ -702,7 +709,8 @@ configure только включается ссылками (без вызов�
 **Тесты первыми.** Сквозь `cli.Run` с `--root t.TempDir()`: `source add --path testdata/catalog --sync` →
 `sources.lock`; повтор `add` → 0 без изменений; другие поля → 65, с `--replace` → 0; `add --archive` с голым путём
 → 64; `add --archive file://… --sha256 <неверный> --sync` → 69 и записи нет; `validate testdata/invalid/*` — коды;
-`catalog pack` дважды — одинаковый sha256; `resolve --phase build --target-arch arm64 --host-arch amd64` слоя
+`catalog pack` дважды — одинаковый sha256; `source sync` каталога с расширением под более новый cream — успех,
+`catalog.cream_newer` в `warnings` (Р22), `install` этого расширения — 68; `resolve --phase build --target-arch arm64 --host-arch amd64` слоя
 `exec` → 68 `platform.arch_barrier`; golden `resolve --json` для `depends-lib`.
 **Готово.** `make test PKG="./internal/cli/..."`, `make lint` зелёные.
 **Зависит от:** T7, T10, T11.
