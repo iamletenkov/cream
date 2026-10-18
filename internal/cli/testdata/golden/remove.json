@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "remove",
+  "ok": true,
+  "result": {
+    "ext": "noop",
+    "version": "1.0.0",
+    "hook": true,
+    "purged": false,
+    "forgotten": false,
+    "dependents": [],
+    "reboot_required": false
+  },
+  "warnings": [],
+  "error": null
+}

@@ -37,7 +37,7 @@
 
 - [ ] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
 
-- [ ] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
+- [x] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
 
 - [x] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
 

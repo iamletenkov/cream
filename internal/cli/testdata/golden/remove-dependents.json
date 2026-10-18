@@ -1,0 +1,17 @@
+{
+  "cream": "dev",
+  "command": "remove",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "deps.dependents",
+    "message": "lib-fixture нужно установленным расширениям: depends-lib (--force — удалить всё равно)",
+    "details": {
+      "dependents": [
+        "depends-lib"
+      ],
+      "ext": "lib-fixture"
+    }
+  }
+}
