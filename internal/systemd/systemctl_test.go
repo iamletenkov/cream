@@ -62,7 +62,7 @@ func TestRunning(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			r := &recorder{out: tc.out, code: tc.code, err: tc.err}
-			state, ok := NewSystemctl(bootedLayout(t), r.run).Running(context.Background())
+			state, ok := bootedRealRoot(r).Running(context.Background())
 			if state != tc.wantState || ok != tc.wantOK {
 				t.Errorf("Running = %q, %v; want %q, %v", state, ok, tc.wantState, tc.wantOK)
 			}
@@ -71,6 +71,23 @@ func TestRunning(t *testing.T) {
 				t.Errorf("calls = %v", r.calls)
 			}
 		})
+	}
+}
+
+// bootedRealRoot is a Systemctl on Root "/" that sees /run/systemd/system.
+func bootedRealRoot(r *recorder) Systemctl {
+	return &systemctl{l: paths.Layout{Root: "/"}, run: r.run, isDir: func(p string) bool { return p == "/run/systemd/system" }}
+}
+
+// Р9: under another --root the live systemd of the host is not the target's:
+// Running is offline without asking systemctl, even if the tree has
+// run/systemd/system.
+func TestRunningOtherRoot(t *testing.T) {
+	t.Parallel()
+	r := &recorder{out: "running\n"}
+	state, ok := NewSystemctl(bootedLayout(t), r.run).Running(context.Background())
+	if ok || state != StateOffline || len(r.calls) != 0 {
+		t.Errorf("Running = %q, %v, calls %v", state, ok, r.calls)
 	}
 }
 

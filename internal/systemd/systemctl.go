@@ -25,16 +25,24 @@ type Systemctl interface {
 // to os/exec lives with the wiring (cli), tests pass a fake.
 type ExecFunc func(ctx context.Context, name string, args ...string) (stdout []byte, code int, err error)
 
-// NewSystemctl returns a Systemctl that calls systemctl through run. Whether
-// systemd runs is decided by /run/systemd/system under l.Root first: without
-// it (build phase, container without systemd) systemctl is never asked.
+// NewSystemctl returns a Systemctl that calls systemctl through run. Only on
+// the real root (ruling Р9) and only with /run/systemd/system present is
+// systemctl asked whether systemd runs; under another --root (the build
+// phase, fixtures) or without that directory (container without systemd)
+// Running is offline.
 func NewSystemctl(l paths.Layout, run ExecFunc) Systemctl {
-	return &systemctl{l: l, run: run}
+	return &systemctl{l: l, run: run, isDir: isDir}
 }
 
 type systemctl struct {
-	l   paths.Layout
-	run ExecFunc
+	l     paths.Layout
+	run   ExecFunc
+	isDir func(path string) bool // tests fake /run/systemd/system on the real root
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 // StateOffline is reported when systemd is not PID 1.
@@ -53,7 +61,7 @@ func parseState(s string) (up, known bool) {
 }
 
 func (s *systemctl) Running(ctx context.Context) (string, bool) {
-	if st, err := os.Stat(s.l.SystemdRunning()); err != nil || !st.IsDir() {
+	if !s.l.NeedsRoot() || !s.isDir(s.l.SystemdRunning()) {
 		return StateOffline, false
 	}
 	// The command exits non-zero for everything but "running": only stdout counts.
