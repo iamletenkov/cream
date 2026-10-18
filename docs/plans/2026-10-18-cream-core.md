@@ -25,7 +25,7 @@
 
 - [ ] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
 
-- [ ] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
+- [x] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
 
 - [ ] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
 
