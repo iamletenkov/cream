@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/manifest"
 )
 
 // Problem is one validation error: the cream exit code and error code it
@@ -26,17 +27,21 @@ type ExtensionInfo struct {
 
 // Report is the result of Validate/ValidateDir: every error found (the
 // validator does not stop at the first one) and the warnings of §6.3, §7.3,
-// §8.4. Catalog and CatalogVersion are empty for ValidateDir.
+// §8.4. NotApplicable lists the extensions of a catalog that need a newer
+// cream (68 platform.cream_version): they do not make the catalog invalid
+// (Р22), are not in Extensions and are warned as catalog.cream_newer.
+// Catalog and CatalogVersion are empty for ValidateDir.
 type Report struct {
 	Catalog        string          `json:"catalog,omitempty"`
 	CatalogVersion string          `json:"catalog_version,omitempty"`
 	Extensions     []ExtensionInfo `json:"extensions"`
+	NotApplicable  []Problem       `json:"not_applicable"`
 	Errors         []Problem       `json:"errors"`
 	Warnings       []cerr.Warning  `json:"warnings"`
 }
 
 func newReport() Report {
-	return Report{Extensions: []ExtensionInfo{}, Errors: []Problem{}, Warnings: []cerr.Warning{}}
+	return Report{Extensions: []ExtensionInfo{}, NotApplicable: []Problem{}, Errors: []Problem{}, Warnings: []cerr.Warning{}}
 }
 
 // OK reports whether no errors were found (warnings do not count).
@@ -75,4 +80,15 @@ func (r *Report) failErr(ext, path string, err error) {
 
 func (r *Report) warn(code, format string, a ...any) {
 	r.Warnings = append(r.Warnings, cerr.Warning{Code: code, Message: fmt.Sprintf(format, a...)})
+}
+
+// creamNewer records an extension that needs a newer cream (Р22): not an
+// error, but NotApplicable and a catalog.cream_newer warning.
+func (r *Report) creamNewer(ext, path string, err error, cream manifest.CreamBuild) {
+	r.NotApplicable = append(r.NotApplicable, Problem{Ext: ext, Path: path, Exit: cerr.ExitCode(err),
+		Code: cerr.CodeOf(err), Message: err.Error()})
+	required := cerr.DetailsOf(err)["required"]
+	r.Warnings = append(r.Warnings, cerr.Warning{Code: warnCreamNewer,
+		Message: fmt.Sprintf("%s: требует cream %v, а это cream %s — расширение неприменимо", ext, required, cream.String()),
+		Details: map[string]any{"ext": ext, "required": required, "cream": cream.String()}})
 }

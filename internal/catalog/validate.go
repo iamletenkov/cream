@@ -32,6 +32,7 @@ const (
 	codeSpecialFile    = "manifest.special_file"
 	codeDuplicateName  = "catalog.duplicate_name"
 	codeCatalogInvalid = "catalog.invalid"
+	codeCreamVersion   = "platform.cream_version" // 68 manifest.Load: нужен cream новее
 )
 
 // Коды предупреждений валидатора.
@@ -39,6 +40,7 @@ const (
 	warnLockNoneSet   = "validate.lock_none_set"  // §6.3: cream set в действии lock: none
 	warnUnitLock      = "validate.unit_lock"      // §7.3: Exec* юнита зовёт действие под блокировкой
 	warnApplyBlocking = "validate.apply_blocking" // §8.4: systemctl без --no-block в apply
+	warnCreamNewer    = "catalog.cream_newer"     // Р22: расширению нужен cream новее текущего
 )
 
 // maxScript — сколько байт исполняемого файла читается для проверки UTF-8 и
@@ -67,6 +69,9 @@ type loaded struct {
 // §8.4. It does not stop at the first error: the report lists them all, and
 // the returned error is Report.Err() (nil when the catalog is valid).
 // Directories starting with "." and plain files under a root are skipped.
+// An extension that needs a newer cream is not an error of the catalog
+// (Р22): it goes to NotApplicable with a catalog.cream_newer warning, so a
+// catalog published for a newer cream still syncs; installing it stays 68.
 func Validate(root string, cream manifest.CreamBuild) (Report, error) {
 	r := newReport()
 	cat, err := manifest.LoadCatalog(root)
@@ -100,7 +105,7 @@ func Validate(root string, cream manifest.CreamBuild) (Report, error) {
 				r.fail(name, rel, codeCatalogInvalid, "%s: не каталог и не файл", rel)
 				continue
 			}
-			m := checkExtension(&r, filepath.Join(root, filepath.FromSlash(rel)), rel, cream)
+			m := checkExtension(&r, filepath.Join(root, filepath.FromSlash(rel)), rel, cream, true)
 			if m == nil {
 				continue
 			}
@@ -129,7 +134,7 @@ func Validate(root string, cream manifest.CreamBuild) (Report, error) {
 // extension's action from a unit is not checked: its manifest is unknown.
 func ValidateDir(dir string, cream manifest.CreamBuild) (Report, error) {
 	r := newReport()
-	m := checkExtension(&r, dir, ".", cream)
+	m := checkExtension(&r, dir, ".", cream, false)
 	if m != nil {
 		r.Extensions = append(r.Extensions, ExtensionInfo{Name: m.Name, Version: m.Version.String(), Path: "."})
 		warnExtension(&r, loaded{rel: ".", dir: dir, m: m}, map[string]*manifest.Manifest{m.Name: m})
@@ -147,7 +152,7 @@ func LoadExtension(dir string, cream manifest.CreamBuild) (Entry, error) {
 
 func loadExtension(dir string, cream manifest.CreamBuild, w *cerr.Warnings) (Entry, error) {
 	r := newReport()
-	m := checkExtension(&r, dir, ".", cream)
+	m := checkExtension(&r, dir, ".", cream, false)
 	for _, x := range r.Warnings {
 		if w != nil {
 			w.Add(x.Code, "%s", x.Message)
@@ -186,8 +191,10 @@ func checkRootDir(catalog, rel string) string {
 
 // checkExtension loads the manifest of the extension at dir and checks its
 // tree; problems go to r with paths under rel. It returns the manifest when
-// the extension has no errors, nil otherwise.
-func checkExtension(r *Report, dir, rel string, cream manifest.CreamBuild) *manifest.Manifest {
+// the extension has no errors, nil otherwise. In a catalog (inCatalog) a
+// manifest that needs a newer cream is not an error: it goes to
+// NotApplicable with a catalog.cream_newer warning (Р22).
+func checkExtension(r *Report, dir, rel string, cream manifest.CreamBuild, inCatalog bool) *manifest.Manifest {
 	base := filepath.Base(filepath.Clean(dir))
 	var w cerr.Warnings
 	m, err := manifest.Load(dir, cream, &w)
@@ -195,6 +202,10 @@ func checkExtension(r *Report, dir, rel string, cream manifest.CreamBuild) *mani
 		r.warn(x.Code, "%s: %s", base, x.Message)
 	}
 	if err != nil {
+		if inCatalog && cerr.CodeOf(err) == codeCreamVersion {
+			r.creamNewer(base, path.Join(rel, manifest.ManifestFile), err, cream)
+			return nil
+		}
 		r.failErr(base, path.Join(rel, manifest.ManifestFile), err)
 		return nil
 	}

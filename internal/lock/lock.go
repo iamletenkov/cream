@@ -150,9 +150,10 @@ func checkName(ext string) error {
 // inherit handles CREAM_LOCK_FD. It returns (nil, nil) when the variable is
 // absent or refers to another file — the caller then waits as usual. When the
 // file is the same it probes a descriptor of its own with LOCK_EX|LOCK_NB:
-// taken — nobody held the lock, the probe descriptor becomes the real lock in
-// mode m; busy — the lock is held, and the handle is a duplicate of the
-// inherited descriptor, provided the parent's mode covers m. The original
+// taken — nobody held the lock: exclusive keeps the probe as the real lock,
+// shared closes it and returns (nil, nil), so the caller waits as usual;
+// busy — the lock is held, and the handle is a duplicate of the inherited
+// descriptor, provided the parent's mode covers m. The original
 // descriptor gets close-on-exec so that it does not leak into hooks unless
 // passed explicitly.
 func (l *Locker) inherit(name, path string, m Mode) (*Handle, error) {
@@ -179,12 +180,16 @@ func (l *Locker) inherit(name, path string, m Mode) (*Handle, error) {
 	err = flock(int(probe.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 	switch {
 	case err == nil:
-		// False inheritance: nobody holds the lock, keep ours.
+		// False inheritance: nobody holds the lock. Exclusive keeps the probe.
+		// Shared does not convert EX→SH in place: flock(2) conversion is not
+		// atomic (the lock is dropped first), another process may take EX in
+		// the gap and LOCK_NB would fail. The probe is closed and the caller
+		// waits for SH as usual (acquire, --lock-timeout). The gap cannot be
+		// hit deterministically in a test; TestInheritedFDNotHeld/shared
+		// checks the resulting lock.
 		if m == Shared {
-			if err := flock(int(probe.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
-				_ = probe.Close()
-				return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_file", "flock %s", name)
-			}
+			_ = probe.Close()
+			return nil, nil
 		}
 		return &Handle{f: probe}, nil
 	case !errors.Is(err, syscall.EWOULDBLOCK):

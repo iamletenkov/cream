@@ -93,13 +93,16 @@ func TestDirsCachePerm(t *testing.T) {
 		realFS  bool // Root "/" with --cache in a temp dir
 		mode    os.FileMode
 		parent  os.FileMode
+		root    os.FileMode // права CacheRoot; 0 — как создал t.TempDir
 		wantErr bool
 	}{
 		{name: "safe cache", realFS: true, mode: 0o755, parent: 0o755},
 		{name: "cache writable by group", realFS: true, mode: 0o775, parent: 0o755, wantErr: true},
 		{name: "cache writable by all", realFS: true, mode: 0o777, parent: 0o755, wantErr: true},
 		{name: "sources dir writable by all", realFS: true, mode: 0o755, parent: 0o777, wantErr: true},
-		{name: "other --root: no check (Р9)", mode: 0o777, parent: 0o777},
+		{name: "cache root writable by all", realFS: true, mode: 0o755, parent: 0o755, root: 0o777, wantErr: true},
+		{name: "cache root writable by group", realFS: true, mode: 0o755, parent: 0o755, root: 0o775, wantErr: true},
+		{name: "other --root: no check (Р9)", mode: 0o777, parent: 0o777, root: 0o777},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,6 +120,11 @@ func TestDirsCachePerm(t *testing.T) {
 			}
 			if err := os.Chmod(filepath.Dir(cache), tc.parent); err != nil {
 				t.Fatal(err)
+			}
+			if tc.root != 0 {
+				if err := os.Chmod(l.CacheRoot(), tc.root); err != nil {
+					t.Fatal(err)
+				}
 			}
 			f := &File{Sources: []Source{archiveSrc("stvor"), archiveSrc("cold")}}
 			_, err := Dirs(l, f, nil)

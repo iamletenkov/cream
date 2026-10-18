@@ -105,7 +105,7 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		{dir: "link-outside", exit: cerr.ExitData, code: "manifest.link_outside"},
 		{dir: "not-elf-no-shebang", exit: cerr.ExitData, code: "manifest.bad_executable"},
 		{dir: "reserved-bin", exit: cerr.ExitData, code: "manifest.reserved"},
-		{dir: "too-new-cream", exit: cerr.ExitNotApplicable, code: "platform.cream_version"},
+		{dir: "too-new-cream"}, // Р22: каталог валиден, расширение — в предупреждениях (TestValidateCreamNewer)
 		{dir: "unknown-field", exit: cerr.ExitData, code: "manifest.invalid"},
 	}
 	entries, err := os.ReadDir(filepath.Join(fixturesRoot, "invalid"))
@@ -123,6 +123,9 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		t.Fatalf("каталоги testdata/invalid %v, в таблице %v", onDisk, inTable)
 	}
 	for _, tc := range tests {
+		if tc.code == "" {
+			continue
+		}
 		t.Run(tc.dir, func(t *testing.T) {
 			t.Parallel()
 			r, err := Validate(filepath.Join(fixturesRoot, "invalid", tc.dir), cream)
@@ -545,8 +548,8 @@ func TestValidateDevBuild(t *testing.T) {
 			`">=1.0.0"`, `">=1.99.0"`, 1),
 		"extensions/new/hooks/install": sh,
 	}, "extensions/new/hooks/install")
-	if _, err := Validate(dir, cream100(t)); cerr.CodeOf(err) != "platform.cream_version" {
-		t.Fatalf("релизная сборка: %v", err)
+	if r, err := Validate(dir, cream100(t)); err != nil || !slices.Equal(warningCodes(r), []string{"catalog.cream_newer"}) {
+		t.Fatalf("релизная сборка: %v, предупреждения %v", err, warningCodes(r))
 	}
 	r, err := Validate(dir, manifest.CreamBuild{Dev: true})
 	if err != nil {
@@ -562,5 +565,62 @@ func TestValidateDevBuild(t *testing.T) {
 	}
 	if l := w.List(); len(l) != 1 || l[0].Code != "platform.dev_build" || !strings.Contains(l[0].Message, "new") {
 		t.Errorf("Lookup: предупреждения %+v", l)
+	}
+}
+
+// TestValidateCreamNewer: расширение, которому нужен cream новее текущего,
+// не делает каталог невалидным (Р22) — оно в Warnings (catalog.cream_newer)
+// и в NotApplicable; LoadExtension на нём — по-прежнему 68.
+func TestValidateCreamNewer(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(fixturesRoot, "invalid", "too-new-cream")
+	r, err := Validate(root, cream100(t))
+	if err != nil || !r.OK() {
+		t.Fatalf("Validate: %v (%+v)", err, r.Errors)
+	}
+	if len(r.Warnings) != 1 || r.Warnings[0].Code != "catalog.cream_newer" {
+		t.Fatalf("предупреждения %+v", r.Warnings)
+	}
+	d := r.Warnings[0].Details
+	if d["ext"] != "too-new-cream" || d["required"] == nil || d["required"] == "" || d["cream"] != "1.0.0" {
+		t.Errorf("details = %v", d)
+	}
+	if len(r.Extensions) != 0 {
+		t.Errorf("неприменимое расширение в Extensions: %+v", r.Extensions)
+	}
+	if len(r.NotApplicable) != 1 {
+		t.Fatalf("NotApplicable = %+v", r.NotApplicable)
+	}
+	if p := r.NotApplicable[0]; p.Ext != "too-new-cream" || p.Exit != cerr.ExitNotApplicable ||
+		p.Code != "platform.cream_version" || p.Path != "extensions/too-new-cream/extension.yaml" {
+		t.Errorf("NotApplicable[0] = %+v", p)
+	}
+	_, err = LoadExtension(filepath.Join(root, "extensions", "too-new-cream"), cream100(t))
+	if cerr.ExitCode(err) != cerr.ExitNotApplicable || cerr.CodeOf(err) != "platform.cream_version" {
+		t.Errorf("LoadExtension = %v, ждали 68 platform.cream_version", err)
+	}
+	// Отдельный каталог расширения (cream validate DIR) — строгий, как установка.
+	if _, err := ValidateDir(filepath.Join(root, "extensions", "too-new-cream"), cream100(t)); cerr.ExitCode(err) != cerr.ExitNotApplicable {
+		t.Errorf("ValidateDir = %v, ждали 68", err)
+	}
+}
+
+// TestValidateCreamNewerKeepsOtherErrors: остальные ошибки каталога — как были.
+func TestValidateCreamNewerKeepsOtherErrors(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{
+		"cream-catalog.yaml": "schema: cream/v1\nname: c\nversion: 1.0.0\nroots: [extensions]\n",
+		"extensions/new/extension.yaml": strings.Replace(manifestYAML("new", "hooks: {install: {}}\n"),
+			`">=1.0.0"`, `">=1.99.0"`, 1),
+		"extensions/new/hooks/install":  sh,
+		"extensions/bad/extension.yaml": manifestYAML("bad", "hooks: {install: {}}\n"),
+	}, "extensions/new/hooks/install")
+	r, err := Validate(dir, cream100(t))
+	if cerr.CodeOf(err) != "manifest.hook_missing" || !slices.Equal(problemCodes(r), []string{"manifest.hook_missing"}) {
+		t.Fatalf("Validate = %v, ошибки %v", err, problemCodes(r))
+	}
+	if !slices.Equal(warningCodes(r), []string{"catalog.cream_newer"}) {
+		t.Errorf("предупреждения %v", warningCodes(r))
 	}
 }
