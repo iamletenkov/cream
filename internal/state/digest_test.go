@@ -33,7 +33,9 @@ func TestParamsDigest(t *testing.T) {
 		{name: "empty params", params: map[string]string{}, secret: isSecret(), want: sum("")},
 		{name: "sorted pairs", params: map[string]string{"B": "2", "A": "1"}, want: sum("A=1\nB=2\n")},
 		{name: "empty value", params: map[string]string{"A": ""}, want: sum("A=\n")},
-		{name: "value with newline and equals", params: map[string]string{"A": "x=y\nz"}, want: sum("A=x=y\nz\n")},
+		{name: "value is quoted like envfile", params: map[string]string{"A": "x=y\nz"}, want: sum("A=\"x=y\nz\"\n")},
+		{name: "quote and backslash escaped", params: map[string]string{"A": `a"b\c`}, want: sum("A=\"a\\\"b\\\\c\"\n")},
+		{name: "bare value stays bare", params: map[string]string{"A": "p:443/x,y@z"}, want: sum("A=p:443/x,y@z\n")},
 		{
 			name:   "secret becomes literal",
 			params: map[string]string{"TOKEN": "s3cr3t", "PROXY": "p:443"},
@@ -72,6 +74,29 @@ func TestParamsDigestInvariants(t *testing.T) {
 			got := ParamsDigest(tc.params, secret)
 			if (got == base) != tc.same {
 				t.Errorf("ParamsDigest = %s, base %s, want same=%v", got, base, tc.same)
+			}
+		})
+	}
+}
+
+// TestParamsDigestNoCollisions: a value cannot forge another key's line, and
+// a plain value equal to the marker differs from a real secret.
+func TestParamsDigestNoCollisions(t *testing.T) {
+	t.Parallel()
+	isP := func(k string) bool { return k == "P" }
+	tests := []struct {
+		name             string
+		a, b             map[string]string
+		secretA, secretB func(string) bool
+	}{
+		{name: "newline in value vs two keys", a: map[string]string{"A": "1\nB=2"}, b: map[string]string{"A": "1", "B": "2"}},
+		{name: "marker as plain value vs secret", a: map[string]string{"P": "<secret>"}, b: map[string]string{"P": "x"}, secretB: isP},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if ParamsDigest(tc.a, tc.secretA) == ParamsDigest(tc.b, tc.secretB) {
+				t.Errorf("digests of %q and %q collide", tc.a, tc.b)
 			}
 		})
 	}

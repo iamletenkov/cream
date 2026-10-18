@@ -42,12 +42,18 @@ type Domain struct {
 	l      paths.Layout
 	ext    string
 	schema keytype.Schema
+	// trusted is l.NeedsRoot(): files are opened through openTrusted and
+	// EtcDir is checked before writing (§13, rulings Р9, Р17).
+	trusted bool
+	// uid owns trusted files and EtcDir: root; tests put their own uid.
+	uid         int
+	openTrusted func(path string, uid int, mode fs.FileMode) (*os.File, error)
 }
 
 // Open returns the domain of ext under layout l with schema s. Nothing is
 // read until a method is called.
 func Open(l paths.Layout, ext string, s keytype.Schema) *Domain {
-	return &Domain{l: l, ext: ext, schema: s}
+	return &Domain{l: l, ext: ext, schema: s, trusted: l.NeedsRoot(), openTrusted: fsx.OpenTrusted}
 }
 
 // Entry is one row of Show. For a secret, Value is a mask.
@@ -144,8 +150,13 @@ func (d *Domain) Set(ch []Change, o SetOpts) (changed []string, err error) {
 	var sec *envfile.File
 	for i, c := range ch {
 		if write(c.Key) && isSecret(specs[i]) {
-			if sec, _, err = d.readSecrets(); err != nil {
+			var readable bool
+			if sec, readable, err = d.readSecrets(); err != nil {
 				return nil, err
+			}
+			if !readable {
+				// Rewriting secrets without reading them would drop the other keys.
+				return nil, cerr.New(cerr.ExitPerm, "perm.root", "%s: секреты меняет только root", d.ext)
 			}
 			break
 		}
@@ -184,6 +195,9 @@ func (d *Domain) Set(ch []Change, o SetOpts) (changed []string, err error) {
 	}
 	if err := os.MkdirAll(d.l.EtcDir(d.ext), 0o755); err != nil {
 		return nil, cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек", d.ext)
+	}
+	if err := d.checkEtcDir(); err != nil {
+		return nil, err
 	}
 	if secDirty {
 		if err := fsx.WriteAtomic(d.l.SecretsFile(d.ext), sec.Bytes(), 0o600); err != nil {
@@ -354,7 +368,7 @@ func (d *Domain) Secrets() ([]string, error) {
 // readConfig parses config; a missing file is an empty domain.
 func (d *Domain) readConfig() (*envfile.File, error) {
 	path := d.l.ConfigFile(d.ext)
-	f, err := openPlain(path)
+	f, err := d.open(path, 0o644)
 	if errors.Is(err, fs.ErrNotExist) {
 		return envfile.Parse(nil)
 	}
@@ -372,12 +386,7 @@ func (d *Domain) readConfig() (*envfile.File, error) {
 // gives readable == false and an empty domain.
 func (d *Domain) readSecrets() (f *envfile.File, readable bool, err error) {
 	path := d.l.SecretsFile(d.ext)
-	var fd *os.File
-	if d.l.NeedsRoot() {
-		fd, err = fsx.OpenTrusted(path, 0, 0o600)
-	} else {
-		fd, err = openPlain(path)
-	}
+	fd, err := d.open(path, 0o600)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		empty, _ := envfile.Parse(nil)
@@ -418,6 +427,50 @@ func (d *Domain) fileErr(err error, what, path string) error {
 		return cerr.Wrap(err, cerr.ExitPerm, "perm."+what, "%s: %s", d.ext, path)
 	}
 	return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: чтение %s", d.ext, path)
+}
+
+// open opens a domain file: on the real root through openTrusted (owner
+// uid, at most mode, checked path — ruling Р17); under another --root
+// without owner checks (ruling Р9), still without following links.
+func (d *Domain) open(path string, mode fs.FileMode) (*os.File, error) {
+	if d.trusted {
+		return d.openTrusted(path, d.uid, mode)
+	}
+	return openPlain(path)
+}
+
+// checkEtcDir requires, on the real root, the settings directory of the
+// extension to be a directory (not a link) owned by uid and not writable by
+// group or others (§13): otherwise someone else could swap the files.
+func (d *Domain) checkEtcDir() error {
+	if !d.trusted {
+		return nil
+	}
+	dir := d.l.EtcDir(d.ext)
+	bad := func(format string, a ...any) error {
+		e := cerr.New(cerr.ExitPerm, "perm.etc_dir", "%s: каталог настроек %s: "+format, append([]any{d.ext, dir}, a...)...)
+		e.Details = map[string]any{"path": dir}
+		return e
+	}
+	fd, err := syscall.Open(dir, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if errors.Is(err, syscall.ELOOP) || errors.Is(err, syscall.ENOTDIR) {
+		return bad("ссылка или не каталог")
+	}
+	if err != nil {
+		return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек %s", d.ext, dir)
+	}
+	defer func() { _ = syscall.Close(fd) }()
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек %s", d.ext, dir)
+	}
+	if int(st.Uid) != d.uid {
+		return bad("владелец uid %d, нужен %d", st.Uid, d.uid)
+	}
+	if st.Mode&0o022 != 0 {
+		return bad("права %04o разрешают запись группе или всем", st.Mode&0o7777)
+	}
+	return nil
 }
 
 // openPlain opens a regular file without following a final link; a link

@@ -93,7 +93,7 @@ func checkTree(t *testing.T, dir string, m *Manifest) {
 
 func TestFixturesValid(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	tests := []struct {
 		catalog string
 		want    []string
@@ -123,7 +123,7 @@ func TestFixturesValid(t *testing.T) {
 				t.Fatalf("расширения %v, ждали %v", got, tc.want)
 			}
 			for name, dir := range exts {
-				m, err := Load(dir, cream)
+				m, err := Load(dir, cream, nil)
 				if err != nil {
 					t.Errorf("Load(%s): %v", name, err)
 					continue
@@ -141,10 +141,10 @@ func TestFixturesValid(t *testing.T) {
 // (T10–T19) опираются на эти свойства.
 func TestFixturesSemantics(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	load := func(t *testing.T, name string) *Manifest {
 		t.Helper()
-		m, err := Load(filepath.Join(fixturesRoot, "catalog", "extensions", name), cream)
+		m, err := Load(filepath.Join(fixturesRoot, "catalog", "extensions", name), cream, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -228,7 +228,7 @@ func TestFixturesSemantics(t *testing.T) {
 // манифестных дефектов — ожидаемый код.
 func TestFixturesInvalid(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	tests := []struct {
 		dir      string
 		wantExit int // 0 — манифест валиден, дефект в дереве или каталоге
@@ -268,7 +268,7 @@ func TestFixturesInvalid(t *testing.T) {
 				t.Fatal("в каталоге нет расширений")
 			}
 			for _, dir := range exts {
-				_, err := Load(dir, cream)
+				_, err := Load(dir, cream, nil)
 				if tc.wantExit == 0 {
 					if err != nil {
 						t.Errorf("Load(%s): %v", dir, err)
@@ -286,9 +286,9 @@ func TestFixturesInvalid(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	dir := t.TempDir()
-	_, err := Load(dir, cream)
+	_, err := Load(dir, cream, nil)
 	if cerr.ExitCode(err) != cerr.ExitNotFound || cerr.CodeOf(err) != "not_found.manifest" {
 		t.Errorf("нет extension.yaml: %v (%d %s)", err, cerr.ExitCode(err), cerr.CodeOf(err))
 	}
@@ -299,7 +299,7 @@ func TestLoadErrors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ManifestFile), big, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = Load(dir, cream)
+	_, err = Load(dir, cream, nil)
 	if cerr.ExitCode(err) != cerr.ExitData {
 		t.Errorf("большой манифест: %v", err)
 	}

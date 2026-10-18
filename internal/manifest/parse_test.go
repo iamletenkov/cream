@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
-	"github.com/iamletenkov/cream/internal/semver"
 )
 
 // base — минимальный валидный манифест; строки таблицы правят его через mk.
@@ -34,13 +33,14 @@ func mk(t *testing.T, extra string, pairs ...string) string {
 	return s + extra
 }
 
-func creamV(t *testing.T, s string) semver.Version {
+// creamV1 — исполнитель 1.0.0.
+func creamV1(t *testing.T) CreamBuild {
 	t.Helper()
-	v, err := semver.Parse(s)
-	if err != nil {
-		t.Fatal(err)
+	b := ParseCreamBuild("1.0.0")
+	if b.Dev {
+		t.Fatal("1.0.0 разобран как dev")
 	}
-	return v
+	return b
 }
 
 func TestParseRules(t *testing.T) {
@@ -197,6 +197,11 @@ func TestParseRules(t *testing.T) {
 		{name: "ключ умолчание против типа", yaml: base + "config: {keys: {A: {type: port, default: \"0\", description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "ключ имя строчными", yaml: base + "config: {keys: {port: {type: port, default: \"1\", description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "ключ CREAM_ занят", yaml: base + "config: {keys: {CREAM_X: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "ключ LD_PRELOAD занят", yaml: base + "config: {keys: {LD_PRELOAD: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "ключ LD_LIBRARY_PATH занят", yaml: base + "config: {keys: {LD_LIBRARY_PATH: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "ключ BASH_ENV занят", yaml: base + "config: {keys: {BASH_ENV: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "ключ ENV занят", yaml: base + "config: {keys: {ENV: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "ключ IFS занят", yaml: base + "config: {keys: {IFS: {type: str, default: x, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "ключ PATH занят", yaml: base + "config: {keys: {PATH: {type: path, default: /bin, description: a}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "secret file", yaml: base + "config: {keys: {TOKEN: {type: str, default: \"\", empty: true, secret: file, description: a}}}\n"},
 		{name: "secret hook — зарезервировано", yaml: base + "config: {keys: {TOKEN: {type: str, default: \"\", empty: true, secret: hook, description: a}}}\n", wantExit: 65, wantCode: "manifest.reserved"},
@@ -224,6 +229,7 @@ func TestParseRules(t *testing.T) {
 		{name: "param тип битый", yaml: base + "actions: {join: {args: pairs, params: {X: {type: \"re:(\"}}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "param имя строчными", yaml: base + "actions: {join: {args: pairs, params: {x: {type: str}}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "stdin secret с секретным param", yaml: base + "actions: {join: {args: pairs, params: {S: {type: str, secret: true}}, stdin: secret}}\n"},
+		{name: "два секретных param", yaml: base + "actions: {join: {args: pairs, params: {S: {type: str, secret: true}, T: {type: str, secret: true}}, stdin: secret}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "stdin secret без секретного param", yaml: base + "actions: {join: {args: pairs, params: {S: {type: str}}, stdin: secret}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "секретный param без stdin secret", yaml: base + "actions: {join: {args: pairs, params: {S: {type: str, secret: true}}}}\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "stdin pass", yaml: base + "actions: {feed: {stdin: pass}}\n"},
@@ -248,7 +254,13 @@ func TestParseRules(t *testing.T) {
 		{name: "files dst не чистый", yaml: base + "files: [{src: files/a, dst: /etc/../root/a}]\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "files dst корень", yaml: base + "files: [{src: files/a, dst: /}]\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "files имя с cream-", yaml: base + "files: [{src: files/a, dst: /etc/systemd/system/cream-configure@demo.service}]\n", wantExit: 65, wantCode: "manifest.invalid"},
-		{name: "files каталог с cream- допустим", yaml: base + "files: [{src: files/a, dst: /etc/cream-tools/a}]\n"},
+		{name: "files каталог с cream-", yaml: base + "files: [{src: files/a, dst: /etc/cream-tools/a}]\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "files cream- в середине пути", yaml: base + "files: [{src: files/a, dst: /etc/systemd/system/cream-configure@demo.service.d/x.conf}]\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "files creamy — не префикс cream-", yaml: base + "files: [{src: files/a, dst: /etc/creamy/a}]\n"},
+		{name: "files /usr/bin/cream", yaml: base + "files: [{src: files/a, dst: /usr/bin/cream}]\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "files /usr/sbin/cream", yaml: base + "files: [{src: files/a, dst: /usr/sbin/cream}]\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "files /bin/cream (usrmerge)", yaml: base + "files: [{src: files/a, dst: /bin/cream}]\n", wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "files /usr/local/bin/creamer", yaml: base + "files: [{src: files/a, dst: /usr/local/bin/creamer}]\n"},
 		{name: "files в config домена", yaml: base + "files: [{src: files/a, dst: /etc/cream/demo/config}]\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "files в secrets чужого домена", yaml: base + "files: [{src: files/a, dst: /etc/cream/teleport/secrets}]\n", wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "files в sources.yaml", yaml: base + "files: [{src: files/a, dst: /etc/cream/sources.yaml}]\n", wantExit: 65, wantCode: "manifest.invalid"},
@@ -277,11 +289,11 @@ func TestParseRules(t *testing.T) {
 		{name: "x- в элементе depends", yaml: base + "depends: [{name: libx, x-since: \"2\"}]\n"},
 		{name: "X- заглавными — не x-", yaml: base + "X-owner: ops\n", wantExit: 65, wantCode: "manifest.invalid"},
 	}
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			m, err := Parse([]byte(tc.yaml), cream)
+			m, err := Parse([]byte(tc.yaml), cream, nil)
 			if tc.wantExit == 0 {
 				if err != nil {
 					t.Fatalf("Parse: %v\n%s", err, tc.yaml)
@@ -319,11 +331,11 @@ func TestParseErrorMentionsField(t *testing.T) {
 		{name: "умолчание bool", yaml: base + "config: {keys: {ON: {type: bool, default: true, description: вкл}}}\n", want: []string{"config.keys.ON.default", "0 или 1"}},
 		{name: "cream старее", yaml: mk(t, "", `cream: ">=1.0.0"`, `cream: ">=1.3.0"`), want: []string{">=1.3.0", "1.0.0"}},
 	}
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := Parse([]byte(tc.yaml), cream)
+			_, err := Parse([]byte(tc.yaml), cream, nil)
 			if err == nil {
 				t.Fatal("ждали ошибку")
 			}
@@ -371,11 +383,11 @@ actions:
     params:
       TELEPORT_PROXY: {required: true}
       TOKEN: {}
-      SECRET: {type: str, secret: true}
       LBL_ENV: {}
     stdin: secret
     output: json
     timeout: 5m
+  enroll: {args: pairs, params: {SECRET: {type: str, secret: true}}, stdin: secret}
   render: {lock: none, phases: [build, live], root: false}
   status: {summary: состояние}
 files:
@@ -383,7 +395,7 @@ files:
   - {src: files/tool, dst: /usr/local/bin/tool}
 x-owner: ops
 `
-	m, err := Parse([]byte(doc), creamV(t, "1.0.0"))
+	m, err := Parse([]byte(doc), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +474,7 @@ x-owner: ops
 	if p := join.Params["TOKEN"]; p.Type == nil || !p.Secret {
 		t.Errorf("param TOKEN (секрет из config.keys) %+v", p)
 	}
-	if p := join.Params["SECRET"]; p.Type == nil || p.Type.Kind != "str" || !p.Secret || p.Required {
+	if p := m.Actions["enroll"].Params["SECRET"]; p.Type == nil || p.Type.Kind != "str" || !p.Secret || p.Required {
 		t.Errorf("param SECRET %+v", p)
 	}
 	if p := join.Params["LBL_ENV"]; p.Type == nil || p.Type.Kind != "str" {
@@ -491,7 +503,7 @@ x-owner: ops
 
 func TestParseDefaults(t *testing.T) {
 	t.Parallel()
-	m, err := Parse([]byte(base), creamV(t, "1.0.0"))
+	m, err := Parse([]byte(base), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +518,7 @@ func TestParseDefaults(t *testing.T) {
 		t.Errorf("пустые списки: %+v", m)
 	}
 	// upgrade без install-таймаута: тоже без таймаута.
-	m2, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, upgrade: {}}")), creamV(t, "1.0.0"))
+	m2, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, upgrade: {}}")), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,7 +526,7 @@ func TestParseDefaults(t *testing.T) {
 		t.Errorf("upgrade %v", m2.Hooks[HookUpgrade].Timeout)
 	}
 	// Свой таймаут upgrade не перекрывается install.
-	m3, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {timeout: 1h}, upgrade: {timeout: 5m}}")), creamV(t, "1.0.0"))
+	m3, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {timeout: 1h}, upgrade: {timeout: 5m}}")), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,15 +535,41 @@ func TestParseDefaults(t *testing.T) {
 	}
 }
 
-func TestParseCreamPreRelease(t *testing.T) {
+// TestParseCreamBuild (Р18): предрелизная сборка сравнивается по основной
+// версии; dev и не-semver удовлетворяют любому cream: с предупреждением.
+func TestParseCreamBuild(t *testing.T) {
 	t.Parallel()
-	// Исполнитель 1.1.0 удовлетворяет >=1.0.0; 1.0.0-rc.1 — нет (pre-release ниже релиза).
-	if _, err := Parse([]byte(base), creamV(t, "1.1.0")); err != nil {
-		t.Errorf("1.1.0: %v", err)
+	tests := []struct {
+		name     string
+		build    string
+		cream    string
+		wantExit int
+		wantWarn bool
+	}{
+		{name: "релиз выше", build: "1.1.0", cream: ">=1.0.0"},
+		{name: "rc по основной версии", build: "1.0.0-rc.1", cream: ">=1.0.0"},
+		{name: "префикс v", build: "v1.2.0", cream: ">=1.0.0"},
+		{name: "rc ниже требования", build: "1.1.0-rc.1", cream: ">=1.2.0", wantExit: 68},
+		{name: "релиз ниже требования", build: "1.1.0", cream: ">=1.2.0", wantExit: 68},
+		{name: "dev", build: "dev", cream: ">=1.9.0", wantWarn: true},
+		{name: "пусто — dev", build: "", cream: ">=1.0.0", wantWarn: true},
+		{name: "не semver", build: "1.2.0+abc", cream: ">=1.0.0", wantWarn: true},
+		{name: "dev не отменяет проверку диапазона", build: "dev", cream: ">=2.0.0", wantExit: 65},
 	}
-	_, err := Parse([]byte(base), creamV(t, "1.0.0-rc.1"))
-	if cerr.ExitCode(err) != 68 {
-		t.Errorf("1.0.0-rc.1: %v", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := &cerr.Warnings{}
+			yaml := mk(t, "", `cream: ">=1.0.0"`, `cream: "`+tc.cream+`"`)
+			_, err := Parse([]byte(yaml), ParseCreamBuild(tc.build), w)
+			if got := cerr.ExitCode(err); got != tc.wantExit {
+				t.Fatalf("код %d, ждали %d: %v", got, tc.wantExit, err)
+			}
+			ws := w.List()
+			if tc.wantWarn != (len(ws) == 1 && ws[0].Code == "platform.dev_build") || (!tc.wantWarn && len(ws) != 0) {
+				t.Errorf("предупреждения %+v, ждали dev_build=%v", ws, tc.wantWarn)
+			}
+		})
 	}
 }
 
@@ -572,7 +610,7 @@ func TestValidName(t *testing.T) {
 
 func TestFileModeType(t *testing.T) {
 	t.Parallel()
-	m, err := Parse([]byte(base+"files: [{src: files/a, dst: /etc/a, mode: \"0750\"}]\n"), creamV(t, "1.0.0"))
+	m, err := Parse([]byte(base+"files: [{src: files/a, dst: /etc/a, mode: \"0750\"}]\n"), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,6 +26,7 @@ const (
 	codeInvalid      = "manifest.invalid"
 	codeReserved     = "manifest.reserved"
 	codeCreamVersion = "platform.cream_version"
+	codeDevBuild     = "platform.dev_build"
 	codeCatSchema    = "catalog.schema"
 	codeCatInvalid   = "catalog.invalid"
 )
@@ -135,7 +136,9 @@ type rawFile struct {
 // Порядок проверок: schema → cream: → структура (неизвестные поля, типы) →
 // правила §4.2, так что старый cream отказывает по cream:, а не по полю, которое
 // появилось в новой минорной версии.
-func Parse(data []byte, cream semver.Version) (*Manifest, error) {
+//
+// w собирает предупреждения (platform.dev_build для сборки без версии); может быть nil.
+func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) {
 	root, err := parseNode(data, codeInvalid, "манифест")
 	if err != nil {
 		return nil, err
@@ -146,7 +149,7 @@ func Parse(data []byte, cream semver.Version) (*Manifest, error) {
 		}
 		return nil, cerr.New(cerr.ExitData, codeSchema, "манифест: неизвестная схема %q (нужно %s)", s, SchemaV1)
 	}
-	creamRange, err := checkCream(topScalar(root, "cream"), cream)
+	creamRange, err := checkCream(topScalar(root, "cream"), cream, w)
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +170,13 @@ func Parse(data []byte, cream semver.Version) (*Manifest, error) {
 }
 
 // Load читает dir/extension.yaml и разбирает его Parse.
-func Load(dir string, cream semver.Version) (*Manifest, error) {
+func Load(dir string, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) {
 	path := filepath.Join(dir, ManifestFile)
 	data, err := readLimited(path, "not_found.manifest", codeInvalid)
 	if err != nil {
 		return nil, err
 	}
-	m, err := Parse(data, cream)
+	m, err := Parse(data, cream, w)
 	if err != nil {
 		return nil, wrapPath(err, path)
 	}
@@ -281,9 +284,38 @@ func topScalar(root *yaml.Node, key string) string {
 	return ""
 }
 
+// CreamBuild — версия исполнителя для проверки cream: (рулинг Р18).
+type CreamBuild struct {
+	// Version — версия сборки; при Dev не используется.
+	Version semver.Version
+	// Dev — сборка без semver-версии ("dev", пусто, метаданные +…): она
+	// удовлетворяет любому cream: с предупреждением platform.dev_build.
+	Dev bool
+}
+
+// ParseCreamBuild разбирает версию сборки (version.Version): ведущее "v"
+// отбрасывается; всё, что не строгий semver, — Dev.
+func ParseCreamBuild(raw string) CreamBuild {
+	v, err := semver.Parse(strings.TrimPrefix(strings.TrimSpace(raw), "v"))
+	if err != nil {
+		return CreamBuild{Dev: true}
+	}
+	return CreamBuild{Version: v}
+}
+
+// String — версия для сообщений.
+func (b CreamBuild) String() string {
+	if b.Dev {
+		return "dev"
+	}
+	return b.Version.String()
+}
+
 // checkCream проверяет диапазон cream: — нижняя граница мажора равна мажору
 // схемы (1), верхней нет или она тоже 1, и версия исполнителя в диапазоне.
-func checkCream(s string, cream semver.Version) (semver.Range, error) {
+// Предрелизная сборка сравнивается по основной версии (1.0.0-rc.1 — как
+// 1.0.0); сборка Dev проходит с предупреждением (Р18).
+func checkCream(s string, cream CreamBuild, w *cerr.Warnings) (semver.Range, error) {
 	if s == "" {
 		return semver.Range{}, cerr.New(cerr.ExitData, codeInvalid, "cream: обязательное поле (например \">=1.0.0\")")
 	}
@@ -296,7 +328,15 @@ func checkCream(s string, cream semver.Version) (semver.Range, error) {
 		return semver.Range{}, cerr.New(cerr.ExitData, codeInvalid,
 			"cream: диапазон %q должен ограничивать мажор исполнителя мажором схемы cream/v1 (1), например \">=1.0.0\"", s)
 	}
-	if !r.Contains(cream) {
+	if cream.Dev {
+		if w != nil {
+			w.Add(codeDevBuild, "сборка cream без версии (dev) считается удовлетворяющей cream: %s", r.String())
+		}
+		return r, nil
+	}
+	core := cream.Version
+	core.Pre = nil
+	if !r.Contains(core) {
 		e := cerr.New(cerr.ExitNotApplicable, codeCreamVersion,
 			"манифест требует cream %s, а это cream %s", r.String(), cream.String())
 		e.Details = map[string]any{"required": r.String(), "cream": cream.String()}

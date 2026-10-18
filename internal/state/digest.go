@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+
+	"github.com/iamletenkov/cream/internal/envfile"
 )
 
 // SecretLiteral replaces a secret value in ParamsDigest: only the fact that
@@ -11,8 +13,10 @@ import (
 const SecretLiteral = "<secret>"
 
 // ParamsDigest is "sha256:<hex>" of the sorted "KEY=VALUE\n" lines of the
-// install parameters (§10); a key for which secret reports true contributes
-// "KEY=<secret>\n". secret may be nil (no secrets).
+// install parameters (§10), VALUE in envfile.Quote form, so a value cannot
+// forge another line; a key for which secret reports true contributes the
+// bare "KEY=<secret>\n", which no quoted value equals (Quote("<secret>") is
+// in double quotes). secret may be nil (no secrets).
 func ParamsDigest(params map[string]string, secret func(key string) bool) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -21,7 +25,7 @@ func ParamsDigest(params map[string]string, secret func(key string) bool) string
 	sort.Strings(keys)
 	h := sha256.New()
 	for _, k := range keys {
-		v := params[k]
+		v := envfile.Quote(params[k])
 		if secret != nil && secret(k) {
 			v = SecretLiteral
 		}

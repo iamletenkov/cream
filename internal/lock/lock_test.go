@@ -115,10 +115,12 @@ func TestExclusiveWaitsForRelease(t *testing.T) {
 		}
 		got <- err
 	}()
+	// The waiter must still be polling after a short, explicit pause: it
+	// cannot finish while the lock is held.
 	select {
 	case err := <-got:
-		t.Fatalf("acquired while held: %v", err)
-	default:
+		t.Fatalf("waiter finished while the lock was held: %v", err)
+	case <-time.After(150 * time.Millisecond):
 	}
 	held.Release()
 	select {
@@ -206,8 +208,11 @@ func TestInheritedFDInProcess(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			env := func(k string) string {
-				if k == EnvLockFD {
+				switch k {
+				case EnvLockFD:
 					return tc.value
+				case EnvLockMode:
+					return "exclusive"
 				}
 				return ""
 			}
@@ -238,10 +243,12 @@ func TestInheritedFDChildProcess(t *testing.T) {
 	tests := []struct {
 		name     string
 		pass     string // lock whose fd is passed: "teleport" (same) or "other" (foreign)
+		held     Mode   // mode the parent holds teleport in (and passes in CREAM_LOCK_MODE)
 		wantExit int
 	}{
-		{name: "same file — no wait", pass: "teleport", wantExit: 0},
-		{name: "foreign file — ignored, normal wait times out", pass: "other", wantExit: cerr.ExitLock},
+		{name: "same file — no wait", pass: "teleport", held: Exclusive, wantExit: 0},
+		{name: "foreign file — ignored, normal wait times out", pass: "other", held: Exclusive, wantExit: cerr.ExitLock},
+		{name: "shared parent — no upgrade to exclusive", pass: "teleport", held: Shared, wantExit: cerr.ExitLock},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,7 +256,7 @@ func TestInheritedFDChildProcess(t *testing.T) {
 			l := layout(t)
 			parent := newLocker(t, l, 0)
 			handles := map[string]*Handle{
-				"teleport": mustExt(t, parent, "teleport", Exclusive),
+				"teleport": mustExt(t, parent, "teleport", tc.held),
 				"other":    mustExt(t, parent, "other", Exclusive),
 			}
 			cmd := exec.Command(os.Args[0], "-test.run=^TestHelperChild$")
@@ -257,6 +264,8 @@ func TestInheritedFDChildProcess(t *testing.T) {
 				"CREAM_LOCK_HELPER=1",
 				"CREAM_LOCK_HELPER_ROOT=" + l.Root,
 				EnvLockFD + "=3",
+				EnvLockMode + "=" + tc.held.String(),
+				"GORACE=atexit_sleep_ms=0",
 			}
 			cmd.ExtraFiles = []*os.File{handles[tc.pass].File()}
 			out, err := cmd.CombinedOutput()
@@ -271,7 +280,7 @@ func TestInheritedFDChildProcess(t *testing.T) {
 				t.Fatalf("child exit = %d, want %d; output:\n%s", code, tc.wantExit, out)
 			}
 			// The parent still holds its lock after the child exited.
-			if _, err := newLocker(t, l, 0).Ext(context.Background(), "teleport", Shared); err == nil {
+			if _, err := newLocker(t, l, 0).Ext(context.Background(), "teleport", Exclusive); err == nil {
 				t.Error("parent's lock is gone after the child exited")
 			}
 		})
@@ -292,4 +301,103 @@ func TestHelperChild(t *testing.T) {
 	}
 	h.Release()
 	os.Exit(0)
+}
+
+func lockEnv(fd int, mode string) func(string) string {
+	return func(k string) string {
+		switch k {
+		case EnvLockFD:
+			return strconv.Itoa(fd)
+		case EnvLockMode:
+			return mode
+		}
+		return ""
+	}
+}
+
+// Р19: the mode the parent holds (CREAM_LOCK_MODE) bounds what the child may
+// take over: shared cannot be upgraded to exclusive (75 lock.upgrade); an
+// unknown or missing mode counts as shared.
+func TestInheritedMode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		held     Mode
+		envMode  string
+		req      Mode
+		wantCode string // "" — inherited
+	}{
+		{name: "exclusive covers exclusive", held: Exclusive, envMode: "exclusive", req: Exclusive},
+		{name: "exclusive covers shared", held: Exclusive, envMode: "exclusive", req: Shared},
+		{name: "shared covers shared", held: Shared, envMode: "shared", req: Shared},
+		{name: "shared is not upgraded", held: Shared, envMode: "shared", req: Exclusive, wantCode: "lock.upgrade"},
+		{name: "missing mode is shared", held: Exclusive, envMode: "", req: Exclusive, wantCode: "lock.upgrade"},
+		{name: "unknown mode is shared", held: Exclusive, envMode: "EXCLUSIVE", req: Shared},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			l := layout(t)
+			held := mustExt(t, newLocker(t, l, 0), "teleport", tc.held)
+			h, err := NewLocker(l, time.Minute, lockEnv(int(held.File().Fd()), tc.envMode)).
+				Ext(context.Background(), "teleport", tc.req)
+			if tc.wantCode != "" {
+				if cerr.ExitCode(err) != cerr.ExitLock || cerr.CodeOf(err) != tc.wantCode {
+					t.Fatalf("err = %v, want 75 %s", err, tc.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Ext: %v", err)
+			}
+			defer h.Release()
+			if !h.Inherited() {
+				t.Error("Inherited() = false")
+			}
+		})
+	}
+}
+
+// Р19: a CREAM_LOCK_FD of the same file that nobody holds a lock on is a false
+// inheritance: the child takes the lock for real, on its own descriptor.
+func TestInheritedFDNotHeld(t *testing.T) {
+	t.Parallel()
+	for _, m := range []Mode{Exclusive, Shared} {
+		t.Run(m.String(), func(t *testing.T) {
+			t.Parallel()
+			l := layout(t)
+			// Create the lock file, then drop the lock but keep an open fd.
+			mustExt(t, newLocker(t, l, 0), "teleport", Exclusive).Release()
+			f, err := os.Open(l.ExtLock("teleport"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = f.Close() }()
+			h, err := NewLocker(l, 0, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
+			if err != nil {
+				t.Fatalf("Ext: %v", err)
+			}
+			defer h.Release()
+			if h.Inherited() {
+				t.Fatal("Inherited() = true for an fd nobody locks")
+			}
+			if h.File() == nil || h.File().Fd() == f.Fd() {
+				t.Fatal("lock must sit on a descriptor of its own")
+			}
+			// The lock is really held in mode m.
+			_, err = newLocker(t, l, 0).Ext(context.Background(), "teleport", Exclusive)
+			assertTimeout(t, err)
+			other, err := newLocker(t, l, 0).Ext(context.Background(), "teleport", Shared)
+			if m == Shared {
+				if err != nil {
+					t.Fatalf("shared next to shared: %v", err)
+				}
+				other.Release()
+			} else {
+				assertTimeout(t, err)
+			}
+			h.Release()
+			mustExt(t, newLocker(t, l, 0), "teleport", Exclusive)
+		})
+	}
 }

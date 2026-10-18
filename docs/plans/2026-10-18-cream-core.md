@@ -91,8 +91,9 @@
 cmd/cream → cli → engine → {catalog, resolve, source, config, state, lock, runner, systemd, place}
 catalog → manifest, fsx, source(только тип SourceDir)   resolve → manifest, semver, state
 manifest → semver, keytype                              config → envfile, keytype, fsx, paths
-place → manifest, state, fsx, paths; systemd → fsx, paths  state, lock → fsx, paths
-все → cerr                                              source → fsx, paths (валидатор — функцией)
+place → manifest, state, fsx, paths; systemd → fsx, paths  state → envfile, fsx, paths; lock → fsx, paths
+keytype → envfile                                       все → cerr
+source → fsx, paths (валидатор — функцией)
 ```
 Сигнатуры ниже — договор. Имена неэкспортируемого исполнитель выбирает сам; менять экспортируемое после слияния
 волны — только через контроллера.
@@ -174,8 +175,10 @@ type Action struct{ Summary string; Args ArgsMode; Params map[string]Param; Stdi
   Output OutputMode; Timeout time.Duration; Phases []Phase; Root bool }
 type Param struct{ Type *keytype.Type; Required, Secret bool }
 type File struct{ Src, Dst string; Mode fs.FileMode }
-func Parse(data []byte, cream semver.Version) (*Manifest, error)
-func Load(dir string, cream semver.Version) (*Manifest, error) // dir/extension.yaml
+type CreamBuild struct{ Version semver.Version; Dev bool }  // Р18
+func ParseCreamBuild(raw string) CreamBuild // version.Version: "v" отбрасывается, не semver → Dev
+func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // w — platform.dev_build, может быть nil
+func Load(dir string, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // dir/extension.yaml
 type Catalog struct{ Schema, Name string; Version semver.Version; Roots []string }
 func ParseCatalog(data []byte) (*Catalog, error)
 func CanonArch(s string) (string, bool)  // aarch64→arm64, x86_64→amd64
@@ -203,10 +206,11 @@ type FileRec struct{ Dst, SHA256 string }
 type ConfigureRec struct{ Stage, Target string }
 type Record struct{ Schema, Name, Version, Kind, Status string; Source SourceRef; ExtDigest, ParamsDigest, Phase string
   InstalledAt, UpdatedAt time.Time; CreamVersion string; Files []FileRec; Bin []string
-  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:",omitempty"` }
+  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:"prev_version,omitempty"` }
 type Store struct{ /* Layout, Now */ }
 func NewStore(l paths.Layout, now func() time.Time) *Store
-func (s *Store) Get(name string) (*Record, bool, error); List() ([]Record, error); Put(Record) error; Delete(name string) error
+func (s *Store) Get(name string) (*Record, bool, error); List(w *cerr.Warnings) ([]Record, error) // битая запись — пропуск + state.corrupt (Р20)
+func (s *Store) Put(Record) error; Delete(name string) error
 type HistoryEntry struct{ Time time.Time; Op, Ext, From, To, Status, Phase string }
 func (s *Store) Append(HistoryEntry) error
 func ParamsDigest(params map[string]string, secret func(key string) bool) string
@@ -215,7 +219,7 @@ type Mode int // Exclusive | Shared
 type Locker struct{ /* Layout, Timeout, inherited *os.File из CREAM_LOCK_FD */ }
 func NewLocker(l paths.Layout, timeout time.Duration, env func(string) string) *Locker
 func (l *Locker) Global(ctx context.Context) (*Handle, error)
-func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же файла → без ожидания
+func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же занятого файла → без ожидания (Р19)
 type Handle struct{ /* *os.File */ }; func (h *Handle) Release(); func (h *Handle) File() *os.File
 ```
 **`internal/source`** (T7)
@@ -244,7 +248,8 @@ type Runner interface{ Run(ctx context.Context, s Spec) (Result, error) }
 type Exec struct{}                              // Setpgid, kill группы по таймауту, без shell
 func NewSecretFilter(w io.Writer, secrets []string) io.WriteCloser // потоковая замена на "***", стыки чанков
 type EnvInput struct{ Phase, Ext, ExtVersion, PrevVersion, ExtDir, EtcDir, StateDir, Root, ConfigFile,
-  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; Values map[string]string }
+  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; LockMode string; Values map[string]string }
+// LockFD > 0 → CREAM_LOCK_FD и CREAM_LOCK_MODE (LockMode "exclusive", иначе "shared") — Р19
 func BuildEnv(in EnvInput) []string             // чистое окружение §6.3 + несекретные ключи
 type Outcome int // OK | Reboot (10) | NotApplicable (20) | Failed
 func Classify(code int) Outcome
@@ -270,9 +275,9 @@ func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // и
 type Entry struct{ Source source.SourceDir; Dir string; Manifest *manifest.Manifest; Digest string }
 type Ref struct{ Source, Name string; Version *semver.Version }
 func ParseRef(s string) (Ref, error)            // [source/]name[@version]
-func Validate(root string, cream semver.Version) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
-func LoadExtension(dir string, cream semver.Version) (Entry, error) // для --from-dir
-func Lookup(dirs []source.SourceDir, ref Ref, cream semver.Version, w *cerr.Warnings) (Entry, error)
+func Validate(root string, cream manifest.CreamBuild) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
+func LoadExtension(dir string, cream manifest.CreamBuild) (Entry, error) // для --from-dir
+func Lookup(dirs []source.SourceDir, ref Ref, cream manifest.CreamBuild, w *cerr.Warnings) (Entry, error)
 
 type Node struct{ Manifest *manifest.Manifest; Installed bool; Files []string; Source state.SourceRef; Digest string }
 type Host struct{ Phase, TargetArch, HostArch, Family string; OSID, OSVersion string
@@ -286,7 +291,7 @@ func Dependents(installed []Node, name string) []string // для remove
 **`internal/engine`** (T12 — ядро; T13–T16 — свои файлы)
 ```go
 type Engine struct{ L paths.Layout; Store *state.Store; Locks *lock.Locker; Run runner.Runner
-  Systemctl systemd.Systemctl; Now func() time.Time; Cream semver.Version; Warn *cerr.Warnings
+  Systemctl systemd.Systemctl; Now func() time.Time; Cream manifest.CreamBuild; Warn *cerr.Warnings
   LookPath func(string) (string, error); Env func(string) string
   Stdin io.Reader; Stdout, Stderr io.Writer }
 type Installed struct{ Record state.Record; Manifest *manifest.Manifest }
@@ -343,6 +348,20 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
 - **Р16.** Коды выхода по T1: без аргументов — 64, ошибка записи в stdout — 74 (код 1 — только `check.failed`).
 - **Р17.** Доступ к файлам с секретами и параметрам — только через `fsx.OpenTrusted` (fd, `O_NOFOLLOW`, `Fstat`,
   проверка каталогов пути); `CopyTree` — через `os.Root` (ревью безопасности T3).
+
+Рулинги контроллера после ревью волны 2 (2026-10-18):
+- **Р18.** Проверка `cream:`: предрелизная сборка cream сравнивается по основной версии (`1.0.0-rc.1` удовлетворяет
+  `>=1.0.0`); версия `dev` или не-semver удовлетворяет любому `cream:` (формат диапазона проверяется всё равно)
+  с предупреждением `platform.dev_build`. Тип `manifest.CreamBuild` заменяет `semver.Version` в сигнатурах
+  `manifest`, `catalog` и `engine.Deps.Cream`. Там же (ревью T4): `cream-` запрещён в любом компоненте `dst`,
+  бинарь cream в `dst` — явно; `reservedKeys` += `LD_PRELOAD`, `LD_LIBRARY_PATH`, `BASH_ENV`, `ENV`, `IFS`;
+  у действия не более одного секретного параметра (65).
+- **Р19.** Родитель передаёт вместе с `CREAM_LOCK_FD` режим `CREAM_LOCK_MODE=shared|exclusive` (`runner.EnvInput.LockMode`;
+  иное — `shared`). Вложенный после сверки (dev, ino) открывает свой дескриптор файла и пробует `LOCK_EX|LOCK_NB`:
+  удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.
+  Запрос `exclusive` при унаследованном `shared` — 75 `lock.upgrade`.
+- **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
+  в тексте предупреждения; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
 
 ## Задачи
 

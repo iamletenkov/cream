@@ -2,13 +2,16 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/fsx"
 	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/paths"
 )
@@ -489,5 +492,125 @@ func TestSecretsUnreadable(t *testing.T) {
 	wantCerr(t, err, cerr.ExitPerm, "perm.root")
 	if v, err := d.Get("PORT", false); err != nil || v != "8080" {
 		t.Errorf("Get(PORT) = %q, %v", v, err)
+	}
+}
+
+// secrets есть, но не читается: Set не может сохранить чужие секреты —
+// 77 perm.root, файлы не трогаются.
+func TestSetSecretsUnreadable(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("root читает файл 0000")
+	}
+	schema := testSchema(t)
+	schema["PASS"] = keytype.Spec{Type: mustType(t, "str"), Empty: true, Secret: keytype.SecretFile, Description: "пароль"}
+	l := paths.Layout{Root: t.TempDir()}
+	writeFile(t, l.SecretsFile(testExt), "PASS=keep\n", 0o000)
+	d := Open(l, testExt, schema)
+	_, err := d.Set([]Change{{"PORT", "9090"}, {"TOKEN", "t"}}, SetOpts{})
+	wantCerr(t, err, cerr.ExitPerm, "perm.root")
+	if err := os.Chmod(l.SecretsFile(testExt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := readFile(t, l.SecretsFile(testExt)); got != "PASS=keep\n" {
+		t.Errorf("secrets = %q, ожидали нетронутый PASS=keep", got)
+	}
+	if _, ok := readFile(t, l.ConfigFile(testExt)); ok {
+		t.Error("config создан, хотя Set отказал")
+	}
+}
+
+// trustedDomain — домен в режиме настоящего корня (§13) с подменённым
+// открытием: владелец — текущий uid (тест не может chown), opener
+// записывает, какой файл и с каким режимом проверялся.
+func trustedDomain(t *testing.T, opener func(path string, uid int, mode os.FileMode) (*os.File, error)) (*Domain, paths.Layout) {
+	t.Helper()
+	d, l := newDomain(t)
+	d.trusted, d.uid, d.openTrusted = true, os.Getuid(), opener
+	return d, l
+}
+
+// На настоящем корне config читается через fsx.OpenTrusted с режимом 0644.
+func TestTrustedReadsConfig(t *testing.T) {
+	t.Parallel()
+	opened := map[string]os.FileMode{}
+	var mu sync.Mutex
+	d, l := trustedDomain(t, func(path string, uid int, mode os.FileMode) (*os.File, error) {
+		mu.Lock()
+		opened[path] = mode
+		mu.Unlock()
+		if uid != os.Getuid() {
+			t.Errorf("uid %d", uid)
+		}
+		return openPlain(path)
+	})
+	writeFile(t, l.ConfigFile(testExt), "PORT=1\n", 0o644)
+	writeFile(t, l.SecretsFile(testExt), "TOKEN=s\n", 0o600)
+	if _, err := d.Show(); err != nil {
+		t.Fatal(err)
+	}
+	if opened[l.ConfigFile(testExt)] != 0o644 || opened[l.SecretsFile(testExt)] != 0o600 {
+		t.Errorf("проверенные открытия %v", opened)
+	}
+	// Отказ проверки — 77 perm.config.
+	d2, l2 := trustedDomain(t, func(path string, _ int, _ os.FileMode) (*os.File, error) {
+		return nil, fmt.Errorf("%s: %w", path, fsx.ErrUnsafePerm)
+	})
+	writeFile(t, l2.ConfigFile(testExt), "PORT=1\n", 0o666)
+	_, err := d2.Show()
+	wantCerr(t, err, cerr.ExitPerm, "perm.config")
+	_, err = d2.Set([]Change{{"PORT", "2"}}, SetOpts{})
+	wantCerr(t, err, cerr.ExitPerm, "perm.config")
+}
+
+// Перед записью на настоящем корне каталог настроек расширения обязан
+// принадлежать root и не быть доступным на запись группе и всем — иначе 77.
+func TestTrustedEtcDir(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		mode     os.FileMode
+		link     bool
+		wantExit int
+	}{
+		{name: "0755", mode: 0o755},
+		{name: "запись группе", mode: 0o775, wantExit: cerr.ExitPerm},
+		{name: "запись всем", mode: 0o777, wantExit: cerr.ExitPerm},
+		{name: "ссылка", mode: 0o755, link: true, wantExit: cerr.ExitPerm},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d, l := trustedDomain(t, func(path string, _ int, _ os.FileMode) (*os.File, error) { return openPlain(path) })
+			dir := l.EtcDir(testExt)
+			if tc.link {
+				realDir := filepath.Join(t.TempDir(), "real")
+				if err := os.Mkdir(realDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(realDir, dir); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(dir, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := d.Set([]Change{{"PORT", "9090"}, {"TOKEN", "t"}}, SetOpts{})
+			if tc.wantExit == 0 {
+				wantCerr(t, err, 0, "")
+				return
+			}
+			wantCerr(t, err, tc.wantExit, "perm.etc_dir")
+			if _, ok := readFile(t, l.ConfigFile(testExt)); ok {
+				t.Error("config записан в небезопасный каталог")
+			}
+		})
 	}
 }
