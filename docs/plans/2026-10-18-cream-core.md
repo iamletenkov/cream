@@ -91,8 +91,9 @@
 cmd/cream → cli → engine → {catalog, resolve, source, config, state, lock, runner, systemd, place}
 catalog → manifest, fsx, source(только тип SourceDir)   resolve → manifest, semver, state
 manifest → semver, keytype                              config → envfile, keytype, fsx, paths
-place → manifest, state, fsx, paths; systemd → fsx, paths  state, lock → fsx, paths
-все → cerr                                              source → fsx, paths (валидатор — функцией)
+place → manifest, state, fsx, paths; systemd → fsx, paths  state → envfile, fsx, paths; lock → fsx, paths
+keytype → envfile                                       все → cerr
+source → fsx, paths (валидатор — функцией)
 ```
 Сигнатуры ниже — договор. Имена неэкспортируемого исполнитель выбирает сам; менять экспортируемое после слияния
 волны — только через контроллера.
@@ -203,10 +204,11 @@ type FileRec struct{ Dst, SHA256 string }
 type ConfigureRec struct{ Stage, Target string }
 type Record struct{ Schema, Name, Version, Kind, Status string; Source SourceRef; ExtDigest, ParamsDigest, Phase string
   InstalledAt, UpdatedAt time.Time; CreamVersion string; Files []FileRec; Bin []string
-  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:",omitempty"` }
+  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:"prev_version,omitempty"` }
 type Store struct{ /* Layout, Now */ }
 func NewStore(l paths.Layout, now func() time.Time) *Store
-func (s *Store) Get(name string) (*Record, bool, error); List() ([]Record, error); Put(Record) error; Delete(name string) error
+func (s *Store) Get(name string) (*Record, bool, error); List(w *cerr.Warnings) ([]Record, error) // битая запись — пропуск + state.corrupt (Р20)
+func (s *Store) Put(Record) error; Delete(name string) error
 type HistoryEntry struct{ Time time.Time; Op, Ext, From, To, Status, Phase string }
 func (s *Store) Append(HistoryEntry) error
 func ParamsDigest(params map[string]string, secret func(key string) bool) string
@@ -343,6 +345,10 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
 - **Р16.** Коды выхода по T1: без аргументов — 64, ошибка записи в stdout — 74 (код 1 — только `check.failed`).
 - **Р17.** Доступ к файлам с секретами и параметрам — только через `fsx.OpenTrusted` (fd, `O_NOFOLLOW`, `Fstat`,
   проверка каталогов пути); `CopyTree` — через `os.Root` (ревью безопасности T3).
+
+Рулинги контроллера после ревью волны 2 (2026-10-18):
+- **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
+  в тексте предупреждения; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
 
 ## Задачи
 

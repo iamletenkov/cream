@@ -670,8 +670,11 @@ sources:
   "source": {"name": "stvor", "type": "archive", "origin": "https://…/cream-extensions-4.0.0.tar.gz",
              "resolved": "sha256:9f2c…", "catalog_version": "4.0.0"},
   "ext_digest": "sha256:…",
-  "params_digest": "sha256:…",                 // sha256 отсортированных "KEY=VALUE\n" параметров install; вместо
-                                               // значения секрета — литерал "<secret>" ("KEY=<secret>\n"):
+  "params_digest": "sha256:…",                 // sha256 отсортированных "KEY=VALUE\n" параметров install; VALUE —
+                                               // в форме кавычек envfile (Quote: голое или "…" с \\ и \"), так что
+                                               // значение не подделает чужую строку; вместо значения секрета —
+                                               // голый литерал "<secret>" ("KEY=<secret>\n"), с которым не совпадает
+                                               // ни одно обычное значение (Quote("<secret>") — в кавычках):
                                                // в дайджест входит только факт наличия, хеш секрета нигде не хранится
   "phase": "live",                             // где поставлено впервые: build | live
   "installed_at": "2026-10-18T10:00:00Z", "updated_at": "…",

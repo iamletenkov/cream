@@ -62,8 +62,11 @@ func (s *Store) Get(name string) (rec *Record, ok bool, err error) {
 	return r, true, nil
 }
 
-// List returns all records sorted by name; temporary and foreign files are skipped.
-func (s *Store) List() ([]Record, error) {
+// List returns all records sorted by name; temporary and foreign files are
+// skipped. A corrupt record is skipped with a state.corrupt warning naming
+// the extension (Р20) — Get of it still fails with 74; a newer schema and a
+// read error stay fatal. w may be nil.
+func (s *Store) List(w *cerr.Warnings) ([]Record, error) {
 	dir := s.layout.InstalledDir()
 	ents, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -81,6 +84,12 @@ func (s *Store) List() ([]Record, error) {
 		name := strings.TrimSuffix(n, ".json")
 		r, ok, err := s.Get(name)
 		if err != nil {
+			if cerr.CodeOf(err) == "state.corrupt" {
+				if w != nil {
+					w.Add("state.corrupt", "запись реестра %s повреждена и пропущена: %v", name, err)
+				}
+				continue
+			}
 			return nil, err
 		}
 		if ok {

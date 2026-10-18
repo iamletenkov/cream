@@ -234,8 +234,20 @@ func TestGetBadRecords(t *testing.T) {
 			writeRaw(t, l, "x", tc.data)
 			_, _, err := s.Get("x")
 			assertCode(t, err, cerr.ExitState, tc.wantCode)
-			_, err = s.List()
-			assertCode(t, err, cerr.ExitState, tc.wantCode)
+			w := &cerr.Warnings{}
+			list, err := s.List(w)
+			if tc.wantCode == "state.newer" {
+				assertCode(t, err, cerr.ExitState, tc.wantCode)
+				return
+			}
+			// Р20: a corrupt record is skipped with a warning, not fatal for List.
+			if err != nil || len(list) != 0 {
+				t.Fatalf("List = %+v, %v; want empty, nil", list, err)
+			}
+			ws := w.List()
+			if len(ws) != 1 || ws[0].Code != "state.corrupt" || !strings.Contains(ws[0].Message, "x") {
+				t.Errorf("warnings = %+v, want one state.corrupt naming x", ws)
+			}
 		})
 	}
 }
@@ -300,7 +312,7 @@ func TestPutAtomicOnCrash(t *testing.T) {
 	if string(after) != string(before) {
 		t.Errorf("record changed after a crash:\n%s", after)
 	}
-	list, err := s.List()
+	list, err := s.List(&cerr.Warnings{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -312,7 +324,7 @@ func TestPutAtomicOnCrash(t *testing.T) {
 func TestList(t *testing.T) {
 	t.Parallel()
 	s, l := newTestStore(t, t0)
-	if list, err := s.List(); err != nil || len(list) != 0 || list == nil {
+	if list, err := s.List(&cerr.Warnings{}); err != nil || len(list) != 0 || list == nil {
 		t.Fatalf("List on empty machine = %#v, %v; want empty non-nil", list, err)
 	}
 	for _, n := range []string{"zeta", "alpha", "mid"} {
@@ -335,7 +347,7 @@ func TestList(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub.json"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	list, err := s.List()
+	list, err := s.List(&cerr.Warnings{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,4 +395,26 @@ func assertCode(t *testing.T, err error, exit int, code string) {
 	if got := cerr.CodeOf(err); got != code {
 		t.Errorf("code = %q (%v), want %q", got, err, code)
 	}
+}
+
+// TestListSkipsCorrupt (Р20): one broken record does not hide the others;
+// Get of the broken one stays 74.
+func TestListSkipsCorrupt(t *testing.T) {
+	t.Parallel()
+	s, l := newTestStore(t, t0)
+	if err := s.Put(teleportRecord()); err != nil {
+		t.Fatal(err)
+	}
+	writeRaw(t, l, "broken", `{"schema":`)
+	w := &cerr.Warnings{}
+	list, err := s.List(w)
+	if err != nil || len(list) != 1 || list[0].Name != "teleport" {
+		t.Fatalf("List = %+v, %v; want only teleport", list, err)
+	}
+	ws := w.List()
+	if len(ws) != 1 || ws[0].Code != "state.corrupt" || !strings.Contains(ws[0].Message, "broken") {
+		t.Errorf("warnings = %+v, want one state.corrupt naming broken", ws)
+	}
+	_, _, err = s.Get("broken")
+	assertCode(t, err, cerr.ExitState, "state.corrupt")
 }
