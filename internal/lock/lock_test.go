@@ -372,7 +372,7 @@ func TestInheritedFDNotHeld(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			h, err := NewLocker(l, 0, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
 			if err != nil {
 				t.Fatalf("Ext: %v", err)

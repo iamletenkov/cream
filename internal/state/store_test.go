@@ -233,11 +233,11 @@ func TestGetBadRecords(t *testing.T) {
 			s, l := newTestStore(t, t0)
 			writeRaw(t, l, "x", tc.data)
 			_, _, err := s.Get("x")
-			assertCode(t, err, cerr.ExitState, tc.wantCode)
+			assertCode(t, err, tc.wantCode)
 			w := &cerr.Warnings{}
 			list, err := s.List(w)
 			if tc.wantCode == "state.newer" {
-				assertCode(t, err, cerr.ExitState, tc.wantCode)
+				assertCode(t, err, tc.wantCode)
 				return
 			}
 			// Р20: a corrupt record is skipped with a warning, not fatal for List.
@@ -303,7 +303,7 @@ func TestPutAtomicOnCrash(t *testing.T) {
 	if err := s.Put(r); !errors.Is(err, crash) {
 		t.Fatalf("Put = %v, want the crash", err)
 	} else {
-		assertCode(t, err, cerr.ExitState, "state.write")
+		assertCode(t, err, "state.write")
 	}
 	after, err := os.ReadFile(l.InstalledFile("teleport"))
 	if err != nil {
@@ -387,10 +387,11 @@ func writeRaw(t *testing.T, l paths.Layout, name, data string) {
 	}
 }
 
-func assertCode(t *testing.T, err error, exit int, code string) {
+// assertCode checks a registry error: always exit 74, code as given.
+func assertCode(t *testing.T, err error, code string) {
 	t.Helper()
-	if got := cerr.ExitCode(err); got != exit {
-		t.Errorf("exit = %d (%v), want %d", got, err, exit)
+	if got := cerr.ExitCode(err); got != cerr.ExitState {
+		t.Errorf("exit = %d (%v), want %d", got, err, cerr.ExitState)
 	}
 	if got := cerr.CodeOf(err); got != code {
 		t.Errorf("code = %q (%v), want %q", got, err, code)
@@ -416,5 +417,5 @@ func TestListSkipsCorrupt(t *testing.T) {
 		t.Errorf("warnings = %+v, want one state.corrupt naming broken", ws)
 	}
 	_, _, err = s.Get("broken")
-	assertCode(t, err, cerr.ExitState, "state.corrupt")
+	assertCode(t, err, "state.corrupt")
 }

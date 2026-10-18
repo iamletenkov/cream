@@ -93,7 +93,7 @@ func checkTree(t *testing.T, dir string, m *Manifest) {
 
 func TestFixturesValid(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	tests := []struct {
 		catalog string
 		want    []string
@@ -141,7 +141,7 @@ func TestFixturesValid(t *testing.T) {
 // (T10–T19) опираются на эти свойства.
 func TestFixturesSemantics(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	load := func(t *testing.T, name string) *Manifest {
 		t.Helper()
 		m, err := Load(filepath.Join(fixturesRoot, "catalog", "extensions", name), cream, nil)
@@ -228,7 +228,7 @@ func TestFixturesSemantics(t *testing.T) {
 // манифестных дефектов — ожидаемый код.
 func TestFixturesInvalid(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	tests := []struct {
 		dir      string
 		wantExit int // 0 — манифест валиден, дефект в дереве или каталоге
@@ -286,7 +286,7 @@ func TestFixturesInvalid(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	dir := t.TempDir()
 	_, err := Load(dir, cream, nil)
 	if cerr.ExitCode(err) != cerr.ExitNotFound || cerr.CodeOf(err) != "not_found.manifest" {

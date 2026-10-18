@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
-	"github.com/iamletenkov/cream/internal/semver"
 )
 
 // base — минимальный валидный манифест; строки таблицы правят его через mk.
@@ -34,12 +33,14 @@ func mk(t *testing.T, extra string, pairs ...string) string {
 	return s + extra
 }
 
-func creamV(t *testing.T, s string) CreamBuild {
+// creamV1 — исполнитель 1.0.0.
+func creamV1(t *testing.T) CreamBuild {
 	t.Helper()
-	if _, err := semver.Parse(s); err != nil {
-		t.Fatal(err)
+	b := ParseCreamBuild("1.0.0")
+	if b.Dev {
+		t.Fatal("1.0.0 разобран как dev")
 	}
-	return ParseCreamBuild(s)
+	return b
 }
 
 func TestParseRules(t *testing.T) {
@@ -288,7 +289,7 @@ func TestParseRules(t *testing.T) {
 		{name: "x- в элементе depends", yaml: base + "depends: [{name: libx, x-since: \"2\"}]\n"},
 		{name: "X- заглавными — не x-", yaml: base + "X-owner: ops\n", wantExit: 65, wantCode: "manifest.invalid"},
 	}
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -330,7 +331,7 @@ func TestParseErrorMentionsField(t *testing.T) {
 		{name: "умолчание bool", yaml: base + "config: {keys: {ON: {type: bool, default: true, description: вкл}}}\n", want: []string{"config.keys.ON.default", "0 или 1"}},
 		{name: "cream старее", yaml: mk(t, "", `cream: ">=1.0.0"`, `cream: ">=1.3.0"`), want: []string{">=1.3.0", "1.0.0"}},
 	}
-	cream := creamV(t, "1.0.0")
+	cream := creamV1(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -394,7 +395,7 @@ files:
   - {src: files/tool, dst: /usr/local/bin/tool}
 x-owner: ops
 `
-	m, err := Parse([]byte(doc), creamV(t, "1.0.0"), nil)
+	m, err := Parse([]byte(doc), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +503,7 @@ x-owner: ops
 
 func TestParseDefaults(t *testing.T) {
 	t.Parallel()
-	m, err := Parse([]byte(base), creamV(t, "1.0.0"), nil)
+	m, err := Parse([]byte(base), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +518,7 @@ func TestParseDefaults(t *testing.T) {
 		t.Errorf("пустые списки: %+v", m)
 	}
 	// upgrade без install-таймаута: тоже без таймаута.
-	m2, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, upgrade: {}}")), creamV(t, "1.0.0"), nil)
+	m2, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, upgrade: {}}")), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +526,7 @@ func TestParseDefaults(t *testing.T) {
 		t.Errorf("upgrade %v", m2.Hooks[HookUpgrade].Timeout)
 	}
 	// Свой таймаут upgrade не перекрывается install.
-	m3, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {timeout: 1h}, upgrade: {timeout: 5m}}")), creamV(t, "1.0.0"), nil)
+	m3, err := Parse([]byte(mk(t, "", "hooks: {install: {}}", "hooks: {install: {timeout: 1h}, upgrade: {timeout: 5m}}")), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -609,7 +610,7 @@ func TestValidName(t *testing.T) {
 
 func TestFileModeType(t *testing.T) {
 	t.Parallel()
-	m, err := Parse([]byte(base+"files: [{src: files/a, dst: /etc/a, mode: \"0750\"}]\n"), creamV(t, "1.0.0"), nil)
+	m, err := Parse([]byte(base+"files: [{src: files/a, dst: /etc/a, mode: \"0750\"}]\n"), creamV1(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

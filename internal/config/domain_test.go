@@ -584,14 +584,14 @@ func TestTrustedEtcDir(t *testing.T) {
 			d, l := trustedDomain(t, func(path string, _ int, _ os.FileMode) (*os.File, error) { return openPlain(path) })
 			dir := l.EtcDir(testExt)
 			if tc.link {
-				real := filepath.Join(t.TempDir(), "real")
-				if err := os.Mkdir(real, 0o755); err != nil {
+				realDir := filepath.Join(t.TempDir(), "real")
+				if err := os.Mkdir(realDir, 0o755); err != nil {
 					t.Fatal(err)
 				}
 				if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.Symlink(real, dir); err != nil {
+				if err := os.Symlink(realDir, dir); err != nil {
 					t.Fatal(err)
 				}
 			} else {
