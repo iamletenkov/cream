@@ -128,6 +128,7 @@ func TestCheckInt(t *testing.T) {
 		{"9223372036854775807", true}, {"-9223372036854775808", true},
 		{"9223372036854775808", false}, {"", false}, {"+1", false}, {"007", false},
 		{"1.5", false}, {"1e3", false}, {"0x10", false}, {"-", false}, {"1_000", false}, {" 1", false},
+		{"-0", false}, {"-00", false},
 	})
 }
 
@@ -234,6 +235,32 @@ func TestCheckList(t *testing.T) {
 	runChecks(t, "list:enum:x,y", []checkCase{
 		{"x y x", true}, {"x z", false},
 	})
+}
+
+// Check — граница, за которой envfile.Set не паникует: недопустимый UTF-8 и
+// NUL отвергает тип любого вида, включая re и элементы list.
+func TestCheckRejectsInvalidUTF8AndNUL(t *testing.T) {
+	t.Parallel()
+	bad := []checkCase{{"\xff", false}, {"a\xc3", false}, {"a\x00b", false}, {"\x00", false}}
+	for _, typ := range []string{"str", "path", "re:.*", "re:(?s).*", "re:[^a]*", "list:re:.*", "list:str", "list:path", "bool", "int", "port", "host"} {
+		cases := bad
+		if strings.HasPrefix(typ, "path") || typ == "list:path" {
+			cases = []checkCase{{"/\xff", false}, {"/a\xc3", false}, {"/a\x00b", false}}
+		}
+		runChecks(t, typ, cases)
+	}
+	runChecks(t, "list:re:.*", []checkCase{{"a \xff", false}, {"a b", true}})
+	runChecks(t, "re:.*", []checkCase{{"любое", true}})
+}
+
+func TestCheckEnumRejectsInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	tp := Type{Kind: KindEnum, Enum: []string{"\xff", "a\x00"}, Raw: "enum:?"}
+	for _, v := range []string{"\xff", "a\x00"} {
+		if err := tp.Check(v); err == nil {
+			t.Errorf("enum.Check(%q) принял, ждали отказ", v)
+		}
+	}
 }
 
 func TestParseTypeReNoWrapEscape(t *testing.T) {

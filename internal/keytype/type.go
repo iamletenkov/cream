@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/iamletenkov/cream/internal/envfile"
 )
 
 // Kind — вид типа.
@@ -19,7 +21,7 @@ type Kind string
 // Виды типов §8.2.
 const (
 	KindBool Kind = "bool" // "0" или "1", как в knobs bisquite
-	KindInt  Kind = "int"  // десятичное int64 без "+" и ведущих нулей
+	KindInt  Kind = "int"  // десятичное int64 без "+", ведущих нулей и "-0"
 	KindPort Kind = "port" // 1–65535
 	KindHost Kind = "host" // рулинг Р10: DNS-имя (LDH), IPv4 или IPv6, необязательный :port
 	KindPath Kind = "path" // абсолютный путь без управляющих знаков
@@ -107,8 +109,16 @@ func parseType(s string) (Type, error) {
 // Check проверяет значение по типу. Пустую строку принимают только str, list
 // (пустой список) и re, если выражение её допускает; обязательность пустого
 // значения решает Spec.CheckValue.
+//
+// Недопустимый UTF-8 и NUL Check отвергает для типа любого вида: это граница,
+// за которой значение пишется в EnvironmentFile, и envfile.Set паникует на
+// том, что не прошло бы envfile.CheckValue.
 func (t Type) Check(v string) error {
-	if err := t.check(v); err != nil {
+	err := envfile.CheckValue(v)
+	if err == nil {
+		err = t.check(v)
+	}
+	if err != nil {
 		return fmt.Errorf("значение не подходит под тип %s: %w", t.Raw, err)
 	}
 	return nil
@@ -180,10 +190,14 @@ func checkStr(v string) error {
 	return nil
 }
 
-// isDecimal: [-]?(0|[1-9][0-9]*).
+// isDecimal: 0|-?[1-9][0-9]* (без "-0").
 func isDecimal(v string, signed bool) bool {
 	if signed {
-		v = strings.TrimPrefix(v, "-")
+		var neg bool
+		v, neg = strings.CutPrefix(v, "-")
+		if neg && v == "0" {
+			return false
+		}
 	}
 	if v == "" {
 		return false
