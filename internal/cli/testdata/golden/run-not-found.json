@@ -1,0 +1,15 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "not_found.action",
+    "message": "у расширения action-json нет действия \"nope\"",
+    "details": {
+      "action": "nope",
+      "ext": "action-json"
+    }
+  }
+}

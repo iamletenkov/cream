@@ -39,7 +39,7 @@
 
 - [ ] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
 
-- [ ] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
+- [x] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
 
 - [ ] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
 
