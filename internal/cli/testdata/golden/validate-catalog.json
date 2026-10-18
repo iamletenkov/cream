@@ -1,0 +1,31 @@
+{
+  "cream": "dev",
+  "command": "validate",
+  "ok": true,
+  "result": {
+    "reports": [
+      {
+        "target": "<TESTDATA>/catalog-next",
+        "kind": "catalog",
+        "catalog": "cream-fixtures",
+        "catalog_version": "1.1.0",
+        "extensions": [
+          {
+            "name": "noop",
+            "version": "1.0.0",
+            "path": "extensions/noop"
+          },
+          {
+            "name": "upgrade-fixture",
+            "version": "2.0.0",
+            "path": "extensions/upgrade-fixture"
+          }
+        ],
+        "not_applicable": [],
+        "errors": []
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

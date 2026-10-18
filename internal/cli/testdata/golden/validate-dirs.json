@@ -1,0 +1,37 @@
+{
+  "cream": "dev",
+  "command": "validate",
+  "ok": true,
+  "result": {
+    "reports": [
+      {
+        "target": "<TESTDATA>/catalog/extensions/noop",
+        "kind": "extension",
+        "extensions": [
+          {
+            "name": "noop",
+            "version": "1.0.0",
+            "path": "."
+          }
+        ],
+        "not_applicable": [],
+        "errors": []
+      },
+      {
+        "target": "<TESTDATA>/catalog/extensions/with-config",
+        "kind": "extension",
+        "extensions": [
+          {
+            "name": "with-config",
+            "version": "1.0.0",
+            "path": "."
+          }
+        ],
+        "not_applicable": [],
+        "errors": []
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

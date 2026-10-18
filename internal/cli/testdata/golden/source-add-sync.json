@@ -1,0 +1,29 @@
+{
+  "cream": "dev",
+  "command": "source",
+  "ok": true,
+  "result": {
+    "source": {
+      "name": "fx",
+      "type": "path",
+      "path": "<ROOT>/src/catalog",
+      "synced": true,
+      "lock": {
+        "name": "fx",
+        "type": "path",
+        "origin": "<ROOT>/src/catalog",
+        "resolved": "sha256:<FX_TREE>",
+        "synced_at": "2026-10-18T10:00:00Z",
+        "catalog_version": "1.0.0"
+      }
+    },
+    "changed": true
+  },
+  "warnings": [
+    {
+      "code": "validate.unit_lock",
+      "message": "lock-restart-exclusive: extensions/lock-restart-exclusive/files/lock-restart-exclusive.service:7: ExecStartPre вызывает cream run lock-restart-exclusive render с lock: exclusive — действие из Exec* юнита объявляется lock: none, иначе restart под блокировкой домена ждёт сам себя (§7.3)"
+    }
+  ],
+  "error": null
+}
