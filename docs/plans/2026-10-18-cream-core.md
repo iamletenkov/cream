@@ -31,7 +31,7 @@
 
 - [x] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
 
-- [ ] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
+- [x] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
 
 - [ ] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
 
