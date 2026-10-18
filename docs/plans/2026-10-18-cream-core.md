@@ -175,8 +175,10 @@ type Action struct{ Summary string; Args ArgsMode; Params map[string]Param; Stdi
   Output OutputMode; Timeout time.Duration; Phases []Phase; Root bool }
 type Param struct{ Type *keytype.Type; Required, Secret bool }
 type File struct{ Src, Dst string; Mode fs.FileMode }
-func Parse(data []byte, cream semver.Version) (*Manifest, error)
-func Load(dir string, cream semver.Version) (*Manifest, error) // dir/extension.yaml
+type CreamBuild struct{ Version semver.Version; Dev bool }  // Р18
+func ParseCreamBuild(raw string) CreamBuild // version.Version: "v" отбрасывается, не semver → Dev
+func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // w — platform.dev_build, может быть nil
+func Load(dir string, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // dir/extension.yaml
 type Catalog struct{ Schema, Name string; Version semver.Version; Roots []string }
 func ParseCatalog(data []byte) (*Catalog, error)
 func CanonArch(s string) (string, bool)  // aarch64→arm64, x86_64→amd64
@@ -273,9 +275,9 @@ func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // и
 type Entry struct{ Source source.SourceDir; Dir string; Manifest *manifest.Manifest; Digest string }
 type Ref struct{ Source, Name string; Version *semver.Version }
 func ParseRef(s string) (Ref, error)            // [source/]name[@version]
-func Validate(root string, cream semver.Version) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
-func LoadExtension(dir string, cream semver.Version) (Entry, error) // для --from-dir
-func Lookup(dirs []source.SourceDir, ref Ref, cream semver.Version, w *cerr.Warnings) (Entry, error)
+func Validate(root string, cream manifest.CreamBuild) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
+func LoadExtension(dir string, cream manifest.CreamBuild) (Entry, error) // для --from-dir
+func Lookup(dirs []source.SourceDir, ref Ref, cream manifest.CreamBuild, w *cerr.Warnings) (Entry, error)
 
 type Node struct{ Manifest *manifest.Manifest; Installed bool; Files []string; Source state.SourceRef; Digest string }
 type Host struct{ Phase, TargetArch, HostArch, Family string; OSID, OSVersion string
@@ -289,7 +291,7 @@ func Dependents(installed []Node, name string) []string // для remove
 **`internal/engine`** (T12 — ядро; T13–T16 — свои файлы)
 ```go
 type Engine struct{ L paths.Layout; Store *state.Store; Locks *lock.Locker; Run runner.Runner
-  Systemctl systemd.Systemctl; Now func() time.Time; Cream semver.Version; Warn *cerr.Warnings
+  Systemctl systemd.Systemctl; Now func() time.Time; Cream manifest.CreamBuild; Warn *cerr.Warnings
   LookPath func(string) (string, error); Env func(string) string
   Stdin io.Reader; Stdout, Stderr io.Writer }
 type Installed struct{ Record state.Record; Manifest *manifest.Manifest }
@@ -348,6 +350,12 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   проверка каталогов пути); `CopyTree` — через `os.Root` (ревью безопасности T3).
 
 Рулинги контроллера после ревью волны 2 (2026-10-18):
+- **Р18.** Проверка `cream:`: предрелизная сборка cream сравнивается по основной версии (`1.0.0-rc.1` удовлетворяет
+  `>=1.0.0`); версия `dev` или не-semver удовлетворяет любому `cream:` (формат диапазона проверяется всё равно)
+  с предупреждением `platform.dev_build`. Тип `manifest.CreamBuild` заменяет `semver.Version` в сигнатурах
+  `manifest`, `catalog` и `engine.Deps.Cream`. Там же (ревью T4): `cream-` запрещён в любом компоненте `dst`,
+  бинарь cream в `dst` — явно; `reservedKeys` += `LD_PRELOAD`, `LD_LIBRARY_PATH`, `BASH_ENV`, `ENV`, `IFS`;
+  у действия не более одного секретного параметра (65).
 - **Р19.** Родитель передаёт вместе с `CREAM_LOCK_FD` режим `CREAM_LOCK_MODE=shared|exclusive` (`runner.EnvInput.LockMode`;
   иное — `shared`). Вложенный после сверки (dev, ino) открывает свой дескриптор файла и пробует `LOCK_EX|LOCK_NB`:
   удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.

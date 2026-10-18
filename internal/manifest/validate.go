@@ -38,7 +38,9 @@ var (
 var reservedNames = []string{"cream", "lib", "ext", "installed", "lock", "global"}
 
 // reservedKeys — переменные окружения хука, которые ключ домена не может занять (§6.3).
-var reservedKeys = []string{"PATH", "LANG", "HOME", "PWD"}
+// Загрузчик и оболочки читают LD_PRELOAD, LD_LIBRARY_PATH, BASH_ENV, ENV, IFS
+// до кода хука — ключ домена с таким именем исполнил бы чужой код.
+var reservedKeys = []string{"PATH", "LANG", "HOME", "PWD", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "IFS"}
 
 // ValidName сообщает, годится ли s в имена расширений: регэксп §4.2, кроме
 // зарезервированных имён и префикса "cream-" (рулинг Р15).
@@ -495,6 +497,9 @@ func validateActions(in map[string]rawAction, keys keytype.Schema) (map[string]A
 				a.Params = map[string]Param{}
 			}
 			a.Params[pname] = p
+			if p.Secret && hasSecret {
+				return nil, invalid(field+".params."+pname, "не более одного секретного параметра: stdin несёт одно значение")
+			}
 			hasSecret = hasSecret || p.Secret
 		}
 		if a.Stdin == StdinSecret && !hasSecret {
@@ -556,6 +561,9 @@ func oneOf[T ~string](field, s string, allowed ...T) (T, error) {
 // creamOwned — пути cream, куда files раскладывать нельзя (§5).
 var creamOwned = []string{"/opt/cream", "/var/lib/cream", "/var/cache/cream", "/usr/lib/cream", "/run/cream"}
 
+// creamBinaries — бинарь cream; /bin и /sbin при usrmerge — те же каталоги.
+var creamBinaries = []string{"/usr/bin/cream", "/usr/sbin/cream", "/bin/cream", "/sbin/cream"}
+
 func validateFiles(in []rawFile) ([]File, error) {
 	var out []File
 	for i, r := range in {
@@ -567,8 +575,8 @@ func validateFiles(in []rawFile) ([]File, error) {
 		if !path.IsAbs(r.Dst) || path.Clean(r.Dst) != r.Dst || r.Dst == "/" || strings.ContainsAny(r.Dst, "\x00\n") {
 			return nil, invalid(field+".dst", "%q: ожидается чистый абсолютный путь файла", r.Dst)
 		}
-		if strings.HasPrefix(path.Base(r.Dst), "cream-") {
-			return nil, invalid(field+".dst", "%q: префикс cream- в имени файла зарезервирован за cream (§4.1)", r.Dst)
+		if slices.ContainsFunc(strings.Split(r.Dst, "/"), func(c string) bool { return strings.HasPrefix(c, "cream-") }) {
+			return nil, invalid(field+".dst", "%q: префикс cream- в компонентах пути зарезервирован за cream (§4.1)", r.Dst)
 		}
 		if err := checkDstNotCream(field+".dst", r.Dst); err != nil {
 			return nil, err
@@ -596,6 +604,9 @@ func validateFiles(in []rawFile) ([]File, error) {
 // (/etc/cream/sources.yaml, /etc/cream/<ext>/config|secrets). Прочие пути в
 // /etc/cream/<любое расширение>/ допустимы (рулинг Р11).
 func checkDstNotCream(field, dst string) error {
+	if slices.Contains(creamBinaries, dst) {
+		return invalid(field, "%q: бинарь cream перезаписывать нельзя", dst)
+	}
 	for _, p := range creamOwned {
 		if dst == p || strings.HasPrefix(dst, p+"/") {
 			return invalid(field, "%q: каталог %s принадлежит cream", dst, p)
