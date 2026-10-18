@@ -1,0 +1,35 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "ok": true,
+  "result": {
+    "schema": "cream-state/v1",
+    "name": "configure-system",
+    "version": "1.0.0",
+    "kind": "extension",
+    "status": "installed",
+    "source": {
+      "name": "core",
+      "type": "archive",
+      "origin": "",
+      "resolved": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "catalog_version": "4.0.0"
+    },
+    "ext_digest": "sha256:a3d39edfe80abc962039ec3b5ea80e42b226c77eeb89e61c4b63084e9fb006b6",
+    "params_digest": "sha256:def87a0a00ebb6995b5d945db579a33efa6c87dfae69b062c8a5e7d409b909db",
+    "phase": "build",
+    "installed_at": "2026-10-18T10:00:00Z",
+    "updated_at": "2026-10-18T10:00:00Z",
+    "cream_version": "dev",
+    "files": [],
+    "bin": [],
+    "configure": {
+      "stage": "system",
+      "target": "multi-user.target"
+    },
+    "reboot_required": false,
+    "changed": true
+  },
+  "warnings": [],
+  "error": null
+}

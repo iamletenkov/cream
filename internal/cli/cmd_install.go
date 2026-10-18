@@ -7,30 +7,44 @@ import (
 	"io"
 	"strings"
 
+	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/engine"
 )
 
-// installCommands are install and upgrade on a live machine (Task 13; the
-// build phase flags are Task 16). The result of one extension is its
+// installCommands are install and upgrade on a live machine (Task 13) and
+// install in the build phase inside the guest (Task 16, §12.2):
+// install --phase build --from-dir D --record F --params-file P
+// [--remove-params-file], without references and KEY=VALUE. The result of one extension is its
 // registry record plus changed (§11.4, golden install-*.json,
 // upgrade-*.json); several extensions (several refs, upgrade --all) give
 // {"extensions": [...]} in install order.
 func (App) installCommands() []Command {
-	var src, paramsFile string
-	var reinstall, acceptRisk, allowSkip, upAll bool
+	var src, paramsFile, phase, fromDir, record string
+	var reinstall, acceptRisk, allowSkip, upAll, removeParams bool
 	return []Command{
 		{Name: "install",
-			Usage: "install [--source S] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка",
+			Usage: "install [--source S] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка\n" +
+				"  install --phase build --from-dir D --record F [--params-file P] [--remove-params-file] [--allow-skip]  — фаза build в госте",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&src, "source", "", "искать ссылки без источника в источнике `S`")
 				fs.BoolVar(&reinstall, "reinstall", false, "вызвать хук install, даже если ничего не изменилось")
 				fs.BoolVar(&acceptRisk, "accept-risk", false, "ставить расширение с targets.live: confirm")
 				fs.BoolVar(&allowSkip, "allow-skip", false, "код 20 хука — status: skipped без ошибки")
 				fs.StringVar(&paramsFile, "params-file", "", "файл `F` с KEY=VALUE (0600, владелец root)")
+				fs.StringVar(&phase, "phase", engine.PhaseLive, "фаза `P`: live или build (build — только с --from-dir)")
+				fs.StringVar(&fromDir, "from-dir", "", "фаза build: дерево расширения `D` (incoming/<id>/<имя>)")
+				fs.StringVar(&record, "record", "", "фаза build: record.json `F` — слой cream resolve --json")
+				fs.BoolVar(&removeParams, "remove-params-file", false, "фаза build: удалить --params-file после чтения")
 				reserveFlags(fs, "with-deps", "allow-downgrade")
 			},
 			Run: func(ctx *Context, args []string) (any, error) {
+				if phase != engine.PhaseLive || fromDir != "" || record != "" || removeParams {
+					return runInstallBuild(ctx, args, installBuildFlags{phase: phase, source: src,
+						reinstall: reinstall, acceptRisk: acceptRisk},
+						engine.BuildRequest{FromDir: fromDir, Record: record, ParamsFile: paramsFile,
+							RemoveParamsFile: removeParams, AllowSkip: allowSkip})
+				}
 				return runInstall(ctx, args, engine.InstallRequest{Source: src, Reinstall: reinstall,
 					AcceptRisk: acceptRisk, AllowSkip: allowSkip,
 					Params: config.AssignInput{ParamsFile: paramsFile}})
@@ -119,4 +133,38 @@ func runUpgrade(ctx *Context, args []string, all bool) (any, error) {
 		return nil, err
 	}
 	return installOutput(res, !all && len(args) == 1), nil
+}
+
+// installBuildFlags are the install flags the build phase refuses or checks.
+type installBuildFlags struct {
+	phase                 string
+	source                string
+	reinstall, acceptRisk bool
+}
+
+// runInstallBuild is `cream install --phase build --from-dir …` (§12.2 п.4):
+// the extension comes from --from-dir, its parameters only from
+// --params-file (never argv: secrets), the source from record.json.
+func runInstallBuild(ctx *Context, args []string, f installBuildFlags, r engine.BuildRequest) (any, error) {
+	switch {
+	case f.phase != engine.PhaseBuild && f.phase != engine.PhaseLive:
+		return nil, cerr.New(cerr.ExitUsage, "usage.phase", "--phase %q: ожидается build или live", f.phase)
+	case f.phase != engine.PhaseBuild:
+		return nil, ctx.Usagef("install: --from-dir, --record и --remove-params-file — только с --phase build")
+	case r.FromDir == "" || r.Record == "":
+		return nil, ctx.Usagef("install --phase build: нужны --from-dir и --record")
+	case len(args) > 0:
+		return nil, ctx.Usagef("install --phase build: расширение — из --from-dir, параметры — только в --params-file")
+	case f.source != "" || f.reinstall || f.acceptRisk:
+		return nil, ctx.Usagef("install --phase build: --source, --reinstall и --accept-risk не применяются")
+	}
+	if err := requireRoot(ctx, "install"); err != nil {
+		return nil, err
+	}
+	r.CheckPerm = ctx.Layout.NeedsRoot()
+	res, err := newEngine(ctx).InstallFromDir(context.Background(), r)
+	if err != nil {
+		return nil, err
+	}
+	return installResult{*res}, nil
 }
