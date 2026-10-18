@@ -10,12 +10,14 @@
 //
 // Deliberate differences from systemd: a NUL byte is an error (systemd stops
 // reading at it); invalid UTF-8 in an assignment is an error, as in systemd.
-// Before v254 a comment ending in `\` swallowed the next line; the writer
-// never produces such a comment.
+// Before v254 a comment ending in `\` swallowed the next line: Parse reads
+// both dialects and refuses a file on which they disagree; the writer never
+// produces such a comment.
 package envfile
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 	"unicode/utf8"
@@ -52,14 +54,41 @@ type File struct {
 	added   []string // keys set but absent from recs, in Set order
 }
 
-// Parse reads data in the EnvironmentFile grammar of systemd v254+.
+// errDialect: systemd < 254 and v254+ read the file differently.
+var errDialect = errors.New("файл читается systemd < 254 иначе: комментарий, оканчивающийся на \\, поглощает следующую строку")
+
+// Parse reads data in the EnvironmentFile grammar of systemd v254+ and
+// refuses a file that systemd < 254 (249, 252) reads into other assignments,
+// so the result holds for every supported systemd.
 func Parse(data []byte) (*File, error) {
-	return parse(data, false)
+	f, err := parseDialect(data, false)
+	if err != nil {
+		return nil, err
+	}
+	legacy, err := parseDialect(data, true)
+	if err != nil {
+		return nil, err
+	}
+	if n := min(len(f.recs), len(legacy.recs)); !slices.Equal(f.recs, legacy.recs) {
+		i := 0
+		for i < n && f.recs[i] == legacy.recs[i] {
+			i++
+		}
+		at := len(data)
+		if i < len(f.recs) {
+			at = f.recs[i].start
+		}
+		if i < len(legacy.recs) {
+			at = min(at, legacy.recs[i].start)
+		}
+		return nil, fmt.Errorf("строка %d: %w", 1+bytes.Count(data[:at], []byte{'\n'}), errDialect)
+	}
+	return f, nil
 }
 
-// parse with legacy=true follows systemd < 254, where a comment ending in `\`
-// swallows the next line (used for the systemd-249/252 reference fixtures).
-func parse(data []byte, legacy bool) (*File, error) {
+// parseDialect with legacy=true follows systemd < 254, where a comment ending
+// in `\` swallows the next line.
+func parseDialect(data []byte, legacy bool) (*File, error) {
 	if i := bytes.IndexByte(data, 0); i >= 0 {
 		return nil, fmt.Errorf("байт NUL в позиции %d", i)
 	}

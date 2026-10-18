@@ -71,9 +71,11 @@ func TestParse(t *testing.T) {
 		{name: "unicode value", in: "A=ключ значение\n", want: []kv{{"A", "ключ значение"}}},
 		{name: "tab is whitespace", in: "A=\tx\t\n", want: []kv{{"A", "x"}}},
 		{name: "vertical tab is not whitespace", in: "A=\vx\v\n", want: []kv{{"A", "\vx\v"}}},
-		// systemd >= 254: a comment ending in `\` no longer swallows the next line.
-		{name: "comment ending in backslash (v254+)", in: "# c \\\nA=1\n", want: []kv{{"A", "1"}}},
 		{name: "comment backslash mid-line", in: "# a\\b\nA=1\n", want: []kv{{"A", "1"}}},
+		// A comment ending in `\` is fine while the line it swallows before v254
+		// carries no assignment: both dialects read the same.
+		{name: "comment backslash before a comment", in: "# c \\\n# d\nA=1\n", want: []kv{{"A", "1"}}},
+		{name: "comment backslash before a blank line", in: "# c \\\n\nA=1\n", want: []kv{{"A", "1"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,8 +94,8 @@ func TestParse(t *testing.T) {
 	}
 }
 
-// The v249/v254 divergence on a comment ending in `\` is pinned here: the
-// legacy dialect is what the systemd-249 reference fixtures are checked with.
+// The v249/v254 divergence on a comment ending in `\` is pinned here per
+// dialect; Parse refuses a file whose dialects disagree (TestParseErrors).
 func TestParseLegacyCommentEscape(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -127,12 +129,12 @@ func TestParseLegacyCommentEscape(t *testing.T) {
 				legacy bool
 				want   []kv
 			}{{false, tc.modern}, {true, tc.v249}} {
-				f, err := parse([]byte(tc.in), d.legacy)
+				f, err := parseDialect([]byte(tc.in), d.legacy)
 				if err != nil {
-					t.Fatalf("parse(legacy=%v): %v", d.legacy, err)
+					t.Fatalf("parseDialect(legacy=%v): %v", d.legacy, err)
 				}
 				if got := pairs(t, f); !reflect.DeepEqual(got, d.want) {
-					t.Errorf("parse(%q, legacy=%v) = %v, want %v", tc.in, d.legacy, got, d.want)
+					t.Errorf("parseDialect(%q, legacy=%v) = %v, want %v", tc.in, d.legacy, got, d.want)
 				}
 			}
 		})
@@ -149,6 +151,9 @@ func TestParseErrors(t *testing.T) {
 		{name: "invalid utf-8 in quoted value", in: "A=\"x\xc3\"\n"},
 		{name: "invalid utf-8 in key", in: "A\xff=1\n"},
 		{name: "NUL byte", in: "A=1\x00\nB=2\n"},
+		// systemd < 254 swallows the line after a comment ending in `\`.
+		{name: "comment backslash read differently before v254", in: "# note \\\nA=1\n"},
+		{name: "comment backslash swallowing a non-assignment", in: "# c \\\nA=1\nB=2\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -321,7 +326,7 @@ func TestAppendAfterDirtyTail(t *testing.T) {
 				t.Errorf("Bytes() = %q must keep the original %q as prefix", out, tc.in)
 			}
 			for _, legacy := range []bool{false, true} {
-				g, err := parse(out, legacy)
+				g, err := parseDialect(out, legacy)
 				if err != nil {
 					t.Fatalf("reparse(legacy=%v) of %q: %v", legacy, out, err)
 				}

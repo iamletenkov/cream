@@ -30,16 +30,19 @@ func CheckOwnerPerm(path string, wantMode fs.FileMode) error {
 // and returns the descriptor that was checked, so the caller reads exactly
 // the file it vetted. Every directory from / down is opened relative to its
 // parent with O_NOFOLLOW and must be owned by uid and not writable by group
-// or others; the file must be a regular file passing CheckOwnerPermFile. A
+// or others; the file must be a regular file with one hard link passing
+// CheckOwnerPermFile. A
 // link anywhere on the path is ErrUnsafePerm; a missing component is
 // reported as is (errors.Is(err, fs.ErrNotExist)).
 func OpenTrusted(path string, uid int, wantMode fs.FileMode) (*os.File, error) {
-	return openTrusted(path, uid, wantMode, "/")
+	return openTrusted(path, uid, uid, wantMode, "/")
 }
 
 // openTrusted checks only directories at or below top (tests run under a
-// temporary directory whose ancestors belong to someone else).
-func openTrusted(path string, uid int, want fs.FileMode, top string) (*os.File, error) {
+// temporary directory whose ancestors belong to someone else). Directories
+// must belong to dirUID and the file to fileUID: tests cannot chown, so a
+// foreign file under trusted directories is modelled by fileUID != dirUID.
+func openTrusted(path string, dirUID, fileUID int, want fs.FileMode, top string) (*os.File, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("проверка прав %s: путь не абсолютный", path)
 	}
@@ -55,7 +58,7 @@ func openTrusted(path string, uid int, want fs.FileMode, top string) (*os.File, 
 	comps := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for i, c := range comps {
 		if checked(cur) {
-			if err := checkDirFD(fd, cur, uid); err != nil {
+			if err := checkDirFD(fd, cur, dirUID); err != nil {
 				_ = syscall.Close(fd)
 				return nil, err
 			}
@@ -84,7 +87,14 @@ func openTrusted(path string, uid int, want fs.FileMode, top string) (*os.File, 
 		err = fmt.Errorf("%s: не обычный файл: %w", path, ErrUnsafePerm)
 	}
 	if err == nil {
-		err = CheckOwnerPermFile(f, uid, want)
+		// A second hard link may live in a directory nobody checked, where
+		// someone else can unlink and replace the name that we trust.
+		if sys, ok := st.Sys().(*syscall.Stat_t); !ok || sys.Nlink != 1 {
+			err = fmt.Errorf("%s: у файла несколько жёстких ссылок: %w", path, ErrUnsafePerm)
+		}
+	}
+	if err == nil {
+		err = CheckOwnerPermFile(f, fileUID, want)
 	}
 	if err != nil {
 		_ = f.Close()

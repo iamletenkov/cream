@@ -3,14 +3,12 @@ package fsx
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 // TreeDigest returns "sha256:<hex>" of the tree under root (spec §9.5): the
@@ -27,7 +25,9 @@ import (
 //
 // The file mode is reduced to the execute bit; owners, times and other
 // permission bits do not count. Links are recorded, not followed. The tree
-// is read through os.Root, so a link swapped in mid-walk cannot lead outside.
+// is read through os.Root, so a link swapped in mid-walk cannot lead outside,
+// and every file is checked after the open to be the entry itself, not a
+// link inside the tree (openInRoot).
 // root must be a directory, not a link; special files are refused.
 func TreeDigest(root string) (string, error) {
 	st, err := os.Lstat(root)
@@ -37,7 +37,7 @@ func TreeDigest(root string) (string, error) {
 	if !st.IsDir() {
 		return "", fmt.Errorf("отпечаток %s: не каталог", root)
 	}
-	r, err := os.OpenRoot(root)
+	r, err := openRootSame(root, st)
 	if err != nil {
 		return "", fmt.Errorf("отпечаток %s: %w", root, err)
 	}
@@ -96,18 +96,11 @@ func TreeDigest(root string) (string, error) {
 }
 
 func fileDigest(r *os.Root, rel string) (sum string, mode fs.FileMode, err error) {
-	f, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, st, err := openInRoot(r, rel)
 	if err != nil {
 		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
-	st, err := f.Stat()
-	if err != nil {
-		return "", 0, err
-	}
-	if !st.Mode().IsRegular() {
-		return "", 0, errors.New("файл подменён во время обхода")
-	}
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", 0, err

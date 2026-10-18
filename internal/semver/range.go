@@ -25,7 +25,9 @@ type comparator struct {
 
 // Range — конъюнкция компараторов через пробел: ">=4.0.0 <5". Дизъюнкция ("||"),
 // "~", "^", дефисные диапазоны и голая версия без оператора не поддерживаются.
-// Версии в компараторах разбираются ParseLoose ("<5", ">=22.04").
+// Версии в компараторах разбираются ParseLoose ("<5", ">=22.04"). Верхняя граница
+// "<X.Y.Z" без предрелиза исключает предрелизы X.Y.Z ("<5" ≡ "<5.0.0-0"),
+// согласованно с MajorBound.
 type Range struct {
 	cmps []comparator
 }
@@ -85,7 +87,8 @@ func (r Range) Contains(v Version) bool {
 		case opGT:
 			ok = d > 0
 		case opLT:
-			ok = d < 0
+			// "<X.Y.Z" без предрелиза исключает и предрелизы X.Y.Z: "<5" ≡ "<5.0.0-0".
+			ok = d < 0 && (len(c.ver.Pre) > 0 || len(v.Pre) == 0 || !sameCore(v, c.ver))
 		case opEQ:
 			ok = d == 0
 		}
@@ -94,6 +97,10 @@ func (r Range) Contains(v Version) bool {
 		}
 	}
 	return true
+}
+
+func sameCore(a, b Version) bool {
+	return a.Major == b.Major && a.Minor == b.Minor && a.Patch == b.Patch
 }
 
 // String — компараторы через один пробел, версии — как записаны.

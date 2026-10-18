@@ -24,9 +24,9 @@ func TestQuoteRoundTrip(t *testing.T) {
 				if tail == "" {
 					in = "K=" + Quote(v)
 				}
-				f, err := parse([]byte(in), legacy)
+				f, err := parseDialect([]byte(in), legacy)
 				if err != nil {
-					t.Fatalf("parse(%q): %v", in, err)
+					t.Fatalf("parseDialect(%q): %v", in, err)
 				}
 				// The legacy dialect swallows the line after the comment, so
 				// only the bare form is meaningful there.
