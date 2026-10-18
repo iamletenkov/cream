@@ -1,0 +1,33 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "ok": false,
+  "result": null,
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "depends-lib: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": {
+    "code": "deps.missing",
+    "message": "depends-lib: нет зависимостей lib-fixture >=1.0.0 <2 — поставьте их раньше; есть в источниках: fixtures/lib-fixture@1.0.0",
+    "details": {
+      "candidates": [
+        {
+          "name": "lib-fixture",
+          "version": "1.0.0",
+          "source": "fixtures",
+          "matches": true
+        }
+      ],
+      "ext": "depends-lib",
+      "missing": [
+        {
+          "name": "lib-fixture",
+          "version": ">=1.0.0 <2"
+        }
+      ]
+    }
+  }
+}

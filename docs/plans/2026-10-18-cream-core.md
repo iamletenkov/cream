@@ -35,7 +35,7 @@
 
 - [x] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
 
-- [ ] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
+- [x] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
 
 - [ ] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
 
