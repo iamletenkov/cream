@@ -151,8 +151,13 @@ func (l Layout) Sources() string {
 	}
 }
 
-// SourcesLock is the observed source revisions: XDG state in user mode, else /var/lib/cream/sources.lock.
+// SourcesLock is the observed source revisions: <CacheDir>/sources.lock with
+// a cache override (ruling Р12: a bisquite build with its own cache leaves the
+// machine's lock alone), else XDG state in user mode, else /var/lib/cream/sources.lock.
 func (l Layout) SourcesLock() string {
+	if l.CacheDir != "" {
+		return filepath.Join(filepath.Clean(l.CacheDir), "sources.lock")
+	}
 	if l.userMode() {
 		return filepath.Join(l.StateHome, "cream", "sources.lock")
 	}

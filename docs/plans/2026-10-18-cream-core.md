@@ -23,7 +23,7 @@
 
 - [x] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
 
-- [ ] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
+- [x] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
 
 - [ ] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
 

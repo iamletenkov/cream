@@ -66,14 +66,14 @@ func TestDetect(t *testing.T) {
 			name: "CREAM_SOURCES and CREAM_CACHE are used as is",
 			env:  map[string]string{"CREAM_SOURCES": "/data/s.yaml", "CREAM_CACHE": "/data/cream"}, euid: 0, rootFlag: "/tmp/x",
 			wantRoot: "/tmp/x", wantSources: "/data/s.yaml",
-			wantLock: "/tmp/x/var/lib/cream/sources.lock", wantCache: "/data/cream",
+			wantLock: "/data/cream/sources.lock", wantCache: "/data/cream",
 		},
 		{
 			name: "flags beat env for sources and cache",
 			env:  map[string]string{"HOME": "/home/u", "CREAM_SOURCES": "/env/s.yaml", "CREAM_CACHE": "/env/c"},
 			euid: 1000, srcFlag: "/flag/s.yaml", cacheF: "/flag/c",
 			wantRoot: "/", wantUser: true, wantSources: "/flag/s.yaml",
-			wantLock: "/home/u/.local/state/cream/sources.lock", wantCache: "/flag/c",
+			wantLock: "/flag/c/sources.lock", wantCache: "/flag/c",
 		},
 	}
 	for _, tc := range tests {
@@ -168,6 +168,10 @@ func TestLayoutSystemRoot(t *testing.T) {
 	}
 	if got := (Layout{User: true}).SourcesLock(); got != "/var/lib/cream/sources.lock" {
 		t.Errorf("Layout{User:true}.SourcesLock() = %q", got)
+	}
+	// Р12: с --cache sources.lock лежит в каталоге кеша, а не в /var/lib/cream.
+	if got := (Layout{Root: "/tmp/x", CacheDir: "/c/"}).SourcesLock(); got != "/c/sources.lock" {
+		t.Errorf("Layout{CacheDir:/c/}.SourcesLock() = %q", got)
 	}
 	if got := (Layout{User: true}).CacheRoot(); got != "/var/cache/cream" {
 		t.Errorf("Layout{User:true}.CacheRoot() = %q", got)
