@@ -86,7 +86,7 @@ func (s *Store) List(w *cerr.Warnings) ([]Record, error) {
 		if err != nil {
 			if cerr.CodeOf(err) == "state.corrupt" {
 				if w != nil {
-					w.Add("state.corrupt", "запись реестра %s повреждена и пропущена: %v", name, err)
+					w.AddDetails("state.corrupt", map[string]any{"ext": name}, "запись реестра %s повреждена и пропущена: %v", name, err)
 				}
 				continue
 			}

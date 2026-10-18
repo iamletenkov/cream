@@ -1,8 +1,14 @@
 package source
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"syscall"
 
+	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/paths"
 )
 
@@ -19,12 +25,30 @@ type SourceDir struct { //nolint:revive // имя закреплено конт�
 
 // Dirs returns the cache directories of f's sources in priority order. It
 // reads nothing but the existence of each cache directory; it never syncs.
-func Dirs(l paths.Layout, f *File, lock []LockEntry) []SourceDir {
+//
+// On the real root (Р9, §13) an existing cache directory and its parent
+// <CacheRoot>/sources must belong to the current user (root, when cream runs
+// as root) and must not be writable by group or others: 77 perm.cache.
+func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) {
+	check := l.NeedsRoot()
+	uid := os.Geteuid()
 	out := make([]SourceDir, 0, len(f.Sources))
+	parentChecked := false
 	for _, s := range f.Sources {
 		d := SourceDir{Source: s, Dir: l.SourceCache(s.Name)}
 		if st, err := os.Lstat(d.Dir); err == nil && st.IsDir() {
 			d.Synced = true
+			if check {
+				if !parentChecked {
+					if err := checkCacheDir(filepath.Dir(d.Dir), uid); err != nil {
+						return nil, err
+					}
+					parentChecked = true
+				}
+				if err := checkCacheDir(d.Dir, uid); err != nil {
+					return nil, err
+				}
+			}
 		}
 		for i := range lock {
 			if lock[i].Name == s.Name {
@@ -35,5 +59,34 @@ func Dirs(l paths.Layout, f *File, lock []LockEntry) []SourceDir {
 		}
 		out = append(out, d)
 	}
-	return out
+	return out, nil
+}
+
+// checkCacheDir refuses a cache directory owned by another user or writable
+// by group or others.
+func checkCacheDir(dir string, uid int) error {
+	st, err := os.Lstat(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return cerr.Wrap(err, cerr.ExitState, "state.read", "кеш источников %s", dir)
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	var bad string
+	switch {
+	case !st.IsDir():
+		bad = "не каталог"
+	case !ok:
+		bad = "нет сведений о владельце"
+	case int(sys.Uid) != uid:
+		bad = fmt.Sprintf("владелец uid %d, нужен %d", sys.Uid, uid)
+	case st.Mode().Perm()&0o022 != 0:
+		bad = fmt.Sprintf("права %04o разрешают запись группе или всем", st.Mode().Perm())
+	default:
+		return nil
+	}
+	e := cerr.New(cerr.ExitPerm, "perm.cache", "кеш источников %s: %s", dir, bad)
+	e.Details = map[string]any{"path": dir}
+	return e
 }

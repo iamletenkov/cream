@@ -413,7 +413,7 @@ func TestListSkipsCorrupt(t *testing.T) {
 		t.Fatalf("List = %+v, %v; want only teleport", list, err)
 	}
 	ws := w.List()
-	if len(ws) != 1 || ws[0].Code != "state.corrupt" || !strings.Contains(ws[0].Message, "broken") {
+	if len(ws) != 1 || ws[0].Code != "state.corrupt" || !strings.Contains(ws[0].Message, "broken") || ws[0].Details["ext"] != "broken" {
 		t.Errorf("warnings = %+v, want one state.corrupt naming broken", ws)
 	}
 	_, _, err = s.Get("broken")

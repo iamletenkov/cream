@@ -131,6 +131,10 @@ func unpack(r io.Reader, root *os.Root, lim extractLimits) ([]pendingLink, map[s
 		if entries++; entries > lim.entries {
 			return nil, nil, fmt.Errorf("больше %d записей", lim.entries)
 		}
+		if h.Typeflag == tar.TypeXGlobalHeader {
+			// git archive's pax_global_header (commit id): metadata, not an entry.
+			continue
+		}
 		name, err := cleanName(h.Name)
 		if err != nil {
 			return nil, nil, err
@@ -156,10 +160,8 @@ func unpack(r io.Reader, root *os.Root, lim extractLimits) ([]pendingLink, map[s
 			links = append(links, pendingLink{name: name, target: h.Linkname})
 		case tar.TypeLink:
 			var n int64
-			if n, err = copyHardlink(root, name, h.Linkname); err == nil {
-				if total += n; total > lim.bytes {
-					return nil, nil, fmt.Errorf("распакованное больше %d байт", lim.bytes)
-				}
+			if n, err = copyHardlink(root, name, h.Linkname, lim.bytes-total); err == nil {
+				total += n
 			}
 		default:
 			err = fmt.Errorf("тип записи %q не поддерживается (устройства, FIFO и прочее)", h.Typeflag)
@@ -247,7 +249,9 @@ func writeFile(root *os.Root, name string, r io.Reader, mode fs.FileMode) error 
 // copyHardlink materializes a hard link to a regular file already extracted
 // as an independent copy (the cache must not carry multi-link files, which
 // fsx.CopyTree refuses on install).
-func copyHardlink(root *os.Root, name, target string) (int64, error) {
+// The copy is refused before anything is written when its size exceeds
+// budget, the bytes left of the extraction limit.
+func copyHardlink(root *os.Root, name, target string, budget int64) (int64, error) {
 	t, err := cleanName(target)
 	if err != nil || t == "." {
 		return 0, fmt.Errorf("жёсткая ссылка на %q за пределы дерева", target)
@@ -263,6 +267,9 @@ func copyHardlink(root *os.Root, name, target string) (int64, error) {
 	}
 	if !st.Mode().IsRegular() {
 		return 0, fmt.Errorf("жёсткая ссылка на %s: не обычный файл", t)
+	}
+	if st.Size() > budget {
+		return 0, fmt.Errorf("распакованное больше лимита: жёсткая ссылка на %s в %d байт", t, st.Size())
 	}
 	if err := ensureDir(root, path.Dir(name)); err != nil {
 		return 0, err

@@ -33,12 +33,17 @@ type Syncer struct {
 	Fetch    Fetcher
 	Validate func(dir string) (catalogVersion string, err error)
 	Now      func() time.Time
+
+	// writeLock writes sources.lock; nil is fsx.WriteAtomic (tests fail it).
+	writeLock func(path string, data []byte, perm fs.FileMode) error
 }
 
 // Sync builds a new cache of src in a private directory next to the cache,
-// validates it and swaps it in with one rename (an atomic exchange when the
-// cache exists), then records the result in sources.lock. On any failure the
-// previous cache and sources.lock stay as they were.
+// validates it, prepares the new sources.lock (a corrupt one refuses the
+// sync before anything changes), swaps the cache in with one rename (an
+// atomic exchange when the cache exists) and writes sources.lock. On any
+// failure the previous cache and sources.lock stay as they were: a failed
+// lock write swaps the previous cache back.
 //
 // archive: download (limit 256 MiB), sha256 compared before extraction
 // (69 source.sha256_mismatch), safe extraction (69 source.bad_archive).
@@ -88,15 +93,32 @@ func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error) {
 		}
 		return LockEntry{}, cerr.Wrap(err, cerr.ExitData, "source.catalog", "источник %s: каталог не прошёл проверку", src.Name)
 	}
-	if err := swapIn(tree, cache, filepath.Join(staging, "old")); err != nil {
-		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источника %s", src.Name)
-	}
 	now := time.Now
 	if s.Now != nil {
 		now = s.Now
 	}
 	e.SyncedAt = now().UTC().Truncate(time.Second)
-	if err := updateLock(s.Layout.SourcesLock(), src.Name, &e); err != nil {
+	lockPath := s.Layout.SourcesLock()
+	data, _, err := prepareLock(lockPath, src.Name, &e)
+	if err != nil {
+		return LockEntry{}, err
+	}
+	if err := lockDir(lockPath); err != nil {
+		return LockEntry{}, err
+	}
+	undo, err := swapIn(tree, cache, filepath.Join(staging, "old"), exchange)
+	if err != nil {
+		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источника %s", src.Name)
+	}
+	write := s.writeLock
+	if write == nil {
+		write = fsx.WriteAtomic
+	}
+	if err := writeLockFile(lockPath, data, write); err != nil {
+		if uerr := undo(); uerr != nil {
+			return LockEntry{}, cerr.Wrap(errors.Join(err, uerr), cerr.ExitState, "state.write",
+				"источник %s: sources.lock не записан, прежний кеш не возвращён", src.Name)
+		}
 		return LockEntry{}, err
 	}
 	return e, nil
@@ -148,31 +170,41 @@ func copyPath(src Source, tree string) (string, error) {
 }
 
 // swapIn puts the directory next in place of cache. Without a cache it is a
-// plain rename; otherwise the two are exchanged atomically (renameat2
-// RENAME_EXCHANGE) so readers never see the cache missing, and the old tree
-// ends up at next. Where the exchange is unsupported, the old cache is moved
-// to old first and next renamed in.
-func swapIn(next, cache, old string) error {
+// plain rename; otherwise the two are exchanged atomically with xchg
+// (renameat2 RENAME_EXCHANGE) so readers never see the cache missing, and
+// the old tree ends up at next. Where the exchange is unsupported (ENOSYS,
+// EINVAL), the old cache is moved to old first and next renamed in. The
+// returned undo puts the previous state back (the previous cache in place,
+// or no cache), the new tree returning to next.
+func swapIn(next, cache, old string, xchg func(a, b string) error) (undo func() error, err error) {
 	if _, err := os.Lstat(cache); errors.Is(err, fs.ErrNotExist) {
-		return os.Rename(next, cache)
+		if err := os.Rename(next, cache); err != nil {
+			return nil, err
+		}
+		return func() error { return os.Rename(cache, next) }, nil
 	} else if err != nil {
-		return err
+		return nil, err
 	}
-	err := exchange(next, cache)
+	err = xchg(next, cache)
 	if err == nil {
-		return nil
+		return func() error { return xchg(next, cache) }, nil
 	}
 	if !errors.Is(err, syscall.ENOSYS) && !errors.Is(err, syscall.EINVAL) {
-		return fmt.Errorf("обмен каталогов: %w", err)
+		return nil, fmt.Errorf("обмен каталогов: %w", err)
 	}
 	if err := os.Rename(cache, old); err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.Rename(next, cache); err != nil {
 		_ = os.Rename(old, cache)
-		return err
+		return nil, err
 	}
-	return nil
+	return func() error {
+		if err := os.Rename(cache, next); err != nil {
+			return err
+		}
+		return os.Rename(old, cache)
+	}, nil
 }
 
 // Forget removes the cache and the sources.lock entry of name (for

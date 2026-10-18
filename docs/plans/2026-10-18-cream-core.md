@@ -106,7 +106,7 @@ type Error struct{ Exit int; Code, Message string; Details map[string]any; Err e
 func New(exit int, code, format string, a ...any) *Error
 func Wrap(err error, exit int, code, format string, a ...any) *Error
 func ExitCode(err error) int          // nil→0, *Error (errors.As)→Exit, иначе 70
-type Warning struct{ Code, Message string }
+type Warning struct{ Code, Message string; Details map[string]any /* omitempty */ } // AddDetails(code, details, fmt, …) — Р20
 type Warnings struct{ list []Warning }   // Add(code, fmt, …), List() []Warning; передаётся явно
 ```
 **`internal/paths`** (T1)
@@ -235,7 +235,7 @@ type Syncer struct{ Layout paths.Layout; Fetch Fetcher; Validate func(dir string
 func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error)
 func ReadLock(path string) ([]LockEntry, error)
 type SourceDir struct{ Source Source; Dir string; Synced bool; Lock *LockEntry }
-func Dirs(l paths.Layout, f *File, lock []LockEntry) []SourceDir  // в порядке приоритета
+func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) // в порядке приоритета; при --root / кеш чужой или доступен на запись группе/всем → 77 perm.cache (§13)
 func ExtractTarGz(r io.Reader, dst string) error   // враждебные архивы — отказ
 func Pack(dir string, w io.Writer, epoch time.Time) error // детерминированный tar.gz
 ```
@@ -266,8 +266,8 @@ type Systemctl interface{ Running(ctx context.Context) (state string, ok bool)
 type ExecFunc func(ctx context.Context, name string, args ...string) (stdout []byte, code int, err error)
 func NewSystemctl(l paths.Layout, run ExecFunc) Systemctl; type Fake struct{ … } // для тестов движка
 
-type Owner func(dst string) (ext string, ok bool) // владелец по реестру
-func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) // 67 при чужом dst
+type Owner func(dst string) (ext string, ok bool) // владелец по реестру: все записи любого статуса, свои тоже (Р21)
+func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) // 67 при чужом dst и при занятом dst без владельца (Р21)
 func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // изменённый → <dst>.cream-modified
 ```
 **`internal/catalog`** (T10), **`internal/resolve`** (T11)
@@ -361,7 +361,12 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.
   Запрос `exclusive` при унаследованном `shared` — 75 `lock.upgrade`.
 - **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
-  в тексте предупреждения; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
+  в тексте предупреждения и в `details.ext`; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
+- **Р21.** `place.Place`: `dst`, который уже есть на диске (по `Lstat`, симлинк — тоже занято) и не числится ни в
+  одном реестре, — 67 `conflict.file_unowned` (`details.dst`); проверка — в цикле владельцев, до первой записи.
+  Свой `dst` определяется по реестру этого расширения при любом статусе, `failed` тоже: движок строит `Owner` из
+  всех записей реестра, свои включительно. Прежняя копия `<dst>.cream-modified` не затирается — `Unplace` берёт
+  первый свободный `.cream-modified.N`.
 
 ## Задачи
 

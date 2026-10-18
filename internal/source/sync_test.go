@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -289,5 +290,129 @@ func TestForget(t *testing.T) {
 	}
 	if err := Forget(s.Layout, "never-synced"); err != nil {
 		t.Errorf("Forget несинхронизированного: %v", err)
+	}
+}
+
+// sources.lock is read and the new content prepared before the swap: a
+// corrupt lock refuses the sync and the cache stays the previous one.
+func TestSyncCorruptLockKeepsCache(t *testing.T) {
+	t.Parallel()
+	const url = "https://x/c.tar.gz"
+	v1 := makeTarGz(t, []tarEntry{{name: "cream-catalog.yaml", body: "1"}, {name: "a", body: "old"}})
+	v2 := makeTarGz(t, []tarEntry{{name: "cream-catalog.yaml", body: "2"}, {name: "a", body: "new"}})
+	ff := &fakeFetcher{bodies: map[string][]byte{url: v1}}
+	s, _ := newSyncer(t, ff)
+	if _, err := s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v1)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.Layout.SourcesLock(), []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ff.bodies[url] = v2
+	_, err := s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v2)})
+	wantCerr(t, err, cerr.ExitState, "state.corrupt")
+	if got := readFile(t, filepath.Join(s.Layout.SourceCache("s"), "a")); got != "old" {
+		t.Errorf("кеш подменён при битом sources.lock: a = %q", got)
+	}
+	ents, _ := os.ReadDir(filepath.Dir(s.Layout.SourceCache("s")))
+	if len(ents) != 1 {
+		t.Errorf("мусор рядом с кешем: %v", ents)
+	}
+}
+
+// A failed write of sources.lock after the swap puts the previous cache back
+// (or removes a first-time cache), so the cache and the lock stay in step.
+func TestSyncLockWriteFailureRestoresCache(t *testing.T) {
+	t.Parallel()
+	const url = "https://x/c.tar.gz"
+	v1 := makeTarGz(t, []tarEntry{{name: "cream-catalog.yaml", body: "1"}, {name: "a", body: "old"}})
+	v2 := makeTarGz(t, []tarEntry{{name: "cream-catalog.yaml", body: "2"}, {name: "a", body: "new"}})
+	ff := &fakeFetcher{bodies: map[string][]byte{url: v1}}
+	s, _ := newSyncer(t, ff)
+	errDisk := errors.New("диск полон")
+	s.writeLock = func(string, []byte, os.FileMode) error { return errDisk }
+	_, err := s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v1)})
+	wantCerr(t, err, cerr.ExitState, "state.write")
+	if _, err := os.Lstat(s.Layout.SourceCache("s")); err == nil {
+		t.Error("первый кеш остался без записи в sources.lock")
+	}
+	s.writeLock = nil
+	if _, err := s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v1)}); err != nil {
+		t.Fatal(err)
+	}
+	s.writeLock = func(string, []byte, os.FileMode) error { return errDisk }
+	ff.bodies[url] = v2
+	_, err = s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v2)})
+	wantCerr(t, err, cerr.ExitState, "state.write")
+	if got := readFile(t, filepath.Join(s.Layout.SourceCache("s"), "a")); got != "old" {
+		t.Errorf("прежний кеш не возвращён: a = %q", got)
+	}
+	ents, _ := os.ReadDir(filepath.Dir(s.Layout.SourceCache("s")))
+	if len(ents) != 1 {
+		t.Errorf("мусор рядом с кешем: %v", ents)
+	}
+}
+
+func TestExchange(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	a, b := filepath.Join(dir, "a"), filepath.Join(dir, "b")
+	writeTree(t, a, map[string]string{"who": "a"})
+	writeTree(t, b, map[string]string{"who": "b"})
+	err := exchange(a, b)
+	if errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EINVAL) {
+		t.Skipf("renameat2 RENAME_EXCHANGE недоступен: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, filepath.Join(a, "who")) != "b" || readFile(t, filepath.Join(b, "who")) != "a" {
+		t.Error("каталоги не поменялись местами")
+	}
+}
+
+// Without RENAME_EXCHANGE (ENOSYS, EINVAL) swapIn falls back to two renames
+// and undo puts the previous cache back; any other error changes nothing.
+func TestSwapInFallback(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		xerr    error
+		wantErr bool
+	}{
+		{"ENOSYS", syscall.ENOSYS, false},
+		{"EINVAL", syscall.EINVAL, false},
+		{"other error", syscall.EPERM, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			next, cache, old := filepath.Join(dir, "next"), filepath.Join(dir, "cache"), filepath.Join(dir, "old")
+			writeTree(t, next, map[string]string{"v": "new"})
+			writeTree(t, cache, map[string]string{"v": "old"})
+			undo, err := swapIn(next, cache, old, func(string, string) error { return tc.xerr })
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("ждали ошибку")
+				}
+				if readFile(t, filepath.Join(cache, "v")) != "old" {
+					t.Error("кеш изменён при ошибке обмена")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if readFile(t, filepath.Join(cache, "v")) != "new" {
+				t.Error("новый кеш не на месте")
+			}
+			if err := undo(); err != nil {
+				t.Fatal(err)
+			}
+			if readFile(t, filepath.Join(cache, "v")) != "old" {
+				t.Error("undo не вернул прежний кеш")
+			}
+		})
 	}
 }
