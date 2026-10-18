@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "validate",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "usage.args",
+    "message": "validate: нужен --catalog DIR и/или каталоги расширений",
+    "details": null
+  }
+}

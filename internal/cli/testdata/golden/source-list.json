@@ -1,0 +1,33 @@
+{
+  "cream": "dev",
+  "command": "source",
+  "ok": true,
+  "result": {
+    "sources": [
+      {
+        "name": "fx",
+        "type": "path",
+        "path": "<ROOT>/src/catalog",
+        "synced": true,
+        "lock": {
+          "name": "fx",
+          "type": "path",
+          "origin": "<ROOT>/src/catalog",
+          "resolved": "sha256:<FX_TREE>",
+          "synced_at": "2026-10-18T10:00:00Z",
+          "catalog_version": "1.0.0"
+        }
+      },
+      {
+        "name": "next",
+        "type": "archive",
+        "url": "file://<ROOT>/next.tar.gz",
+        "sha256": "<NEXT_SHA256>",
+        "synced": false,
+        "lock": null
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

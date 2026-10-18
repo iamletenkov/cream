@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "resolve",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "platform.arch_barrier",
+    "message": "слой noop (exec) собирается только на хосте архитектуры цели: цель arm64, хост amd64",
+    "details": {
+      "ext": "noop",
+      "host_arch": "amd64",
+      "target_arch": "arm64"
+    }
+  }
+}

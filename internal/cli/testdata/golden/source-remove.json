@@ -1,0 +1,11 @@
+{
+  "cream": "dev",
+  "command": "source",
+  "ok": true,
+  "result": {
+    "name": "next",
+    "removed": true
+  },
+  "warnings": [],
+  "error": null
+}

@@ -1,0 +1,38 @@
+{
+  "cream": "dev",
+  "command": "validate",
+  "ok": true,
+  "result": {
+    "reports": [
+      {
+        "target": "<TESTDATA>/invalid/too-new-cream",
+        "kind": "catalog",
+        "catalog": "invalid-too-new-cream",
+        "catalog_version": "1.0.0",
+        "extensions": [],
+        "not_applicable": [
+          {
+            "ext": "too-new-cream",
+            "path": "extensions/too-new-cream/extension.yaml",
+            "exit": 68,
+            "code": "platform.cream_version",
+            "message": "<TESTDATA>/invalid/too-new-cream/extensions/too-new-cream/extension.yaml: манифест требует cream >=1.99.0, а это cream 1.0.0"
+          }
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "catalog.cream_newer",
+      "message": "too-new-cream: требует cream >=1.99.0, а это cream 1.0.0 — расширение неприменимо",
+      "details": {
+        "cream": "1.0.0",
+        "ext": "too-new-cream",
+        "required": ">=1.99.0"
+      }
+    }
+  ],
+  "error": null
+}

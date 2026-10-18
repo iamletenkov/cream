@@ -43,7 +43,7 @@
 
 - [ ] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
 
-- [ ] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
+- [x] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
 
 - [ ] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
 
