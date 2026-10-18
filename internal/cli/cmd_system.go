@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -41,7 +40,7 @@ func runConfigure(ctx *Context, args []string, o engine.ConfigureOptions) (any, 
 		return nil, ctx.Usagef("configure: нужно одно имя расширения")
 	}
 	// A manual configure applies the current settings: reason apply.
-	res, err := newEngine(ctx).ConfigureReport(context.Background(), args[0], engine.ReasonApply, o)
+	res, err := newEngine(ctx).ConfigureReport(ctx.Ctx, args[0], engine.ReasonApply, o)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +62,7 @@ func runSystem(ctx *Context, args []string) (any, error) {
 	if err := requireRoot(ctx, "system init"); err != nil {
 		return nil, err
 	}
-	res, err := newEngine(ctx).SystemInit(context.Background())
+	res, err := newEngine(ctx).SystemInit(ctx.Ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -119,7 +118,7 @@ func sourceLock(ctx *Context, what string) (release func(), err error) {
 	if err := requireRoot(ctx, what); err != nil {
 		return nil, err
 	}
-	h, err := lock.NewLocker(ctx.Layout, ctx.Globals.LockTimeout, ctx.App.Env).Global(context.Background())
+	h, err := lock.NewLocker(ctx.Layout, ctx.Globals.LockTimeout, ctx.App.Env).Global(ctx.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +237,7 @@ func sourceAdd(ctx *Context, d catalogDeps, f sourceFlags, args []string) (any, 
 	s, _ = file.Get(s.Name)
 	if f.sync {
 		// Синхронизация до записи: при её сбое sources.yaml не меняется (§9.1).
-		if _, err := sourceSyncer(ctx, d).Sync(context.Background(), s); err != nil {
+		if _, err := sourceSyncer(ctx, d).Sync(ctx.Ctx, s); err != nil {
 			return nil, err
 		}
 	}
@@ -419,7 +418,7 @@ func sourceSync(ctx *Context, d catalogDeps, args []string) (any, error) {
 	var first error
 	failed := []string{}
 	for _, s := range todo {
-		e, err := syncer.Sync(context.Background(), s)
+		e, err := syncer.Sync(ctx.Ctx, s)
 		if err != nil {
 			_, _ = fmt.Fprintf(ctx.Stderr(), "cream: источник %s: %v\n", s.Name, err)
 			failed = append(failed, s.Name)

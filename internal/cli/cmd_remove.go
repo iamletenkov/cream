@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -56,7 +55,7 @@ func runRemove(ctx *Context, args []string, o engine.RemoveOptions) (any, error)
 	if len(args) != 1 {
 		return nil, ctx.Usagef("remove: нужно одно имя расширения")
 	}
-	res, err := newEngine(ctx).Remove(context.Background(), args[0], o)
+	res, err := newEngine(ctx).Remove(ctx.Ctx, args[0], o)
 	if err != nil {
 		return nil, err
 	}

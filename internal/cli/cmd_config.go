@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -180,7 +179,7 @@ func runSet(ctx *Context, args []string, paramsFile string, o engine.SetOptions)
 	if err != nil {
 		return nil, err
 	}
-	res, err := e.Set(context.Background(), args[0], ch, o)
+	res, err := e.Set(ctx.Ctx, args[0], ch, o)
 	if err != nil {
 		return nil, err
 	}

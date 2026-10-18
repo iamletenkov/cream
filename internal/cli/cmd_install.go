@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -117,7 +116,7 @@ func runInstall(ctx *Context, args []string, r engine.InstallRequest) (any, erro
 	}
 	r.Params.Stdin = ctx.App.Stdin
 	r.Params.CheckPerm = ctx.Layout.NeedsRoot()
-	res, err := newEngine(ctx).InstallAll(context.Background(), r)
+	res, err := newEngine(ctx).InstallAll(ctx.Ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +127,7 @@ func runUpgrade(ctx *Context, args []string, all bool) (any, error) {
 	if err := requireRoot(ctx, "upgrade"); err != nil {
 		return nil, err
 	}
-	res, err := newEngine(ctx).Upgrade(context.Background(), args, all)
+	res, err := newEngine(ctx).Upgrade(ctx.Ctx, args, all)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +161,7 @@ func runInstallBuild(ctx *Context, args []string, f installBuildFlags, r engine.
 		return nil, err
 	}
 	r.CheckPerm = ctx.Layout.NeedsRoot()
-	res, err := newEngine(ctx).InstallFromDir(context.Background(), r)
+	res, err := newEngine(ctx).InstallFromDir(ctx.Ctx, r)
 	if err != nil {
 		return nil, err
 	}
