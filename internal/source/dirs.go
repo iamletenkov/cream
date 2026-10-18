@@ -26,8 +26,8 @@ type SourceDir struct { //nolint:revive // имя закреплено конт�
 // Dirs returns the cache directories of f's sources in priority order. It
 // reads nothing but the existence of each cache directory; it never syncs.
 //
-// On the real root (Р9, §13) an existing cache directory and its parent
-// <CacheRoot>/sources must belong to the current user (root, when cream runs
+// On the real root (Р9, §13) an existing cache directory, its parent
+// <CacheRoot>/sources and CacheRoot itself must belong to the current user (root, when cream runs
 // as root) and must not be writable by group or others: 77 perm.cache.
 func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) {
 	check := l.NeedsRoot()
@@ -40,8 +40,10 @@ func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) {
 			d.Synced = true
 			if check {
 				if !parentChecked {
-					if err := checkCacheDir(filepath.Dir(d.Dir), uid); err != nil {
-						return nil, err
+					for _, dir := range []string{l.CacheRoot(), filepath.Dir(d.Dir)} {
+						if err := checkCacheDir(dir, uid); err != nil {
+							return nil, err
+						}
 					}
 					parentChecked = true
 				}
