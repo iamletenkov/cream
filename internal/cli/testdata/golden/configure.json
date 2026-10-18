@@ -1,0 +1,13 @@
+{
+  "cream": "dev",
+  "command": "configure",
+  "ok": true,
+  "result": {
+    "ext": "configure-system",
+    "reason": "apply",
+    "mode": "hook",
+    "reboot_required": false
+  },
+  "warnings": [],
+  "error": null
+}

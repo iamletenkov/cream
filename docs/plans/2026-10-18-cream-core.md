@@ -33,7 +33,7 @@
 
 - [x] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
 
-- [ ] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
+- [x] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
 
 - [ ] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
 
