@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "usage.args",
+    "message": "install: несколько ссылок — только без параметров",
+    "details": null
+  }
+}
