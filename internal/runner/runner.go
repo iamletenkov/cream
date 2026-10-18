@@ -80,7 +80,19 @@ func (fn Func) Run(ctx context.Context, s Spec) (Result, error) { return fn(ctx,
 // waits for output pipes held open by descendants after the process exits.
 type Exec struct {
 	Grace time.Duration
+
+	// start starts a built command (nil — (*exec.Cmd).Start); tests replace it.
+	start func(*exec.Cmd) error
 }
+
+// Start retries: a hook file written by a just-finished writer can still be
+// open for writing in a child forked meanwhile (ETXTBSY until that child
+// execs) — the start is repeated with a growing pause, each time with a
+// freshly built exec.Cmd (one cannot be started twice).
+const (
+	startAttempts = 5
+	startPause    = 10 * time.Millisecond
+)
 
 // Run starts s.Path and waits for it.
 func (e Exec) Run(ctx context.Context, s Spec) (Result, error) {
@@ -100,28 +112,32 @@ func (e Exec) Run(ctx context.Context, s Spec) (Result, error) {
 
 	stdout, stderr, closeFilters := outputs(s)
 
-	// exec.CommandContext only binds the context: Path is absolute, so there is
-	// no PATH lookup, and every other field is set here.
-	cmd := exec.CommandContext(runCtx, s.Path)
-	cmd.Args = append([]string{s.Path}, s.Args...)
-	cmd.Dir = s.Dir
-	cmd.Env = s.Env
-	if cmd.Env == nil {
-		cmd.Env = []string{} // nil would hand the child cream's own environment
-	}
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = s.Stdin, stdout, stderr
-	cmd.ExtraFiles = s.ExtraFiles
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = grace
 	var killTimer *time.Timer
-	cmd.Cancel = func() error {
-		pgid := cmd.Process.Pid
-		killTimer = time.AfterFunc(grace, func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
-		return syscall.Kill(-pgid, syscall.SIGTERM)
+	build := func() *exec.Cmd {
+		// exec.CommandContext only binds the context: Path is absolute, so there
+		// is no PATH lookup, and every other field is set here.
+		cmd := exec.CommandContext(runCtx, s.Path)
+		cmd.Args = append([]string{s.Path}, s.Args...)
+		cmd.Dir = s.Dir
+		cmd.Env = s.Env
+		if cmd.Env == nil {
+			cmd.Env = []string{} // nil would hand the child cream's own environment
+		}
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = s.Stdin, stdout, stderr
+		cmd.ExtraFiles = s.ExtraFiles
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.WaitDelay = grace
+		cmd.Cancel = func() error {
+			pgid := cmd.Process.Pid
+			killTimer = time.AfterFunc(grace, func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
+			return syscall.Kill(-pgid, syscall.SIGTERM)
+		}
+		return cmd
 	}
 
 	start := time.Now()
-	if err := cmd.Start(); err != nil {
+	cmd, err := e.startRetry(runCtx, build)
+	if err != nil {
 		_ = closeFilters()
 		return Result{ExitCode: -1}, fmt.Errorf("запуск %s: %w", s.Path, err)
 	}
@@ -153,6 +169,29 @@ func (e Exec) Run(ctx context.Context, s Spec) (Result, error) {
 		return res, fmt.Errorf("%s: вывод: %w", s.Path, flushErr)
 	}
 	return res, nil
+}
+
+// startRetry builds and starts a command, repeating the start on ETXTBSY
+// (startAttempts in all, pauses startPause·2^n) while ctx is alive.
+func (e Exec) startRetry(ctx context.Context, build func() *exec.Cmd) (*exec.Cmd, error) {
+	start := e.start
+	if start == nil {
+		start = (*exec.Cmd).Start
+	}
+	for n := 0; ; n++ {
+		cmd := build()
+		err := start(cmd)
+		if err == nil || !errors.Is(err, syscall.ETXTBSY) || n == startAttempts-1 {
+			return cmd, err
+		}
+		t := time.NewTimer(startPause << n)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return cmd, err
+		case <-t.C:
+		}
+	}
 }
 
 // outputs wraps Stdout and Stderr in secret filters. The same writer for both

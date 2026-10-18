@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -293,4 +294,59 @@ func TestExecIsRunner(t *testing.T) {
 	t.Parallel()
 	var _ Runner = Exec{}
 	var _ Runner = Func(func(context.Context, Spec) (Result, error) { return Result{}, nil })
+}
+
+// TestExecRetriesTextBusy — ETXTBSY при старте (файл хука ещё открыт на запись
+// в параллельно форкнутом потомке) повторяется на свежем exec.Cmd; после
+// startAttempts попыток ошибка отдаётся как есть.
+func TestExecRetriesTextBusy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		busy     int // сколько первых стартов вернут ETXTBSY
+		wantErr  bool
+		wantCall int
+	}{
+		{name: "один сбой", busy: 1, wantCall: 2},
+		{name: "четыре сбоя", busy: startAttempts - 1, wantCall: startAttempts},
+		{name: "все попытки", busy: startAttempts + 3, wantErr: true, wantCall: startAttempts},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var cmds []*exec.Cmd
+			e := Exec{Grace: time.Second, start: func(c *exec.Cmd) error {
+				for _, prev := range cmds {
+					if prev == c {
+						t.Error("повтор на том же exec.Cmd")
+					}
+				}
+				cmds = append(cmds, c)
+				if len(cmds) <= tc.busy {
+					return &fs.PathError{Op: "fork/exec", Path: c.Path, Err: syscall.ETXTBSY}
+				}
+				return c.Start()
+			}}
+			var out bytes.Buffer
+			res, err := e.Run(context.Background(), Spec{Path: fixture(t, "exit-code"), Args: []string{"3"}, Stdout: &out})
+			if len(cmds) != tc.wantCall {
+				t.Errorf("стартов %d, ждали %d", len(cmds), tc.wantCall)
+			}
+			if tc.wantErr {
+				if !errors.Is(err, syscall.ETXTBSY) {
+					t.Fatalf("ошибка %v, ждали ETXTBSY", err)
+				}
+				return
+			}
+			if err != nil || res.ExitCode != 3 {
+				t.Fatalf("res %+v, err %v", res, err)
+			}
+		})
+	}
+	// Другие ошибки старта не повторяются.
+	calls := 0
+	e := Exec{start: func(*exec.Cmd) error { calls++; return &fs.PathError{Op: "fork/exec", Err: syscall.EACCES} }}
+	if _, err := e.Run(context.Background(), Spec{Path: fixture(t, "exit-code")}); !errors.Is(err, syscall.EACCES) || calls != 1 {
+		t.Errorf("EACCES: err %v, стартов %d", err, calls)
+	}
 }

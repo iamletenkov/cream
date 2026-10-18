@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -164,14 +165,19 @@ func seedInstalled(t *testing.T, te *testEngine, src string, mutate ...func(*sta
 }
 
 // writeHook подменяет хук name установленного расширения ext скриптом body
-// (#!/bin/sh добавляется), режим 0755.
+// (#!/bin/sh добавляется), режим 0755. Запись — под syscall.ForkLock: иначе
+// параллельный тест может форкнуться, пока файл открыт на запись, и унести
+// дескриптор в потомка — exec хука тогда получит ETXTBSY.
 func writeHook(t *testing.T, te *testEngine, ext, name, body string) {
 	t.Helper()
 	p := filepath.Join(te.L.ExtTree(ext), "hooks", name)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+	syscall.ForkLock.RLock()
+	err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755)
+	syscall.ForkLock.RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 }
