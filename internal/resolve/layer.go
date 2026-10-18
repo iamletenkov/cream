@@ -49,7 +49,7 @@ func checkPlatform(m *manifest.Manifest, h Host, w *cerr.Warnings) (string, erro
 		return "", graphErr(cerr.ExitNotApplicable, code, m.Name, details, format, a...)
 	}
 	p := m.Platform
-	if h.Family != "" && h.Family != p.Family {
+	if (h.Family != "" || h.Detected) && h.Family != p.Family {
 		return na("platform.family", map[string]any{"want": p.Family, "found": h.Family},
 			"%s: семейство %s, а здесь %s", m.Name, p.Family, h.Family)
 	}

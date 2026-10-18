@@ -281,7 +281,7 @@ func Lookup(dirs []source.SourceDir, ref Ref, cream manifest.CreamBuild, w *cerr
 
 type Node struct{ Manifest *manifest.Manifest; Installed bool; Files []string; Source state.SourceRef; Digest string }
 type Host struct{ Phase, TargetArch, HostArch, Family string; OSID, OSVersion string
-  HasCommand func(string) bool; AcceptRisk bool }
+  HasCommand func(string) bool; AcceptRisk bool; Detected bool } // Detected — Р23
 func DetectHost(l paths.Layout, phase string, lookPath func(string) (string, error)) (Host, error)
 type Layer struct{ Name, Version, Source, SourceResolved, CatalogVersion, ExtDigest, ParamsDigest string
   Deps []string; Mode, Token string; Pinned bool; SecretParams []string } // §12.4; это же — record.json (Р6)
@@ -367,6 +367,15 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   Свой `dst` определяется по реестру этого расширения при любом статусе, `failed` тоже: движок строит `Owner` из
   всех записей реестра, свои включительно. Прежняя копия `<dst>.cream-modified` не затирается — `Unplace` берёт
   первый свободный `.cream-modified.N`.
+
+Рулинги контроллера после повторного ревью (2026-10-18):
+- **Р23.** `resolve.Probe.Detect`: при наличии os-release `Family` не пустой — `deb` для debian-подобных (по `ID` или
+  `ID_LIKE`), `rpm`/`apk`/`openwrt` для известных чужих, иначе значение `ID` (`linux`, если `ID` нет, как в
+  os-release(5)); пустой — только если os-release нет вовсе. Хост от `Detect` помечен `Host.Detected`: на нём пустой
+  `Family` — 68 `platform.family` (`details.found: ""`), а не «применимо», — `platform.family` в манифесте
+  обязателен (§4), а машину без os-release cream не опознаёт. `Host`, собранный вызывающим (`cream resolve` без
+  `--family`), по-прежнему пропускает проверку семейства. os-release читается через `os.OpenInRoot(Root, …)`;
+  `HasCommand` под чужим `--root` смотрит PATH хоста.
 
 ## Задачи
 

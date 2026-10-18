@@ -61,8 +61,8 @@ func TestProbeDetect(t *testing.T) {
 			phase: PhaseLive, wantFamily: "deb", wantID: "debian", wantVer: "12", wantArch: "amd64"},
 		{name: "debian testing без VERSION_ID", fixture: "debian-testing", rel: "etc/os-release", arch: "amd64",
 			phase: PhaseLive, wantFamily: "deb", wantID: "debian", wantArch: "amd64"},
-		{name: "чужое семейство", fixture: "fedora-40", rel: "etc/os-release", arch: "amd64", phase: PhaseLive,
-			wantID: "fedora", wantVer: "40", wantArch: "amd64"},
+		{name: "чужое семейство — не пустое (Р23)", fixture: "fedora-40", rel: "etc/os-release", arch: "amd64",
+			phase: PhaseLive, wantFamily: "rpm", wantID: "fedora", wantVer: "40", wantArch: "amd64"},
 		{name: "os-release нет — всё неизвестно", arch: "amd64", phase: PhaseLive, wantArch: "amd64"},
 		{name: "неизвестная фаза", fixture: "debian-12", rel: "etc/os-release", arch: "amd64", phase: "stage",
 			wantExit: cerr.ExitUsage, wantCode: "usage.phase"},
@@ -83,7 +83,7 @@ func TestProbeDetect(t *testing.T) {
 				t.Fatal(err)
 			}
 			if h.Phase != tc.phase || h.Family != tc.wantFamily || h.OSID != tc.wantID || h.OSVersion != tc.wantVer ||
-				h.TargetArch != tc.wantArch || h.HostArch != tc.wantArch {
+				h.TargetArch != tc.wantArch || h.HostArch != tc.wantArch || !h.Detected {
 				t.Fatalf("Host = %+v", h)
 			}
 			if h.HasCommand == nil || !h.HasCommand("curl") || h.HasCommand("jq") {
@@ -132,5 +132,94 @@ func TestDetectHostNilLookPath(t *testing.T) {
 	}
 	if h.HasCommand != nil {
 		t.Fatal("без lookPath команды не проверяются (HasCommand == nil)")
+	}
+}
+
+func TestProbeDetectFamily(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ name, osRelease, want string }{
+		{"debian по ID", "ID=debian\n", "deb"},
+		{"ubuntu по ID_LIKE", "ID=ubuntu\nID_LIKE=debian\n", "deb"},
+		{"rhel-подобная по ID_LIKE", "ID=rocky\nID_LIKE=\"rhel centos fedora\"\n", "rpm"},
+		{"opensuse", "ID=opensuse-leap\nID_LIKE=\"suse opensuse\"\n", "rpm"},
+		{"alpine", "ID=alpine\n", "apk"},
+		{"openwrt", "ID=openwrt\n", "openwrt"},
+		{"неизвестная — значение ID", "ID=arch\n", "arch"},
+		{"без ID — linux по os-release(5)", "NAME=x\n", "linux"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "etc"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "etc", "os-release"), []byte(tc.osRelease), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			h, err := Probe{Layout: paths.Layout{Root: root}, Arch: "amd64"}.Detect(PhaseLive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if h.Family != tc.want {
+				t.Fatalf("Family = %q, ждали %q", h.Family, tc.want)
+			}
+		})
+	}
+}
+
+// Сквозной путь Р23: Detect на чужой системе или без os-release, затем
+// Resolve расширения family: deb — 68 platform.family, а не «применимо».
+func TestDetectThenResolveFamily(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ name, fixture, wantFound string }{
+		{"fedora-40", "fedora-40", "rpm"},
+		{"os-release нет", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := rootWith(t, tc.fixture, "etc/os-release")
+			h, err := Probe{Layout: paths.Layout{Root: root}, LookPath: fakeLookPath(), Arch: "amd64"}.Detect(PhaseLive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var w cerr.Warnings
+			_, err = Resolve(nil, []Node{fixture(t, "noop")}, nil, h, &w)
+			if cerr.ExitCode(err) != cerr.ExitNotApplicable || cerr.CodeOf(err) != "platform.family" {
+				t.Fatalf("Resolve = %v (%d %s), ждали 68 platform.family", err, cerr.ExitCode(err), cerr.CodeOf(err))
+			}
+			if d := cerr.DetailsOf(err); d["want"] != "deb" || d["found"] != tc.wantFound {
+				t.Fatalf("details = %v", d)
+			}
+		})
+	}
+}
+
+// Host, собранный вызывающим (cream resolve на хосте bisquite без --family),
+// с пустым Family семейство не проверяет.
+func TestResolveFamilyUnknownSkippedWhenNotDetected(t *testing.T) {
+	t.Parallel()
+	h := liveHost()
+	h.Family = ""
+	var w cerr.Warnings
+	if _, err := Resolve(nil, []Node{fixture(t, "noop")}, nil, h, &w); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+}
+
+func TestProbeDetectEtcSymlink(t *testing.T) {
+	t.Parallel()
+	root := rootWith(t, "debian-12", "usr/lib/os-release")
+	if err := os.MkdirAll(filepath.Join(root, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Как в Debian: /etc/os-release -> ../usr/lib/os-release.
+	if err := os.Symlink("../usr/lib/os-release", filepath.Join(root, "etc", "os-release")); err != nil {
+		t.Fatal(err)
+	}
+	h, err := Probe{Layout: paths.Layout{Root: root}, Arch: "amd64"}.Detect(PhaseLive)
+	if err != nil || h.Family != "deb" || h.OSID != "debian" {
+		t.Fatalf("Detect = %+v, %v", h, err)
 	}
 }

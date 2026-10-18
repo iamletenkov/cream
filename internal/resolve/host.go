@@ -13,11 +13,11 @@ package resolve
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
@@ -39,17 +39,23 @@ const FamilyDeb = "deb"
 // TargetArch means "unknown here" and that check is skipped (cream resolve on
 // the bisquite host knows the target arch and family, not the guest's OS;
 // the guest checks again); HasCommand == nil skips platform.commands.
-// Arches may be given as uname -m (x86_64, aarch64): Resolve canonicalizes.
+// Detected marks a host probed on the machine itself (Detect): there an empty
+// Family means os-release is absent, and platform.family is 68, not skipped
+// (Р23). Arches may be given as uname -m (x86_64, aarch64): Resolve
+// canonicalizes.
 type Host struct {
 	Phase, TargetArch, HostArch, Family string
 	OSID, OSVersion                     string
 	HasCommand                          func(string) bool
 	AcceptRisk                          bool
+	Detected                            bool
 }
 
 // Probe detects the host: os-release under Layout.Root (/etc/os-release,
 // then /usr/lib/os-release), commands through LookPath (nil — not checked)
 // and Arch, the machine architecture (runtime.GOARCH or uname -m).
+// LookPath searches the PATH of the cream process: under a foreign --root it
+// still answers for the host's commands, not for the tree under the root.
 type Probe struct {
 	Layout   paths.Layout
 	LookPath func(string) (string, error)
@@ -65,13 +71,13 @@ func DetectHost(l paths.Layout, phase string, lookPath func(string) (string, err
 // Detect returns the host for phase (build or live; anything else is 64
 // usage.phase). The target arch is the machine's own. A missing os-release
 // leaves Family, OSID and OSVersion empty; an unreadable one is 74 state.io.
-// Family is "deb" when ID or ID_LIKE names debian.
+// With os-release present Family is never empty (familyOf, Р23).
 func (p Probe) Detect(phase string) (Host, error) {
 	if err := checkPhase(phase); err != nil {
 		return Host{}, err
 	}
 	arch := canonArch(p.Arch)
-	h := Host{Phase: phase, TargetArch: arch, HostArch: arch}
+	h := Host{Phase: phase, TargetArch: arch, HostArch: arch, Detected: true}
 	if p.LookPath != nil {
 		look := p.LookPath
 		h.HasCommand = func(c string) bool { _, err := look(c); return err == nil }
@@ -87,18 +93,46 @@ func (p Probe) Detect(phase string) (Host, error) {
 	like, _ := osr.Get("ID_LIKE")
 	h.OSID = id
 	h.OSVersion, _ = osr.Get("VERSION_ID")
-	if id == "debian" || slices.Contains(strings.Fields(like), "debian") {
-		h.Family = FamilyDeb
-	}
+	h.Family = familyOf(id, like)
 	return h, nil
 }
 
+// familyLike maps an os-release ID (or an ID_LIKE word) to its package family.
+var familyLike = map[string]string{
+	"debian": FamilyDeb,
+	"fedora": "rpm", "rhel": "rpm", "centos": "rpm", "suse": "rpm", "opensuse": "rpm",
+	"alpine": "apk", "openwrt": "openwrt",
+}
+
+// familyOf is the package family of an os-release: by ID, then by ID_LIKE,
+// else the ID itself ("linux" when ID is absent, as os-release(5) says).
+// Only "deb" is a family cream/v1 installs; the rest are named for the 68.
+func familyOf(id, like string) string {
+	for _, w := range append([]string{id}, strings.Fields(like)...) {
+		if f, ok := familyLike[w]; ok {
+			return f
+		}
+	}
+	if id == "" {
+		return "linux"
+	}
+	return id
+}
+
+// osReleaseFiles are the os-release paths relative to the root, in order.
+var osReleaseFiles = []string{"etc/os-release", "usr/lib/os-release"}
+
 // readOSRelease returns the parsed os-release, nil when neither file exists.
+// The files are opened through os.OpenInRoot: a symlink may not lead out of
+// Layout.Root (a foreign --root does not read the host's os-release).
 func (p Probe) readOSRelease() (*envfile.File, error) {
-	etc := p.Layout.OSRelease()
-	usr := filepath.Join(filepath.Dir(filepath.Dir(etc)), "usr", "lib", "os-release")
-	for _, path := range []string{etc, usr} {
-		data, err := os.ReadFile(path)
+	root := p.Layout.Root
+	if root == "" {
+		root = "/"
+	}
+	for _, rel := range osReleaseFiles {
+		path := filepath.Join(root, rel)
+		data, err := readInRoot(root, rel)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -112,6 +146,15 @@ func (p Probe) readOSRelease() (*envfile.File, error) {
 		return f, nil
 	}
 	return nil, nil
+}
+
+func readInRoot(root, rel string) ([]byte, error) {
+	f, err := os.OpenInRoot(root, rel)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(f)
 }
 
 func checkPhase(phase string) error {
