@@ -1,0 +1,16 @@
+#!/bin/sh
+# prerm cream (спека §15): при удалении пакета с установленными расширениями
+# только предупреждает — расширения и их юниты остаются, удалять их — дело
+# cream remove, а не dpkg.
+set -e
+
+case "$1" in
+remove | deconfigure)
+	if [ -n "$(ls -A /var/lib/cream/installed 2>/dev/null)" ]; then
+		echo "cream: установлены расширения (/var/lib/cream/installed); пакет удаляется, расширения остаются." >&2
+		echo "cream: удалить их — cream remove <ext> до удаления пакета." >&2
+	fi
+	;;
+esac
+
+exit 0

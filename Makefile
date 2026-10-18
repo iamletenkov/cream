@@ -3,13 +3,27 @@
 
 GO_IMAGE       ?= golang:1.25.11
 GOLANGCI_IMAGE ?= golangci/golangci-lint:v2.14.0
+NFPM_IMAGE     ?= goreleaser/nfpm:v2.47.0
+DEBIAN_IMAGE   ?= debian:13
+GOVULNCHECK    ?= golang.org/x/vuln/cmd/govulncheck@v1.7.0
 MODULE         := github.com/iamletenkov/cream
 VERSION        ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 ARCHES         ?= amd64 arm64
 PKG            ?= ./...
 TEST_P         ?= 4
 # Замок тяжёлых прогонов: на общем хосте один ci за раз (и у людей, и у агентов).
+# HEAVY берёт замок, если его ещё не держит вызывающий (CREAM_HEAVY_HELD): цель
+# под замком может звать другую такую же без взаимной блокировки.
 HEAVY_LOCK     ?= /tmp/cream-heavy.lock
+HEAVY           = $(if $(CREAM_HEAVY_HELD),,flock $(HEAVY_LOCK) env CREAM_HEAVY_HELD=1)
+# Воспроизводимость (§15): время коммита — mtime в пакетах и архивах.
+SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || echo 0)
+# Версия пакета — без «v»; describe не от тега (хеш коммита) — 0.0.0~<describe>.
+DEB_VERSION    ?= $(if $(and $(filter 0% 1% 2% 3% 4% 5% 6% 7% 8% 9%,$(VERSION:v%=%)),$(findstring .,$(VERSION))),$(VERSION:v%=%),0.0.0~$(VERSION:v%=%))
+ARCH           ?= amd64
+RELEASE_DIR    ?= dist/release
+# Подкаталог .cache/ под кеш сборки Go: repro-check собирает в разных кешах.
+GOCACHE_DIR    ?= go-build
 LDFLAGS        := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 
 UID := $(shell id -u)
@@ -20,14 +34,16 @@ GID := $(shell id -g)
 DOCKER_RUN = docker run --rm -u $(UID):$(GID) \
 	-v "$(CURDIR):/src" -w /src \
 	-v "$(CURDIR)/.cache:/cache" \
-	-e HOME=/tmp -e GOCACHE=/cache/go-build -e GOMODCACHE=/cache/mod \
-	-e GOLANGCI_LINT_CACHE=/cache/golangci -e GOFLAGS=-buildvcs=false
+	-e HOME=/tmp -e GOCACHE=/cache/$(GOCACHE_DIR) -e GOMODCACHE=/cache/mod \
+	-e GOLANGCI_LINT_CACHE=/cache/golangci -e GOFLAGS=-buildvcs=false \
+	-e SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)
 GO = $(DOCKER_RUN) $(GO_IMAGE)
 # Go-файлы модуля без кэша модулей (.cache/mod) и сборки: gofmt по «.» зашёл бы в зависимости.
 GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -path ./.git \) -prune -o -name '*.go' -print
 
 .DEFAULT_GOAL := help
-.PHONY: help build build-all test test-golden lint fmt tidy ci ci-unlocked clean cache
+.PHONY: help build build-all test test-golden lint fmt tidy ci ci-unlocked clean cache \
+	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln
 
 help: ## список целей
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -65,9 +81,45 @@ lint: cache ## gofmt -l, go vet, golangci-lint
 	$(DOCKER_RUN) $(GOLANGCI_IMAGE) golangci-lint run ./...
 
 ci: ## всё, что гоняет CI: lint + test + build-all (под замком HEAVY_LOCK)
-	flock $(HEAVY_LOCK) $(MAKE) --no-print-directory ci-unlocked
+	$(HEAVY) $(MAKE) --no-print-directory ci-unlocked
 
 ci-unlocked: lint test build-all
+
+deb: ## $(RELEASE_DIR)/cream_<v>_$(ARCH).deb (nfpm; ARCH=amd64|arm64, под замком)
+	$(HEAVY) $(MAKE) --no-print-directory deb-unlocked
+
+deb-unlocked: build-all
+	$(MAKE) --no-print-directory deb-pkg
+
+# Один .deb из готовых dist/cream-linux-*: changelog.gz → nfpm → проверка
+# состава в debian (scripts/check-deb.sh).
+deb-pkg:
+	@mkdir -p $(RELEASE_DIR)
+	$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/dist-release.sh stage $(DEB_VERSION) $(RELEASE_DIR)
+	$(DOCKER_RUN) -e ARCH=$(ARCH) -e DEB_VERSION=$(DEB_VERSION) -e STAGE=$(RELEASE_DIR)/stage \
+		$(NFPM_IMAGE) package -f packaging/nfpm.yaml -p deb -t $(RELEASE_DIR)/cream_$(DEB_VERSION)_$(ARCH).deb
+	$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/check-deb.sh deb $(DEB_VERSION) $(ARCH) $(RELEASE_DIR)
+
+dist-release: ## оба .deb, тарболы cream_<v>_linux_<arch>.tar.gz и SHA256SUMS в $(RELEASE_DIR) (под замком)
+	$(HEAVY) $(MAKE) --no-print-directory dist-release-unlocked
+
+dist-release-unlocked: build-all
+	rm -rf "$(RELEASE_DIR)"
+	@set -e; for a in $(ARCHES); do $(MAKE) --no-print-directory deb-pkg ARCH=$$a; done
+	$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/dist-release.sh archive $(DEB_VERSION) $(RELEASE_DIR) $(ARCHES)
+	@set -e; for a in $(ARCHES); do \
+		$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/check-deb.sh tarball $(DEB_VERSION) $$a $(RELEASE_DIR); \
+	done
+
+repro-check: ## две сборки dist-release с одним SOURCE_DATE_EPOCH — sha256 совпадают (под замком)
+	$(HEAVY) env MAKE="$(MAKE)" sh scripts/repro-check.sh
+
+# go run …@версия собирает govulncheck вне модуля: go.mod/go.sum не меняются,
+# модули инструмента — в отдельном .cache/vuln-mod. v1.7.0 — последняя версия
+# под go 1.25 (v1.8.0 требует go >= 1.26, а GOTOOLCHAIN=local).
+vuln: cache ## govulncheck по модулю (версия закреплена в GOVULNCHECK)
+	$(DOCKER_RUN) -e GOMODCACHE=/cache/vuln-mod -e GOFLAGS="-buildvcs=false -mod=mod" \
+		$(GO_IMAGE) go run $(GOVULNCHECK) ./...
 
 clean: ## удалить dist/ (кэш .cache/ сохраняется)
 	rm -rf dist

@@ -1,0 +1,16 @@
+#!/bin/sh
+# postinst cream (спека §15): раскладка машины и шаблон юнита — cream system
+# init (повтор безвреден), затем systemd перечитывает юниты, если он запущен
+# (в chroot, контейнере и appliance virt-customize его нет).
+set -e
+
+case "$1" in
+configure)
+	/usr/bin/cream system init
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload || true
+	fi
+	;;
+esac
+
+exit 0
