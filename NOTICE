@@ -1,0 +1,6 @@
+cream
+Copyright 2026 Letenkov Maksim
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+It bundles no third-party code: the binary is built from this repository and
+the Go standard library only.

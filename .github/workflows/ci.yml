@@ -1,0 +1,69 @@
+name: CI
+
+# Проверки — те же make-цели, что запускают руками (make lint / test /
+# build-all = make ci): Go в контейнере golang:1.25.11, линтер закреплён
+# в Makefile. CI и локальный прогон не расходятся.
+#
+# Выпуск — release-please: на main после зелёных проверок он ведёт PR
+# «release X.Y.Z» (CHANGELOG.md); слияние этого PR создаёт тег vX.Y.Z и
+# опубликованный релиз. Теги руками не ставят. Сборка .deb и файлы к релизу
+# появятся по спеке (docs/STATUS.md).
+
+# Ветки проверяются на pull_request, push — только main: там релиз.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Отменять устаревший прогон можно только на PR: на main отмена посреди
+# release-please оставила бы релиз недоделанным.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0   # git describe — версия в бинаре
+          persist-credentials: false
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Build linux/amd64 and linux/arm64
+        run: make build-all
+
+      - name: Smoke
+        run: |
+          file dist/cream-linux-amd64 dist/cream-linux-arm64
+          file dist/cream-linux-amd64 | grep -q 'statically linked'
+          dist/cream-linux-amd64 version
+
+  release-please:
+    name: Release Please
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Release Please
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        with:
+          config-file: .github/release_please/release-please-config.json
+          manifest-file: .github/release_please/.release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
