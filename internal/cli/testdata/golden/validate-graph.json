@@ -1,0 +1,124 @@
+{
+  "cream": "dev",
+  "command": "validate",
+  "ok": false,
+  "result": null,
+  "warnings": [
+    {
+      "code": "catalog.cream_newer",
+      "message": "newer: требует cream >=1.99.0, а это cream 1.0.0 — расширение неприменимо",
+      "details": {
+        "cream": "1.0.0",
+        "ext": "newer",
+        "required": ">=1.99.0"
+      }
+    },
+    {
+      "code": "catalog.requires",
+      "message": "needy: requires nothing-provides — в каталоге её никто не даёт (нужен cream assume или поставщик из другого источника)",
+      "details": {
+        "ext": "needy"
+      }
+    },
+    {
+      "code": "catalog.conflicts",
+      "message": "picky: conflicts.extensions phantom — такого расширения в каталоге нет",
+      "details": {
+        "ext": "picky"
+      }
+    }
+  ],
+  "error": {
+    "code": "catalog.depends",
+    "message": "<TESTDATA>/graph: app: depends на lib-a >=2.0.0 <3, а в каталоге 1.0.0 (и ещё ошибок: 2)",
+    "details": {
+      "reports": [
+        {
+          "target": "<TESTDATA>/graph",
+          "kind": "catalog",
+          "catalog": "cream-graph-fixtures",
+          "catalog_version": "1.0.0",
+          "extensions": [
+            {
+              "name": "app",
+              "version": "1.0.0",
+              "path": "extensions/app"
+            },
+            {
+              "name": "cyc-a",
+              "version": "1.0.0",
+              "path": "extensions/cyc-a"
+            },
+            {
+              "name": "cyc-b",
+              "version": "1.0.0",
+              "path": "extensions/cyc-b"
+            },
+            {
+              "name": "lib-a",
+              "version": "1.0.0",
+              "path": "extensions/lib-a"
+            },
+            {
+              "name": "needy",
+              "version": "1.0.0",
+              "path": "extensions/needy"
+            },
+            {
+              "name": "ok-user",
+              "version": "1.0.0",
+              "path": "extensions/ok-user"
+            },
+            {
+              "name": "on-newer",
+              "version": "1.0.0",
+              "path": "extensions/on-newer"
+            },
+            {
+              "name": "orphan",
+              "version": "1.0.0",
+              "path": "extensions/orphan"
+            },
+            {
+              "name": "picky",
+              "version": "1.0.0",
+              "path": "extensions/picky"
+            }
+          ],
+          "not_applicable": [
+            {
+              "ext": "newer",
+              "path": "extensions/newer/extension.yaml",
+              "exit": 68,
+              "code": "platform.cream_version",
+              "message": "<TESTDATA>/graph/extensions/newer/extension.yaml: манифест требует cream >=1.99.0, а это cream 1.0.0"
+            }
+          ],
+          "errors": [
+            {
+              "ext": "app",
+              "path": "extensions/app/extension.yaml",
+              "exit": 65,
+              "code": "catalog.depends",
+              "message": "app: depends на lib-a >=2.0.0 <3, а в каталоге 1.0.0"
+            },
+            {
+              "ext": "orphan",
+              "path": "extensions/orphan/extension.yaml",
+              "exit": 65,
+              "code": "catalog.depends",
+              "message": "orphan: depends на ghost — такого расширения в каталоге нет"
+            },
+            {
+              "ext": "cyc-a",
+              "path": "extensions/cyc-a/extension.yaml",
+              "exit": 65,
+              "code": "catalog.depends_cycle",
+              "message": "цикл depends: cyc-a → cyc-b → cyc-a"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

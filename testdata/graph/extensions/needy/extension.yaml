@@ -1,0 +1,11 @@
+schema: cream/v1
+name: needy
+version: 1.0.0
+summary: фикстура графа needy
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Предупреждение: способность nothing-provides никто в каталоге не даёт
+# (её может дать cream assume или голый INSTALL); cap-x даёт lib-a.
+requires: [cap-x, nothing-provides]
+hooks:
+  install: {}

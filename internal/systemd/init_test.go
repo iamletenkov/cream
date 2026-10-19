@@ -106,6 +106,45 @@ func TestInitRelinksTargets(t *testing.T) {
 	}
 }
 
+// Init пересчитывает цель cloud-user по машине (§6.4): cloud-init появился
+// после установки расширения — ссылка переезжает в cloud-init.target.wants, и
+// обратно, когда его не стало.
+func TestInitRecomputesCloudUserTarget(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	if _, err := Enable(l, "code-server", StageSpec{Stage: "cloud-user"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Enable(l, "firewall", StageSpec{Stage: "early"}); err != nil {
+		t.Fatal(err)
+	}
+	link := func(target, ext string) string {
+		return filepath.Join(l.WantsDir(target), "cream-configure@"+ext+".service")
+	}
+	writeFile(t, l.CloudFinalUnit(), "[Unit]\n")
+	if err := Init(l); err != nil {
+		t.Fatal(err)
+	}
+	if dst, err := os.Readlink(link("cloud-init.target", "code-server")); err != nil || dst != templateLink {
+		t.Errorf("cloud-init.target.wants: %q %v", dst, err)
+	}
+	if _, err := os.Lstat(link("multi-user.target", "code-server")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("multi-user.target.wants осталась: %v", err)
+	}
+	if _, err := os.Readlink(link("sysinit.target", "firewall")); err != nil {
+		t.Errorf("early: %v", err)
+	}
+	if err := os.Remove(l.CloudFinalUnit()); err != nil {
+		t.Fatal(err)
+	}
+	if err := Init(l); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Readlink(link("multi-user.target", "code-server")); err != nil {
+		t.Errorf("без cloud-init — обратно в multi-user.target.wants: %v", err)
+	}
+}
+
 func TestInitRejectsUnknownStageInDropIn(t *testing.T) {
 	t.Parallel()
 	l := paths.Layout{Root: t.TempDir()}

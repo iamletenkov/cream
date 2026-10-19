@@ -93,7 +93,7 @@ func checkTree(t *testing.T, dir string, m *Manifest) {
 
 func TestFixturesValid(t *testing.T) {
 	t.Parallel()
-	cream := creamV1(t)
+	cream := ParseCreamBuild("1.1.0") // фикстуры стадий configure требуют cream 1.1.0
 	tests := []struct {
 		catalog string
 		want    []string
@@ -102,7 +102,8 @@ func TestFixturesValid(t *testing.T) {
 		{
 			catalog: "catalog",
 			want: []string{
-				"action-bad-protocol", "action-json", "apply-hook", "configure-system", "conflict-cap",
+				"action-bad-protocol", "action-json", "apply-hook", "configure-cloud-user", "configure-early",
+				"configure-graphical", "configure-system", "conflict-cap",
 				"conflict-name", "depends-lib", "failing-install", "files-mode", "install-scope",
 				"lib-fixture", "live-confirm", "lock-restart", "lock-restart-exclusive", "noop",
 				"not-applicable", "reboot-required", "requires-cap", "upgrade-fixture", "with-config",
@@ -243,6 +244,7 @@ func TestFixturesInvalid(t *testing.T) {
 		{dir: "duplicate-name-roots"},
 		{dir: "unknown-field", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
 		{dir: "reserved-bin", wantExit: cerr.ExitData, wantCode: "manifest.reserved"},
+		{dir: "stage-cream-too-low", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
 		{dir: "too-new-cream", wantExit: cerr.ExitNotApplicable, wantCode: "platform.cream_version"},
 	}
 	entries, err := os.ReadDir(filepath.Join(fixturesRoot, "invalid"))

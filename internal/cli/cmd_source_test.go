@@ -118,6 +118,7 @@ func TestGoldenSource(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	d := sourceTestDeps()
+	d.cream = manifest.ParseCreamBuild("1.1.0") // каталог фикстур со стадиями configure cream 1.1
 	in := cliIn{Root: root}
 	cat := sourceCopyFixture(t, root, "catalog", "catalog")
 	next := sourceCopyFixture(t, root, "catalog-next", "catalog-next")

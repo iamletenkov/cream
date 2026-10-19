@@ -5,6 +5,9 @@
 [`internal/cli/testdata/golden/`](../internal/cli/testdata/golden/), которые закрепляют форму `result` каждой команды.
 Решения, стоящие за контрактом, — [ADR-0001](adr/0001-contract-cream-v1.md) и [ADR-0002](adr/0002-single-dependency-stdlib-cli.md).
 
+Добавления минорных версий помечены «с 1.1.0»: в минорной версии команды, флаги, поля `result` и коды ошибок только
+добавляются (ADR-0001).
+
 В примерах golden-файлов `"cream": "dev"` — версия тестовой сборки, `<ROOT>`, `<TESTDATA>`, `<FX_TREE>`,
 `<NEXT_SHA256>` — подстановки путей и отпечатков тестового окружения.
 
@@ -66,7 +69,7 @@
 | 1 | `check`/`status`: не применено (команды отложены, Р1) | `check.failed` |
 | 0–63 | `cream run`: код самого действия | |
 | 64 | неверный вызов: флаги, аргументы, секрет в argv, отложенное | `usage.*` (`args`, `assignment`, `duplicate`, `duplicate_key`, `ext_name`, `flag`, `format`, `no_command`, `param_required`, `phase`, `ref`, `reserved`, `root`, `secret`, `source`, `source_date_epoch`, `stdin_empty`, `stdin_param`, `stdin_too_large`, `stdin_twice`, `unknown_command`, `unknown_param`), `secret.in_argv` |
-| 65 | неверные данные: манифест, каталог, значение ключа, readonly, `record.json`, юнит или стадия systemd | `manifest.*`, `catalog.*` (`schema`, `invalid`, `duplicate_name`), `config.*` (`invalid`, `unknown_key`, `readonly`, `reserved`, `install_scope`, `params_file`), `record.invalid`, `record.mismatch`, `source.invalid`, `source.conflict`, `source.reserved`, `source.catalog`, `version.downgrade`, `version.same_digest`, `hook.missing_remove`, `stage.unsupported`, `unit.invalid` |
+| 65 | неверные данные: манифест, каталог, значение ключа, readonly, `record.json`, юнит или стадия systemd | `manifest.*`, `catalog.*` (`schema`, `invalid`, `duplicate_name`), `config.*` (`invalid`, `unknown_key`, `readonly`, `reserved`, `install_scope`, `params_file`), `record.invalid`, `record.mismatch`, `source.invalid`, `source.conflict`, `source.reserved`, `source.catalog`, `version.downgrade`, `version.same_digest`, `hook.missing_remove`, `stage.unsupported`, `unit.invalid`; с 1.1.0 — `installed.invalid`, `catalog.depends`, `catalog.depends_cycle` |
 | 66 | не найдено: расширение, источник, ключ, действие, манифест, каталог, `params-file`; `@version` не совпала | `not_found.*`, `version.mismatch`, `record.not_found` |
 | 67 | граф: зависимость, версия, способность, цикл, конфликт, владение файлом, есть зависимые | `deps.*` (`missing`, `version`, `requires`, `cycle`, `dependents`), `conflict.*` (`extension`, `capability`, `file`, `file_owner`, `file_unowned`) |
 | 68 | неприменимо: arch, family, os, команды, `targets`, версия cream, хук вернул 20 | `platform.*` (`arch`, `arch_barrier`, `family`, `os`, `commands`, `cream_version`), `target.*` (`build`, `live`, `confirm`), `action.phase`, `hook.not_applicable` |
@@ -88,8 +91,9 @@
 | `source.shadowed` | одноимённое расширение есть в нескольких источниках, взято из первого |
 | `source.not_synced` | источник без кеша пропущен при поиске, расширение взято из другого |
 | `catalog.cream_newer` | расширению каталога нужен cream новее текущего — пропущено, синхронизация не падает (Р22) |
+| `catalog.requires`, `catalog.conflicts` | с 1.1.0, `cream validate --catalog`: `requires` без поставщика в каталоге; `conflicts.extensions` на имя не из каталога |
 | `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
-| `platform.dev_build` | сборка cream без версии считается удовлетворяющей `cream:` манифеста |
+| `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей `cream:` манифеста |
 | `platform.os_unknown` | нет os-release: `platform.os` не проверена |
 | `deps.dependents_forced` | `remove --force` убрал расширение, от которого зависят установленные |
 | `state.corrupt` | битая запись реестра пропущена в списке или снята `remove --forget` (Р20, Р25) |
@@ -166,12 +170,20 @@ cream source sync [<name>…]
 лежат в `error.details.reports`.
 `result`: `{"reports": [{target, kind: catalog|extension, catalog?, catalog_version?, extensions: [{name, version,
 path}], not_applicable: [{ext, path, exit, code, message}], errors: [тот же вид]}]}`.
+
+**Граф каталога** (с 1.1.0, только `--catalog`; `source sync` и `catalog pack` его не проверяют — опубликованный
+каталог не отвергается): `depends` на имя, которого в каталоге нет, или с диапазоном, не включающим версию из
+каталога, — 65 `catalog.depends`; цикл `depends` — 65 `catalog.depends_cycle` (`a → b → a`); `requires` без
+поставщика в каталоге — предупреждение `catalog.requires` (способность может дать `cream assume` или другой
+источник); `conflicts.extensions` на имя не из каталога — предупреждение `catalog.conflicts`. Расширение, пропущенное
+как требующее cream новее (Р22), считается присутствующим.
 Golden: [validate-catalog.json](../internal/cli/testdata/golden/validate-catalog.json),
 [validate-dirs.json](../internal/cli/testdata/golden/validate-dirs.json),
 [validate-cream-newer.json](../internal/cli/testdata/golden/validate-cream-newer.json) (Р22: не ошибка, а
 `not_applicable` и предупреждение),
 [validate-invalid.json](../internal/cli/testdata/golden/validate-invalid.json),
-[validate-usage.json](../internal/cli/testdata/golden/validate-usage.json).
+[validate-usage.json](../internal/cli/testdata/golden/validate-usage.json),
+[validate-graph.json](../internal/cli/testdata/golden/validate-graph.json) (с 1.1.0: граф каталога).
 
 ### `cream catalog pack`
 `cream catalog pack DIR --out F` — сначала проверяет каталог, затем пишет детерминированный `tar.gz`: сортировка,
@@ -179,7 +191,7 @@ uid/gid 0, mtime = `SOURCE_DATE_EPOCH` (неверное значение — 64
 времени. Байтовая воспроизводимость — при одной версии Go toolchain. Ошибка записи — 74 `io.write`.
 
 ### `cream resolve`
-`cream resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] <ref> [K=V…] [<ref> [K=V…]]…`
+`cream resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…] [<ref> [K=V…]]…`
 — офлайн-разрешение слоёв по кешу (без сети), для bisquite (§12.1, §12.4). Ссылка — `[source/]name[@version]`;
 параметры `K=V` относятся к предыдущей ссылке (до первой ссылки — 64). Неизвестный ключ — 65 `config.unknown_key`,
 неверное значение — 65 `config.invalid`, повтор ключа — 64 `usage.duplicate_key`. Секретный ключ задаётся только
@@ -192,6 +204,15 @@ uid/gid 0, mtime = `SOURCE_DATE_EPOCH` (неверное значение — 64
 | `--target-arch A` | архитектура цели (по умолчанию — этой машины) |
 | `--host-arch A` | архитектура хоста сборки; слой `exec` при `target ≠ host` — 68 `platform.arch_barrier` |
 | `--family F` | семейство пакетов цели (`deb`); без него в build семейство не проверяется (Р23) |
+| `--installed FILE` | с 1.1.0, только с `--phase build` (иначе 64 `usage.args`): расширения, уже установленные в базе `FROM` слоя |
+
+**`--installed`** (с 1.1.0, для bisquite: слой `EXTENSION` поверх образа, где часть зависимостей уже стоит). `FILE` —
+JSON-массив, элемент — `{"name", "version", "provides"?}` или `{"token", "provides"?}` с `token` lineage
+`[<source>/]<name>@<version>[#<rev>]`; прочие поля элемента (остальной lineage: `params_digest`, `deps`, …)
+игнорируются, повтор имени — побеждает последний (lineage накопительный, база первой). Эти расширения входят в граф
+как установленные: закрывают `depends` (с проверкой диапазона версий — иначе 67 `deps.version`) и `requires` (по
+`provides`) слоя и попадают в его `deps`, но слоями не становятся. Без флага вывод прежний: установленного в build
+нет. Нет файла — 66 `not_found.installed`, неверный формат — 65 `installed.invalid`.
 
 `result`: `{"phase", "layers": [{name, version, source, source_resolved, catalog_version, ext_digest,
 params_digest, deps, mode, token, pinned, secret_params, dir}]}` в порядке установки. Значения секретных
@@ -199,7 +220,9 @@ params_digest, deps, mode, token, pinned, secret_params, dir}]}` в порядк
 Golden: [resolve-depends-lib.json](../internal/cli/testdata/golden/resolve-depends-lib.json),
 [resolve-params.json](../internal/cli/testdata/golden/resolve-params.json),
 [resolve-deps-missing.json](../internal/cli/testdata/golden/resolve-deps-missing.json) (67 `deps.missing`),
-[resolve-arch-barrier.json](../internal/cli/testdata/golden/resolve-arch-barrier.json) (68).
+[resolve-arch-barrier.json](../internal/cli/testdata/golden/resolve-arch-barrier.json) (68),
+[resolve-installed.json](../internal/cli/testdata/golden/resolve-installed.json) (с 1.1.0: `--installed` закрывает
+`depends` и `requires`).
 
 ### `cream install`
 ```
@@ -284,7 +307,14 @@ Golden: [remove.json](../internal/cli/testdata/golden/remove.json),
 - `cream configure [--wait] <ext>` — запустить configure расширения (юнит `cream-configure@<ext>` или хук);
   `--from-unit <ext>` — только для вызова из самого юнита. `result`: `{ext, reason, mode, reboot_required}` —
   [configure.json](../internal/cli/testdata/golden/configure.json).
-- `cream system init` — каталоги §5 с режимами, шаблон юнита из встроенной копии, пересчёт целей configure; при
+- Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети), `cloud-user`
+  (`cloud-init.target` при `cloud-final.service`, иначе `multi-user.target`) и `graphical` (`graphical.target`,
+  после `multi-user.target` и `display-manager.service`). Манифест с новыми стадиями обязан требовать `cream: ">=1.1.0"`, иначе 65
+  `manifest.invalid`; cream 1.0 отказывает ему по `cream:` — 68 `platform.cream_version` (в каталоге — пропуск с
+  `catalog.cream_newer`).
+- `cream system init` — каталоги §5 с режимами, шаблон юнита из встроенной копии, пересчёт целей configure (цель
+  `cloud-user` — по наличию cloud-init на машине: после его установки или удаления — `cream system init`; с 1.1.0
+  пересчитанная цель пишется и в `configure.target` реестра); при
   работающем systemd — `daemon-reload`. `result`: `{unit, daemon_reload}` —
   [system-init.json](../internal/cli/testdata/golden/system-init.json).
 

@@ -4,8 +4,9 @@
 // Разбор строгий: неизвестное поле — ошибка, кроме ключей с префиксом "x-" на
 // любом уровне отображений (они вырезаются до декодирования, поэтому имена
 // действий и хуков вида "x-…" тоже невидимы); скаляр вместо списка — ошибка;
-// отложенное в cream 1.0 (§17) — ошибка 65 manifest.reserved, а не «неизвестное
-// поле». Проверки дерева расширения (имя каталога, биты исполнения, ссылки,
+// отложенное (§17) — ошибка 65 manifest.reserved, а не «неизвестное поле»;
+// поле минорной версии новее 1.0 (стадии configure 1.1.0) при cream: ниже её —
+// 65 manifest.invalid «нужен cream: ">=X"». Проверки дерева расширения (имя каталога, биты исполнения, ссылки,
 // соответствие хуков файлам) — дело пакета catalog.
 //
 // Все ошибки — *cerr.Error: 65 manifest.* (данные), 68 platform.cream_version
@@ -114,9 +115,14 @@ const (
 // Stage — стадия загрузки хука configure (§6.4).
 type Stage string
 
-// StageSystem — единственная стадия cream 1.0; early, cloud-user, graphical
-// зарезервированы (Р3).
-const StageSystem Stage = "system"
+// Стадии §6.4. В cream 1.0 — только system; early, cloud-user и graphical
+// появились в cream 1.1.0: манифест с ними обязан требовать cream: ">=1.1.0".
+const (
+	StageSystem    Stage = "system"
+	StageEarly     Stage = "early"
+	StageCloudUser Stage = "cloud-user"
+	StageGraphical Stage = "graphical"
+)
 
 // Hook — объявление хука. Timeout == 0 — без таймаута; значения по умолчанию
 // уже подставлены. Stage, After, Before, Wants — только у configure.

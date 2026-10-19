@@ -38,9 +38,11 @@ func warningCodes(r Report) []string {
 
 func TestValidateCleanCatalogs(t *testing.T) {
 	t.Parallel()
-	cream := cream100(t)
+	v11 := manifest.ParseCreamBuild("1.1.0")
+	newer := "catalog.cream_newer"
 	tests := []struct {
 		dir          string
+		cream        manifest.CreamBuild
 		name         string
 		version      string
 		exts         int
@@ -48,13 +50,16 @@ func TestValidateCleanCatalogs(t *testing.T) {
 	}{
 		// lock-restart-exclusive — негативный вариант §14 п.7: ошибкой он не
 		// является, но правило §7.3 нарушает — ровно одно предупреждение.
-		{dir: "catalog", name: "cream-fixtures", version: "1.0.0", exts: 20, wantWarnings: []string{"validate.unit_lock"}},
-		{dir: "catalog-next", name: "cream-fixtures", version: "1.1.0", exts: 2, wantWarnings: []string{}},
+		{dir: "catalog", cream: v11, name: "cream-fixtures", version: "1.0.0", exts: 23, wantWarnings: []string{"validate.unit_lock"}},
+		// cream 1.0 не видит фикстур стадий cream 1.1 (configure-{cloud-user,early,graphical}): Р22.
+		{dir: "catalog", cream: cream100(t), name: "cream-fixtures", version: "1.0.0", exts: 20,
+			wantWarnings: []string{newer, newer, newer, "validate.unit_lock"}},
+		{dir: "catalog-next", cream: cream100(t), name: "cream-fixtures", version: "1.1.0", exts: 2, wantWarnings: []string{}},
 	}
 	for _, tc := range tests {
-		t.Run(tc.dir, func(t *testing.T) {
+		t.Run(tc.dir+"@"+tc.cream.String(), func(t *testing.T) {
 			t.Parallel()
-			r, err := Validate(filepath.Join(fixturesRoot, tc.dir), cream)
+			r, err := Validate(filepath.Join(fixturesRoot, tc.dir), tc.cream)
 			if err != nil {
 				t.Fatalf("Validate: %v; ошибки %+v", err, r.Errors)
 			}
@@ -105,6 +110,7 @@ func TestValidateInvalidFixtures(t *testing.T) {
 		{dir: "link-outside", exit: cerr.ExitData, code: "manifest.link_outside"},
 		{dir: "not-elf-no-shebang", exit: cerr.ExitData, code: "manifest.bad_executable"},
 		{dir: "reserved-bin", exit: cerr.ExitData, code: "manifest.reserved"},
+		{dir: "stage-cream-too-low", exit: cerr.ExitData, code: "manifest.invalid"},
 		{dir: "too-new-cream"}, // Р22: каталог валиден, расширение — в предупреждениях (TestValidateCreamNewer)
 		{dir: "unknown-field", exit: cerr.ExitData, code: "manifest.invalid"},
 	}

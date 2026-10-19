@@ -1,0 +1,10 @@
+schema: cream/v1
+name: ok-user
+version: 1.0.0
+summary: фикстура графа ok-user
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Без замечаний: lib-a в нужном диапазоне.
+depends: [{name: lib-a, version: ">=1.0.0 <2"}]
+hooks:
+  install: {}

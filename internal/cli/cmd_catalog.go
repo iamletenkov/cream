@@ -41,12 +41,13 @@ func catalogCommandsWith(d catalogDeps) []Command {
 			},
 			Run: func(ctx *Context, args []string) (any, error) { return runCatalog(ctx, d, packOut, args) }},
 		{Name: "resolve",
-			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] <ref> [K=V…]…  — офлайн-разрешение слоёв (§12.4)",
+			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…]…  — офлайн-разрешение слоёв (§12.4)",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&h.phase, "phase", resolve.PhaseLive, "фаза `P`: build или live")
 				fs.StringVar(&h.targetArch, "target-arch", "", "архитектура цели `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.hostArch, "host-arch", "", "архитектура хоста сборки `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb); без него не проверяется в build")
+				fs.StringVar(&h.installed, "installed", "", "build: `FILE` — JSON-массив расширений базы FROM [{name, version, provides?}] (cream 1.1.0)")
 				reserveFlags(fs, "require-pinned")
 			},
 			Run: func(ctx *Context, args []string) (any, error) { return runResolve(ctx, d, h, args) }},
@@ -120,7 +121,7 @@ func runValidate(ctx *Context, d catalogDeps, cat string, dirs []string) (any, e
 	for _, t := range targets {
 		var r catalog.Report
 		if t.kind == "catalog" {
-			r, _ = catalog.Validate(t.path, d.cream)
+			r, _ = catalog.ValidateCatalog(t.path, d.cream)
 		} else {
 			r, _ = catalog.ValidateDir(t.path, d.cream)
 		}
@@ -241,6 +242,9 @@ func packEpoch(raw string) (int64, error) {
 // resolveFlags are the host flags of `cream resolve`.
 type resolveFlags struct {
 	phase, targetArch, hostArch, family string
+	// installed is the --installed file: the extensions of the base image
+	// of a build layer (lineage of FROM), installed nodes of the graph.
+	installed string
 }
 
 // resolveRequest is one <ref> [K=V…] group of the arguments.
@@ -275,8 +279,9 @@ func (r resolveResult) WriteText(w io.Writer) error {
 // runResolve looks every reference up in the source caches (no network),
 // checks its parameters against config.keys and resolves the requested
 // layers against the host: build — the host from the flags (an empty
-// family is not checked, the guest's OS is unknown); live — this machine
-// (os-release under --root) with the registry as installed.
+// family is not checked, the guest's OS is unknown) with --installed, if
+// given, as installed; live — this machine (os-release under --root) with
+// the registry as installed.
 // Secret parameters enter neither params_digest nor the output: only
 // their names, in secret_params.
 func runResolve(ctx *Context, d catalogDeps, f resolveFlags, args []string) (any, error) {
@@ -287,6 +292,10 @@ func runResolve(ctx *Context, d catalogDeps, f resolveFlags, args []string) (any
 	host, err := resolveHost(ctx, d, f)
 	if err != nil {
 		return nil, err
+	}
+	if f.installed != "" && host.Phase != resolve.PhaseBuild {
+		return nil, cerr.New(cerr.ExitUsage, "usage.args",
+			"resolve: --installed — только с --phase build (в live установленное берётся из реестра)")
 	}
 	file, err := sourceLoad(ctx)
 	if err != nil {
@@ -318,8 +327,13 @@ func runResolve(ctx *Context, d catalogDeps, f resolveFlags, args []string) (any
 			Digest: e.Digest})
 	}
 	var installed []resolve.Node
-	if host.Phase == resolve.PhaseLive {
+	switch {
+	case host.Phase == resolve.PhaseLive:
 		if installed, err = resolveInstalled(ctx, d); err != nil {
+			return nil, err
+		}
+	case f.installed != "":
+		if installed, err = resolve.ReadInstalled(f.installed); err != nil {
 			return nil, err
 		}
 	}

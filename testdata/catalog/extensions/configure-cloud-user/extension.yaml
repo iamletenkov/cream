@@ -1,0 +1,12 @@
+schema: cream/v1
+name: configure-cloud-user
+version: 1.0.0
+summary: фикстура configure-cloud-user
+cream: ">=1.1.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure стадии cloud-user (cream 1.1.0): после cloud-final, цель —
+# cloud-init.target при cloud-init, иначе multi-user.target.
+hooks:
+  install: {}
+  configure: {stage: cloud-user}
+  remove: {}

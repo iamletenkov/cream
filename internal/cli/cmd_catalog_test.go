@@ -79,6 +79,8 @@ func TestGoldenValidate(t *testing.T) {
 		{name: "validate-invalid", args: []string{"validate", "--json", "--catalog", "catalog-next",
 			"invalid/hook-undeclared/extensions/hook-undeclared"}, wantExit: 65},
 		{name: "validate-usage", args: []string{"validate", "--json"}, wantExit: 64},
+		// cream 1.1.0: граф каталога — depends (ошибки), requires и conflicts (предупреждения).
+		{name: "validate-graph", args: []string{"validate", "--json", "--catalog", "graph"}, wantExit: 65},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -217,6 +219,10 @@ func TestGoldenResolve(t *testing.T) {
 	digests := map[string]string{sourceResolvedHex(t, paths.Layout{Root: root}, "fx"): "<FX_TREE>"}
 	build := []string{"resolve", "--json", "--phase", "build", "--target-arch", "amd64", "--host-arch", "x86_64",
 		"--family", "deb"}
+	// База FROM слоя (cream 1.1.0): lib-fixture и поставщик fixture-runtime уже в образе.
+	base := filepath.Join(t.TempDir(), "base.json")
+	writeFileT(t, base, `[{"token": "fx/lib-fixture@1.0.0#0123456789ab", "params_digest": "sha256:00"},
+ {"name": "apply-hook", "version": "1.0.0", "provides": ["fixture-runtime"]}]`)
 	tests := []struct {
 		name     string
 		args     []string
@@ -226,6 +232,8 @@ func TestGoldenResolve(t *testing.T) {
 		{name: "resolve-params", args: append(build[:len(build):len(build)], "with-config", "COUNT=7",
 			"TOKEN=-", "MODE=slow")},
 		{name: "resolve-deps-missing", args: append(build[:len(build):len(build)], "depends-lib"), wantExit: 67},
+		{name: "resolve-installed", args: append(build[:len(build):len(build)], "--installed", base, "depends-lib",
+			"requires-cap")},
 		{name: "resolve-arch-barrier", args: []string{"resolve", "--json", "--phase", "build", "--target-arch",
 			"arm64", "--host-arch", "amd64", "noop"}, wantExit: 68},
 	}
@@ -269,6 +277,8 @@ func TestResolveRefusals(t *testing.T) {
 		{"версия не та", append(b[:4:4], "noop@2.0.0"), 66, "version.mismatch"},
 		{"неверная фаза", []string{"--phase", "boot", "noop"}, 64, "usage.phase"},
 		{"--require-pinned зарезервирован", append(b[:4:4], "--require-pinned", "noop"), 64, "usage.reserved"},
+		{"--installed в live", []string{"--installed", "/nope.json", "noop"}, 64, "usage.args"},
+		{"--installed нет файла", append(b[:4:4], "--installed", "/nope.json", "noop"), 66, "not_found.installed"},
 		{"семейство", []string{"--phase", "build", "--family", "rpm", "noop"}, 68, "platform.family"},
 		{"live без os-release", []string{"noop"}, 68, "platform.family"},
 	}
@@ -304,6 +314,13 @@ func TestResolveRefusals(t *testing.T) {
 	out := sourceRunCLI(t, d, cliIn{Root: fresh}, "resolve", "--json", "--phase", "build", "noop")
 	if out.Code != 69 || sourceErrCode(t, out) != "source.not_synced" {
 		t.Errorf("не синхронизирован: %+v", out)
+	}
+}
+
+func writeFileT(t *testing.T, p, body string) {
+	t.Helper()
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

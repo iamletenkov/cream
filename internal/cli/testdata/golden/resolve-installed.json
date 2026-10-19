@@ -1,0 +1,46 @@
+{
+  "cream": "dev",
+  "command": "resolve",
+  "ok": true,
+  "result": {
+    "phase": "build",
+    "layers": [
+      {
+        "name": "depends-lib",
+        "version": "1.0.0",
+        "source": "fx",
+        "source_resolved": "sha256:<FX_TREE>",
+        "catalog_version": "1.0.0",
+        "ext_digest": "sha256:81a2a340e55102bdab33cdfac8eb2ca963bf0746dd88ef30ec6d3409c53843a6",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "deps": [
+          "lib-fixture@1.0.0"
+        ],
+        "mode": "exec",
+        "token": "fx/depends-lib@1.0.0#<FX_TREE>",
+        "pinned": false,
+        "secret_params": [],
+        "dir": "<ROOT>/var/cache/cream/sources/fx/extensions/depends-lib"
+      },
+      {
+        "name": "requires-cap",
+        "version": "1.0.0",
+        "source": "fx",
+        "source_resolved": "sha256:<FX_TREE>",
+        "catalog_version": "1.0.0",
+        "ext_digest": "sha256:d5d4ccc51b75f8dea9d72a63d79da308a11c04a27478371d38615d86c9b7360e",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "deps": [
+          "apply-hook@1.0.0"
+        ],
+        "mode": "exec",
+        "token": "fx/requires-cap@1.0.0#<FX_TREE>",
+        "pinned": false,
+        "secret_params": [],
+        "dir": "<ROOT>/var/cache/cream/sources/fx/extensions/requires-cap"
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

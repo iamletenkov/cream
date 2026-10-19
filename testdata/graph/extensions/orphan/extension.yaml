@@ -1,0 +1,10 @@
+schema: cream/v1
+name: orphan
+version: 1.0.0
+summary: фикстура графа orphan
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Ошибка: зависимости ghost в каталоге нет.
+depends: [{name: ghost}, {name: lib-a}]
+hooks:
+  install: {}

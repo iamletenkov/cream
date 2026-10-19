@@ -1,0 +1,4 @@
+schema: cream/v1
+name: cream-graph-fixtures
+version: 1.0.0
+roots: [extensions]
