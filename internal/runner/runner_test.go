@@ -350,3 +350,24 @@ func TestExecRetriesTextBusy(t *testing.T) {
 		t.Errorf("EACCES: err %v, стартов %d", err, calls)
 	}
 }
+
+// TestExecRetryStopsOnCancel — отмена ctx во время паузы между повторами старта
+// прерывает повторы сразу: второй попытки нет, ошибка старта отдаётся.
+func TestExecRetryStopsOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	e := Exec{Grace: time.Second, start: func(c *exec.Cmd) error {
+		calls++
+		cancel()
+		return &fs.PathError{Op: "fork/exec", Path: c.Path, Err: syscall.ETXTBSY}
+	}}
+	_, err := e.Run(ctx, Spec{Path: fixture(t, "exit-code")})
+	if err == nil {
+		t.Fatal("ошибки нет после отмены")
+	}
+	if calls != 1 {
+		t.Errorf("стартов %d после отмены, ждали 1", calls)
+	}
+}

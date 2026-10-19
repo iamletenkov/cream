@@ -478,6 +478,63 @@ func TestInstallFileUnowned(t *testing.T) {
 	}
 }
 
+// installLevelCatalog — files-mode с параметром LEVEL (enum) и его каталог.
+func installLevelCatalog(t *testing.T) string {
+	t.Helper()
+	return installPatched(t, fixtureDir(t, "files-mode"), "files-mode",
+		installAppend("config:\n  keys:\n    LEVEL: {type: \"enum:low,high\", default: low, description: \"уровень\"}\n"))
+}
+
+// TestInstallParamInvalidBeforeTree — неверный параметр отказывает (65
+// config.invalid) до дерева: ни дерева, ни files, ни домена, ни реестра (§6.5, шаг 3).
+func TestInstallParamInvalidBeforeTree(t *testing.T) {
+	t.Parallel()
+	te := installEngine(t, installSrc{"fixtures", installLevelCatalog(t)})
+	_, err := installRun(t, te, "files-mode", "LEVEL=bogus")
+	wantCode(t, err, cerr.ExitData, "config.invalid")
+	if _, ok, _ := te.Store.Get("files-mode"); ok {
+		t.Error("запись реестра при неверном параметре")
+	}
+	if installExists(te.L.ExtTree("files-mode")) || installExists(te.L.ExtNew("files-mode")) {
+		t.Error("дерево при неверном параметре")
+	}
+	if installExists(filepath.Join(te.Root, "/etc/files-mode/plain.conf")) {
+		t.Error("files разложены при неверном параметре")
+	}
+	if installExists(te.L.ConfigFile("files-mode")) {
+		t.Error("домен записан при неверном параметре")
+	}
+}
+
+// TestInstallParamWriteFailsAfterFiles — сбой записи параметров после дерева и
+// files — операция failed в реестре, хук install не запускается, ошибка не
+// проглатывается (§6.5, шаг 4).
+func TestInstallParamWriteFailsAfterFiles(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root пишет в каталог без права записи")
+	}
+	te := installEngine(t, installSrc{"fixtures", installLevelCatalog(t)})
+	// Каталог настроек без права записи: чтение домена (проверка до дерева)
+	// проходит, запись после files — нет.
+	etc := te.L.EtcDir("files-mode")
+	if err := os.MkdirAll(etc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(etc, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(etc, 0o755) })
+	_, err := installRun(t, te, "files-mode", "LEVEL=high")
+	wantCode(t, err, cerr.ExitState, "config.io")
+	if rec := installRecord(t, te, "files-mode"); rec.Status != state.StatusFailed {
+		t.Errorf("статус %q, ждали failed", rec.Status)
+	}
+	if n := hookCount(t, te, "files-mode", "install"); n != 0 {
+		t.Errorf("хук install запущен %d раз после сбоя записи параметров", n)
+	}
+}
+
 func TestInstallSecretNotLeaked(t *testing.T) {
 	t.Parallel()
 	te := installEngine(t)
