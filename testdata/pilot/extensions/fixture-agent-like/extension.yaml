@@ -1,0 +1,15 @@
+schema: cream/v1
+name: fixture-agent-like
+version: 1.0.0
+summary: модель обёртки stvor-agent — зависит от teleport, кладёт drop-in командной метки в его каталог
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Р11: files кладёт файл в каталог настроек другого расширения
+# (/etc/cream/fixture-teleport-like/command-labels.d/agent). Файл числится в
+# реестре этого расширения, не teleport; remove убирает только его.
+depends: [{name: fixture-teleport-like, version: ">=1.0.0 <2"}]
+hooks:
+  install: {}
+  remove: {}
+files:
+  - {src: files/command-label-agent, dst: /etc/cream/fixture-teleport-like/command-labels.d/agent, mode: "0644"}

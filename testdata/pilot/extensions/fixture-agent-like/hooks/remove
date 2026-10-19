@@ -1,0 +1,5 @@
+#!/bin/sh
+# Модель обёртки stvor-agent: «пакет агента» удалён.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+echo removed >"$CREAM_STATE_DIR/removed"

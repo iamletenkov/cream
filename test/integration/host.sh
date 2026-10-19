@@ -9,20 +9,30 @@
 
 IT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 IT_NAME=""
+# ARCH (amd64|arm64) — архитектура контейнера; чужая для хоста идёт через
+# --platform и binfmt/qemu хоста (медленно; основной путь arm64 — раннер CI).
+case "$(uname -m)" in
+x86_64) IT_HOST_ARCH=amd64 ;;
+aarch64) IT_HOST_ARCH=arm64 ;;
+*) IT_HOST_ARCH=$(uname -m) ;;
+esac
+IT_ARCH=${ARCH:-$IT_HOST_ARCH}
+IT_PLATFORM=()
+if [ "$IT_ARCH" != "$IT_HOST_ARCH" ]; then IT_PLATFORM=(--platform "linux/$IT_ARCH"); fi
 
 it_log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 
 # it_image <tag> <base> — собрать образ cream-it:<tag> из test/integration/Dockerfile.
 it_image() {
 	it_log "образ cream-it:$1 (BASE=$2)"
-	docker build -q -t "cream-it:$1" --build-arg "BASE=$2" "$IT_DIR" >/dev/null
+	docker build -q "${IT_PLATFORM[@]}" -t "cream-it:$1" --build-arg "BASE=$2" "$IT_DIR" >/dev/null
 }
 
 # it_start <tag> <name> — поднять контейнер и дождаться загрузки systemd.
 it_start() {
 	IT_NAME=$2
 	docker rm -f "$IT_NAME" >/dev/null 2>&1 || true
-	docker run -d --name "$IT_NAME" \
+	docker run -d --name "$IT_NAME" "${IT_PLATFORM[@]}" \
 		--cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
 		--tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
 		--memory 1g --pids-limit 2048 \

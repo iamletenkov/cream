@@ -1,0 +1,13 @@
+#!/bin/sh
+# Модель teleport: «бинарь» версии FTL_VERSION (scope: install), каталог
+# командных меток в домене (туда кладут drop-in другие расширения, Р11) и
+# включение службы. Службу не запускает: render зовёт cream run, а расширение
+# станет установленным только после хука; служба стартует на загрузке или
+# по set-managed.
+set -eu
+mkdir -p "$CREAM_STATE_DIR" "$CREAM_ETC_DIR/command-labels.d"
+n=$(cat "$CREAM_STATE_DIR/install.count" 2>/dev/null || echo 0)
+echo $((n + 1)) >"$CREAM_STATE_DIR/install.count"
+printf '%s\n' "$FTL_VERSION" >"$CREAM_STATE_DIR/bin-version"
+printf 'hostname=hostname\n' >"$CREAM_ETC_DIR/command-labels.d/00-base"
+systemctl enable fixture-teleport.service

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Модель status teleport: человекочитаемое состояние.
+set -eu
+echo "service=$(systemctl is-active fixture-teleport.service 2>/dev/null || true) proxy=${FTL_PROXY:-}"

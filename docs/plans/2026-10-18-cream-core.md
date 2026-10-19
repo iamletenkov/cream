@@ -47,7 +47,7 @@
 
 - [x] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
 
-- [ ] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
+- [x] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
 
 - [ ] Task 20: CI-матрица и сборка ассетов релиза (release-please)
 

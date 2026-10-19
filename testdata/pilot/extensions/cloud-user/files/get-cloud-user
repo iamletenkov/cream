@@ -1,0 +1,48 @@
+#!/bin/sh
+# Имя пользователя машины в stdout; диагностика — в stderr, отказ — код 1.
+# Порт идеи cream-extensions/lib/get_cloud_user.sh на POSIX sh:
+#  - есть cloud-init с данными — пользователь из них (user, затем users[0].name);
+#  - cloud-init есть, а данных ещё нет — отказ: это гонка, а не отсутствие,
+#    запасной путь настроил бы не того пользователя;
+#  - cloud-init нет (или нечем разобрать YAML) — первая обычная учётка
+#    (uid 1000..65533) с домашним каталогом, и об этом — строка в stderr.
+set -eu
+
+fallback_user() {
+	getent passwd | while IFS=: read -r name _ uid _ _ home _; do
+		if [ "$uid" -ge 1000 ] && [ "$uid" -lt 65534 ] && [ -d "$home" ]; then
+			echo "cloud-user: cloud-init нет, взята учётка '$name' (uid $uid)" >&2
+			echo "$name"
+			return 0
+		fi
+	done | head -n 1 | grep . || {
+		echo "cloud-user: нет пользователя cloud-init и обычной учётки с домашним каталогом" >&2
+		return 1
+	}
+}
+
+if ! command -v cloud-init >/dev/null 2>&1 || ! command -v yq >/dev/null 2>&1; then
+	fallback_user
+	exit $?
+fi
+
+userdata=$(cloud-init query userdata 2>/dev/null || true)
+if [ -z "$userdata" ] && [ -f /var/lib/cloud/instance/user-data.txt ]; then
+	userdata=$(cat /var/lib/cloud/instance/user-data.txt)
+fi
+if [ -z "$userdata" ] || [ "$userdata" = null ]; then
+	echo "cloud-user: данные cloud-init ещё не готовы" >&2
+	exit 1
+fi
+
+clean() { env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin TERM=dumb "$@"; }
+user=$(printf '%s\n' "$userdata" | clean yq -r '.user // ""' 2>/dev/null || true)
+if [ -z "$user" ]; then
+	user=$(printf '%s\n' "$userdata" | clean yq -r '.users[0].name // ""' 2>/dev/null || true)
+fi
+if [ -z "$user" ]; then
+	# Данные есть, пользователя в них нет — ошибка seed, а не повод для запасного пути.
+	echo "cloud-user: в данных cloud-init нет пользователя" >&2
+	exit 1
+fi
+echo "$user"

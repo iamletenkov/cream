@@ -1,0 +1,5 @@
+#!/bin/sh
+# Модель apply teleport: изменённые ключи — в журнал, без ожидания заданий systemd.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+printf 'changed=%s env=%s\n' "$CREAM_CHANGED_KEYS" "$FTL_ENV" >>"$CREAM_STATE_DIR/apply.log"

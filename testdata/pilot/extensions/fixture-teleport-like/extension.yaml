@@ -1,0 +1,41 @@
+schema: cream/v1
+name: fixture-teleport-like
+version: 1.0.0
+summary: модель teleport — join со stdin, set-managed с синхронным restart, render из ExecStartPre
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Форма teleport §4.3 и контракт stvor-agent: join (секрет только на stdin),
+# set-managed (exclusive, пишет readonly-ключ вложенным cream set и синхронно
+# перезапускает службу), managed-status/render/status — lock: none, render —
+# в ExecStartPre службы (правило §7.3). Ключ FTL_VERSION — scope: install.
+provides: [teleport-node]
+conflicts: {capabilities: [teleport-node]}
+hooks:
+  install: {}
+  apply: {}
+  remove: {}
+config:
+  keys:
+    FTL_VERSION: {type: "re:^[0-9]+\\.[0-9]+\\.[0-9]+$", default: "18.10.0", scope: install, description: "версия «бинаря»; смена — повтор install"}
+    FTL_PROXY: {type: host, default: "", empty: true, readonly: true, description: "адрес proxy; пишет join"}
+    FTL_ENV: {type: "re:^[a-z0-9][a-z0-9-]{0,62}$", default: "", empty: true, description: "метка env оператора"}
+    FTL_MANAGED_LABELS: {type: "list:re:^[a-z][a-z0-9_]{0,62}=[a-z0-9][a-z0-9._-]{0,62}$", default: "", empty: true, readonly: true, description: "метки внешнего управляющего; пишет только set-managed"}
+    FTL_TOKEN: {type: str, default: "", empty: true, secret: file, description: "секрет в /etc/cream/fixture-teleport-like/secrets"}
+actions:
+  join:
+    summary: "регистрация: секрет только со stdin, адрес — в настройки"
+    args: pairs
+    params:
+      FTL_PROXY: {required: true}
+      FTL_JOIN_SECRET: {type: str, secret: true, required: true}
+    stdin: secret
+    lock: exclusive
+    output: json
+    timeout: 1m
+    phases: [live]
+  set-managed: {summary: "управляемые метки и синхронный restart службы", args: free, lock: exclusive, output: json, timeout: 3m, phases: [live]}
+  managed-status: {summary: "управляемые метки и отрисованный конфиг", lock: none, output: json, phases: [live]}
+  render: {summary: "отрисовать конфиг службы (ExecStartPre)", lock: none, phases: [build, live]}
+  status: {summary: "состояние службы", lock: none, phases: [live]}
+files:
+  - {src: files/fixture-teleport.service, dst: /etc/systemd/system/fixture-teleport.service, mode: "0644"}
