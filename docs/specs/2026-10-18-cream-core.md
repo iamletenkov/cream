@@ -794,7 +794,10 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 1. `--copy-in <guest-cream>:/usr/bin` и `--chmod 0755:/usr/bin/cream`. Копия делается всегда: версия в образе
    совпадает с хостом. Реестр совместим внутри мажора.
 2. `--run-command '/usr/bin/cream system init'`.
-3. `--tar-in <staging>/<id>.tar:/var/lib/cream/incoming/<id>`. Архив bisquite собирает на хосте
+3. Доставка архива (Р30 плана — совместимо с `virt-customize` 1.48 Debian 12, где нет `--tar-in`):
+   `--mkdir /var/lib/cream/incoming/<id>`, `--copy-in <staging>/<id>.tar:/var/lib/cream/incoming/`,
+   `--run-command 'tar -C /var/lib/cream/incoming/<id> --numeric-owner -xf /var/lib/cream/incoming/<id>.tar && rm -f
+   /var/lib/cream/incoming/<id>.tar'`. Архив bisquite собирает на хосте
    `tar --owner=0 --group=0 --numeric-owner` (режимы сохраняются, ссылки — как ссылки): `--copy-in` переносит в гостя
    uid/gid пользователя хоста, и проверка «владелец root» (§13) отвергла бы `params.env`. Внутри — дерево расширения
    из кеша, `record.json` (источник и отпечатки из `resolve`) и `params.env`. `params.env` — все параметры слоя, 0600;
@@ -899,7 +902,7 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 
   В CI на каждый PR: amd64 — полная матрица; arm64 — `debian:13` и `ubuntu:24.04` на arm-раннере GitHub.
 - **Build-фаза.** `make test-build` на фикстурном qcow2: Debian genericcloud, кешируется по sha256. Проверяется
-  `virt-customize` со слоем `exec`, доставка `--tar-in` с владельцем root (§12.2), реестр, `policy-rc.d`, отсутствие параметров в argv (`ps` во время сборки
+  `virt-customize` со слоем `exec`, доставка архива с владельцем root (§12.2), реестр, `policy-rc.d`, отсутствие параметров в argv (`ps` во время сборки
   и текст ошибки). Запуск ручной и ночной, не в каждом PR.
 - **cream-extensions.** `tools/check.sh` = `cream validate --catalog .` (пин версии cream) + shellcheck + нынешние
   bash-тесты хуков на подменённом корне (`CREAM_ROOT`). Плюс проверка «отпечаток изменился, а версия нет» (§3).

@@ -8,7 +8,7 @@
 # закреплённый базовый образ; кеш — .cache/test-build/<имя образа> (скачивается
 # один раз, sha512 сверяется с закреплённым и с SHA512SUMS рядом с образом).
 # TEST_BUILD_HOST=1 — virt-customize хоста вместо контейнера test/build/Dockerfile
-# (нужен virt-customize с --tar-in: в 1.48 Debian 12 его нет, scenario.sh отказывает 69).
+# (последовательность Р30 обходится без --tar-in и идёт и на 1.48 Debian 12).
 # Временный каталог (overlay, staging, распакованный пакет) удаляется при любом
 # выходе. Вызывать под замком HEAVY_LOCK (make test-build берёт его сам).
 set -euo pipefail
@@ -62,6 +62,7 @@ mkdir -p "$work/tmp"
 start=$(date +%s)
 if [ "${TEST_BUILD_HOST:-}" = 1 ]; then
 	echo "== режим: virt-customize хоста ($(virt-customize --version))"
+	mkdir -p "$cache/appliance-host"
 	LIBGUESTFS_BACKEND=direct LIBGUESTFS_CACHEDIR=$cache/appliance-host TMPDIR=$work/tmp \
 		bash "$ROOT/test/build/scenario.sh" "$work/cream.deb" "$base" "$work" "$ROOT"
 else

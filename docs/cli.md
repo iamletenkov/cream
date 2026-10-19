@@ -333,25 +333,31 @@ Golden: [actions.json](../internal/cli/testdata/golden/actions.json),
 Последовательность для одного слоя `EXTENSION` с `mode: exec` (спека §12.1–§12.2, задача 16).
 
 1. **На хосте — разрешение.** `cream --json resolve --phase build --target-arch <arch цели> --host-arch <arch
-   хоста> --family <семейство> --sources <свой sources.yaml> --cache <DATA_DIR>/cream <ref> [K=V…]…` по всем
-   слоям VMFILE в их порядке. Каждый элемент `layers` — будущий `record.json`; `dir` — дерево в кеше. Отказы: 67
+   хоста> --family <семейство> --sources <свой sources.yaml> --cache <DATA_DIR>/cream <ref> [K=V…] [SECRET…]…`
+   по всем слоям VMFILE в их порядке. Каждый элемент `layers` — будущий `record.json`; `dir` — дерево в кеше. Отказы: 67
    граф, 68 `platform.arch_barrier` (чужая архитектура для `exec`), 69 источник не синхронизирован.
 2. **На хосте — staging.** Каталог 0700 с `<name>/` (копия `dir`), `record.json` (элемент `layers`; можно добавить
    `source_type`, `source_origin`) и `params.env` (все параметры слоя `KEY=VALUE`, 0600). Архив —
    `tar --owner=0 --group=0 --numeric-owner` (режимы и ссылки сохраняются): без этого в госте файлы окажутся с uid
    пользователя хоста, и проверка «владелец root» отвергнет `params.env` (77). Архив удаляется после вызова.
-3. **Один вызов `virt-customize` на слой:**
+3. **Один вызов `virt-customize` на слой** (Р30: последовательность идёт и на `virt-customize` 1.48 Debian 12, где
+   нет `--tar-in`; `tar -C` в госте нужен готовый каталог, поэтому `--mkdir` обязателен):
    ```
    --copy-in /usr/lib/cream/guest/linux-<arch>/cream:/usr/bin
    --chmod 0755:/usr/bin/cream
    --run-command '/usr/bin/cream system init'
-   --tar-in <staging>/<id>.tar:/var/lib/cream/incoming/<id>
+   --mkdir /var/lib/cream/incoming/<id>
+   --copy-in <staging>/<id>.tar:/var/lib/cream/incoming/
+   --run-command 'tar -C /var/lib/cream/incoming/<id> --numeric-owner -xf /var/lib/cream/incoming/<id>.tar
+        && rm -f /var/lib/cream/incoming/<id>.tar'
    --run-command '/usr/bin/cream --json install --phase build
         --from-dir /var/lib/cream/incoming/<id>/<name>
         --record /var/lib/cream/incoming/<id>/record.json
         --params-file /var/lib/cream/incoming/<id>/params.env --remove-params-file'
    ```
    Гостевой бинарь берётся из пакета cream на хосте и копируется всегда: версия в образе равна версии хоста.
+   Распаковка в госте идёт от root, `--numeric-owner` сохраняет владельца 0:0 из архива. Секретные параметры в
+   шаге 1 называются только именем (`KEY` или `KEY=-`, Р28), значения — только в `params.env`.
 4. **cream в госте** под `lock/global`: сверяет имя, версию, `ext_digest` дерева и `params_digest` параметров с
    `record.json` (65 `record.mismatch`, `details.field`); проверяет `platform` и граф по **реестру гостя**
    (зависимости из FROM учитываются); ставит `/usr/sbin/policy-rc.d` (exit 101) на время хука, если его не было, и

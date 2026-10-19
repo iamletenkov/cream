@@ -29,8 +29,8 @@ func buildEngine(t *testing.T) *testEngine {
 	return te
 }
 
-// buildIncoming раскладывает приёмник incoming/<id>, как bisquite через
-// --tar-in: дерево src в <id>/<имя>, params.env (0600) с телом params и
+// buildIncoming раскладывает приёмник incoming/<id>, как bisquite распаковкой
+// архива (Р30): дерево src в <id>/<имя>, params.env (0600) с телом params и
 // record.json — слой resolve с отпечатком дерева и params_digest от
 // paramsForDigest (nil — от params). Возвращает запрос фазы build.
 func buildIncoming(t *testing.T, te *testEngine, id, src, params string, mutate ...func(*resolve.Layer)) BuildRequest {

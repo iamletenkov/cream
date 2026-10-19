@@ -30,13 +30,6 @@ fail() {
 eq() { [ "$1" = "$2" ] && ok "$3" || fail "$3: «$1» ≠ «$2»"; }
 log() { echo "== $*"; }
 
-# --tar-in есть в virt-customize 1.52 (Debian 13), а в 1.48 (Debian 12) его нет:
-# последовательность docs/cli.md там не выполнима — отказ сразу, а не на слое.
-virt-customize --help 2>&1 | grep -q -- '--tar-in' || {
-	echo "scenario.sh: $(virt-customize --version) не знает --tar-in (в контейнере Debian 13 — 1.52; запустите без TEST_BUILD_HOST=1)" >&2
-	exit 69
-}
-
 # --- Пакет: хостовый cream и гостевой бинарь из того же .deb ----------------
 pkg=$work/pkg
 dpkg-deb -x "$deb" "$pkg"
@@ -64,19 +57,22 @@ secret2=cream-secret-$(rnd)
 envtag=build-$(rnd)
 
 # --- Разрешение на хосте (шаг 1) ---------------------------------------------
-# resolve принимает секрет только в argv, а params_digest от значения секрета
-# не зависит (`KEY=<secret>`): хосту хватает заглушки, настоящее значение идёт
-# только в params.env.
+# Секрет resolve называется только именем (Р28: голое KEY или KEY=-, литерал —
+# 64 secret.in_argv): params_digest от значения секрета не зависит
+# (`KEY=<secret>`), настоящее значение идёт только в params.env.
 resolve() {
 	hc resolve --phase build --target-arch amd64 --host-arch amd64 --family deb "$@"
 }
 resolve pilot/cloud-user pilot/fixture-docker-like DOCKER_LOG_LEVEL=debug \
-	pilot/fixture-teleport-like "FTL_ENV=$envtag" FTL_TOKEN=placeholder >"$work/resolve.json"
+	pilot/fixture-teleport-like "FTL_ENV=$envtag" FTL_TOKEN >"$work/resolve.json"
 eq "$(jq -r '[.result.layers[].name] | join(" ")' "$work/resolve.json")" \
 	"cloud-user fixture-docker-like fixture-teleport-like" "resolve --phase build: три слоя в порядке установки"
 eq "$(jq -r '.result.layers[2].secret_params | join(",")' "$work/resolve.json")" FTL_TOKEN \
 	"resolve: секрет назван в secret_params"
-grep -qF placeholder "$work/resolve.json" && fail "resolve напечатал значение секрета"
+rc=0
+hc resolve --phase build --family deb pilot/fixture-teleport-like FTL_TOKEN=literal >"$work/resolve-lit.json" || rc=$?
+eq "$rc $(jq -r .error.code "$work/resolve-lit.json")" "64 secret.in_argv" "resolve: литерал секрета — 64 secret.in_argv"
+grep -qF literal "$work/resolve-lit.json" && fail "resolve напечатал значение секрета"
 ok "resolve не печатает значение секрета"
 resolve fixtures/failing-install FAIL=1 >"$work/resolve-fail.json"
 
@@ -102,12 +98,14 @@ stage() {
 	echo "$name"
 }
 
-# customize <id> <name> [--run-command …] — virt-customize слоя. --mkdir перед
-# --tar-in обязателен: tar_in libguestfs не создаёт каталог назначения (в
-# последовательности docs/cli.md его нет). На время вызова
-# фоном снимается `ps -eo args` в $pslog. Код virt-customize — в $vc_rc.
+# customize <id> <name> [--run-command …] — virt-customize слоя в
+# последовательности docs/cli.md «Для bisquite» (Р30, совместима с
+# virt-customize 1.48 Debian 12 — без --tar-in): --mkdir incoming/<id>,
+# --copy-in архива в incoming/, распаковка tar --numeric-owner в госте и
+# удаление архива. На время вызова фоном снимается `ps -eo args` в $pslog.
+# Код virt-customize — в $vc_rc.
 customize() {
-	local id=$1 name=$2 wp
+	local id=$1 name=$2 wp in=/var/lib/cream/incoming
 	shift 2
 	(while :; do
 		ps -eo args >>"$pslog" 2>/dev/null || true
@@ -119,8 +117,9 @@ customize() {
 		--copy-in "$guest:/usr/bin" \
 		--chmod 0755:/usr/bin/cream \
 		--run-command '/usr/bin/cream system init' \
-		--mkdir "/var/lib/cream/incoming/$id" \
-		--tar-in "$work/$id.tar:/var/lib/cream/incoming/$id" \
+		--mkdir "$in/$id" \
+		--copy-in "$work/$id.tar:$in/" \
+		--run-command "tar -C $in/$id --numeric-owner -xf $in/$id.tar && rm -f $in/$id.tar" \
 		"$@" || vc_rc=$?
 	kill "$wp" 2>/dev/null || true
 	wait "$wp" 2>/dev/null || true
@@ -248,6 +247,8 @@ for n in neg-mismatch neg-hook; do
 	[ -e "$out/varlib/incoming/${ids[$n]}/params.env" ] && fail "params.env ($n) остался"
 	ok "$n: incoming/${ids[$n]} оставлен, params.env удалён"
 done
+if find "$out/varlib/incoming" -maxdepth 1 -name '*.tar' | grep -q .; then fail "архив слоя остался в incoming/"; fi
+ok "архивы слоёв из incoming/ удалены после распаковки"
 if find "$out/varlib" -name params.env | grep -q .; then fail "params.env остался в /var/lib/cream"; fi
 ok "params.env нигде в /var/lib/cream"
 
