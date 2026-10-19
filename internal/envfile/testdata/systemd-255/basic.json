@@ -1,0 +1,8 @@
+{
+  "env": [
+    "A=1",
+    "B=two words",
+    "C=",
+    "D=x #not a comment"
+  ]
+}

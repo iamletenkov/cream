@@ -1,0 +1,7 @@
+#!/bin/sh
+# Модель docker: выключить службу до того, как cream уберёт её юнит.
+set -eu
+if [ -d /run/systemd/system ]; then
+	systemctl stop fixture-dockerd.service || true
+fi
+systemctl disable fixture-dockerd.service || true

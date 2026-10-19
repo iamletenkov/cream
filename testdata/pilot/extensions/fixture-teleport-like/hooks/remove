@@ -1,0 +1,7 @@
+#!/bin/sh
+# Модель teleport: остановить и выключить службу до снятия её юнита.
+set -eu
+if [ -d /run/systemd/system ]; then
+	systemctl stop fixture-teleport.service || true
+fi
+systemctl disable fixture-teleport.service || true

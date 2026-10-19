@@ -1,0 +1,9 @@
+#!/bin/sh
+# Модель render teleport: конфиг службы из настроек домена (только чтение,
+# lock: none — зовётся из ExecStartPre). Каждый вызов — строка в render.log.
+set -eu
+mkdir -p /run/fixture-teleport-like "$CREAM_STATE_DIR"
+tmp=/run/fixture-teleport-like/.teleport.yaml
+printf 'proxy: %s\nlabels: %s\nenv: %s\n' "$FTL_PROXY" "$FTL_MANAGED_LABELS" "$FTL_ENV" >"$tmp"
+mv "$tmp" /run/fixture-teleport-like/teleport.yaml
+printf 'phase=%s labels=%s\n' "$CREAM_PHASE" "$FTL_MANAGED_LABELS" >>"$CREAM_STATE_DIR/render.log"

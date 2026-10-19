@@ -24,6 +24,10 @@ ARCH           ?= amd64
 RELEASE_DIR    ?= dist/release
 # Подкаталог .cache/ под кеш сборки Go: repro-check собирает в разных кешах.
 GOCACHE_DIR    ?= go-build
+# Живая интеграция (§14): DISTRO — один из test/integration/run.sh или all
+# (= INTEGRATION_DISTROS по очереди); пакет — $(RELEASE_DIR)/cream_<v>_$(ARCH).deb.
+DISTRO             ?= debian-12
+INTEGRATION_DISTROS ?= debian-12 ubuntu-24.04
 LDFLAGS        := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 
 UID := $(shell id -u)
@@ -43,7 +47,8 @@ GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -p
 
 .DEFAULT_GOAL := help
 .PHONY: help build build-all test test-golden lint fmt tidy ci ci-unlocked clean cache \
-	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln
+	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln \
+	test-integration test-integration-unlocked envfile-refs
 
 help: ## список целей
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -113,6 +118,21 @@ dist-release-unlocked: build-all
 
 repro-check: ## две сборки dist-release с одним SOURCE_DATE_EPOCH — sha256 совпадают (под замком)
 	$(HEAVY) env MAKE="$(MAKE)" sh scripts/repro-check.sh
+
+test-integration: ## .deb в контейнере с systemd, сценарии test/integration (DISTRO=debian-12|ubuntu-24.04|debian-13|all; под замком)
+	$(HEAVY) $(MAKE) --no-print-directory test-integration-unlocked
+
+# Контейнеры — по одному (cream-it-<distro>, удаляются run.sh); лог каждого
+# прогона — .scratchpad/test-runs/integration-<distro>-<время>/.
+test-integration-unlocked: deb-unlocked
+	@set -e; for d in $(if $(filter all,$(DISTRO)),$(INTEGRATION_DISTROS),$(DISTRO)); do \
+		log=.scratchpad/test-runs/integration-$$d-$$(date +%Y%m%d-%H%M%S); \
+		echo "== integration $$d ($(ARCH)) → $$log"; \
+		ARCH=$(ARCH) bash test/integration/run.sh $$d $(RELEASE_DIR)/cream_$(DEB_VERSION)_$(ARCH).deb $$log; \
+	done
+
+envfile-refs: ## переснять эталоны EnvironmentFile systemd 249/252/255/257 (internal/envfile/testdata; под замком)
+	$(HEAVY) bash test/integration/capture-envfile.sh
 
 # go run …@версия собирает govulncheck вне модуля: go.mod/go.sum не меняются,
 # модули инструмента — в отдельном .cache/vuln-mod.

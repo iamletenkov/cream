@@ -1,0 +1,7 @@
+{
+  "env": [
+    "A=x y  ",
+    "B=a\\b\\",
+    "C=multi\nline"
+  ]
+}

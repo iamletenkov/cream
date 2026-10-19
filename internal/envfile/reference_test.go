@@ -35,7 +35,7 @@ func TestReferenceSystemd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(dirs) == 0 {
-		t.Skip("эталоны systemd снимает Task 19 (testdata/systemd-<ver>/ пока нет)")
+		t.Fatal("нет эталонов testdata/systemd-<ver>/ (снимает test/integration/capture-envfile.sh)")
 	}
 	cases := caseFiles(t)
 	for _, dir := range dirs {
@@ -86,6 +86,43 @@ func TestReferenceSystemd(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// The versions §14 names are all captured, and the divergence on a comment
+// ending in `\` is pinned: systemd 249 (and 252) continue the comment onto
+// the next line and lose A, 255+ (and 257) end the comment at the newline.
+// Parse refuses that file (errDialect) precisely because of this row.
+func TestReferenceCommentBackslashDiverges(t *testing.T) {
+	t.Parallel()
+	load := func(ver string) reference {
+		t.Helper()
+		raw, err := os.ReadFile(filepath.Join("testdata", "systemd-"+ver, "comment-backslash.json"))
+		if err != nil {
+			t.Fatalf("эталон systemd %s: %v", ver, err)
+		}
+		var ref reference
+		if err := json.Unmarshal(raw, &ref); err != nil {
+			t.Fatalf("эталон systemd %s: %v", ver, err)
+		}
+		return ref
+	}
+	tests := []struct {
+		ver  string
+		want []string
+	}{
+		{"249", []string{"B=2"}},
+		{"252", []string{"B=2"}},
+		{"255", []string{"A=1", "B=2"}},
+		{"257", []string{"A=1", "B=2"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.ver, func(t *testing.T) {
+			t.Parallel()
+			if got := load(tc.ver); got.Error || !reflect.DeepEqual(got.Env, tc.want) {
+				t.Errorf("systemd %s: comment-backslash = %+v, want env %q", tc.ver, got, tc.want)
+			}
+		})
 	}
 }
 

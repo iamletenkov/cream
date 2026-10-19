@@ -1,0 +1,12 @@
+[Unit]
+Description=cream pilot: служба-пустышка модели teleport
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/cream/fixture-teleport-like/config
+ExecStartPre=/usr/bin/cream run fixture-teleport-like render
+ExecStart=/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

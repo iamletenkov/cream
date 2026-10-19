@@ -1,0 +1,19 @@
+#!/bin/sh
+# Модель set-managed teleport (спека stvor-agent): метки key=value из argv →
+# readonly-ключ FTL_MANAGED_LABELS вложенным cream set --allow-readonly, затем
+# синхронный restart службы. ExecStartPre службы зовёт render с lock: none, и
+# restart завершается, пока set-managed держит lock/fixture-teleport-like.
+# Коды: 0 — применено, 1 — restart не подтверждён, 2 — неверный ввод.
+set -eu
+for kv in "$@"; do
+	if ! printf '%s\n' "$kv" | grep -Eq '^[a-z][a-z0-9_]{0,62}=[a-z0-9][a-z0-9._-]{0,62}$'; then
+		echo "set-managed: неверная метка: $kv" >&2
+		exit 2
+	fi
+done
+labels="$*"
+cream set --allow-readonly --no-apply fixture-teleport-like "FTL_MANAGED_LABELS=$labels" >&2
+systemctl restart fixture-teleport.service || exit 1
+rendered=$(sed -n 's/^labels: //p' /run/fixture-teleport-like/teleport.yaml)
+[ "$rendered" = "$labels" ] || { echo "set-managed: render не подхватил метки" >&2; exit 1; }
+printf '{"applied":true,"labels":"%s","count":%d}\n' "$labels" "$#"

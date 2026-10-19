@@ -1,0 +1,6 @@
+#!/bin/sh
+# Модель managed-status teleport: ровно один JSON-объект в stdout.
+set -eu
+rendered=$(sed -n 's/^labels: //p' /run/fixture-teleport-like/teleport.yaml 2>/dev/null || true)
+service=$(systemctl is-active fixture-teleport.service 2>/dev/null || true)
+printf '{"labels":"%s","rendered":"%s","service":"%s"}\n' "$FTL_MANAGED_LABELS" "$rendered" "$service"
