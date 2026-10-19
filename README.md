@@ -1,23 +1,68 @@
 # cream
 
 Исполнитель расширений для машин и образов: один статический бинарь `cream`
-(linux/amd64, linux/arm64), который будет ставиться пакетом `.deb`.
+(linux/amd64, linux/arm64), ставится пакетом `.deb`.
 
-Что будет уметь (по решению 2026-10-18, детали — в спеке):
+cream:
 
-- читать манифест расширения `extension.yaml`;
-- вести жизненный цикл `install` / `upgrade` / `configure` / `remove` на живой
-  машине и фазу `build` внутри `virt-customize` (её вызывает
-  [bisquite](https://github.com/iamletenkov/bisquite) в слоях сборки образа);
-- хранить состояние установленного;
-- `cream set` / `cream show` — настройки расширений (бывший `bisquite-conf`);
-- брать расширения из источников-каталогов, например
-  [cream-extensions](https://github.com/iamletenkov/cream-extensions).
+- читает манифест расширения `extension.yaml` (формат `cream/v1`);
+- ведёт жизненный цикл `install` / `upgrade` / `configure` / `remove` на живой
+  машине и фазу `build` внутри `virt-customize` — её вызывает
+  [bisquite](https://github.com/iamletenkov/bisquite) в слоях сборки образа;
+- хранит состояние установленного в `/var/lib/cream`;
+- `cream set` / `cream show` — типизированные настройки расширений (бывший
+  `bisquite-conf`), совместимые с `EnvironmentFile` systemd;
+- `cream run` / `cream actions` — действия расширений с машинно-читаемым
+  выводом (через них работает stvor-agent);
+- берёт расширения из источников-каталогов, например
+  [cream-extensions](https://github.com/iamletenkov/cream-extensions); сеть —
+  только в `cream source sync`.
 
-## Статус
+## Установка
 
-**Каркас.** Есть только `cream version`; спека в работе. Текущее состояние —
-[docs/STATUS.md](docs/STATUS.md), документация — [docs/README.md](docs/README.md).
+Пакеты лежат в [выпусках GitHub](https://github.com/iamletenkov/cream/releases):
+`cream_<версия>_amd64.deb`, `cream_<версия>_arm64.deb`, тарболы
+`cream_<версия>_linux_<arch>.tar.gz` и `SHA256SUMS`.
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+sudo apt install ./cream_1.0.0_amd64.deb
+cream version
+```
+
+Пакет кладёт `/usr/bin/cream`, шаблон юнита `cream-configure@.service` и
+гостевые бинари обеих архитектур для хоста сборки
+(`/usr/lib/cream/guest/linux-{amd64,arm64}/cream`); `postinst` делает
+`cream system init`. Зависимостей нет; `Suggests: git, libguestfs-tools`.
+
+## Быстрый старт
+
+```bash
+# источник — архив каталога по URL и sha256, сразу синхронизировать
+sudo cream source add core \
+  --archive https://example.org/cream-extensions-4.0.0.tar.gz \
+  --sha256 <sha256 архива> --sync
+
+# установить расширение с параметрами; секрет — только со stdin (KEY=-)
+sudo cream install core/teleport TELEPORT_PROXY=proxy.example:443
+
+cream list
+cream show teleport
+sudo cream set teleport TELEPORT_PROXY=proxy2.example:443
+cream actions teleport --json
+```
+
+Все команды, флаги, коды выхода и формы `--json` — в [docs/cli.md](docs/cli.md).
+
+## Документация
+
+- [docs/cli.md](docs/cli.md) — справочник CLI, контракт для stvor-agent, фаза
+  build для bisquite;
+- [спека cream/v1](docs/specs/2026-10-18-cream-core.md) — формат расширения,
+  жизненный цикл, настройки, источники;
+- [ADR](docs/adr/README.md) — решения, которые трудно откатить;
+- [docs/README.md](docs/README.md) — индекс, [docs/STATUS.md](docs/STATUS.md) —
+  текущее состояние.
 
 ## Сборка
 

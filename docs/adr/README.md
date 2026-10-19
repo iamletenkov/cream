@@ -5,4 +5,5 @@
 
 | № | Решение | Статус | Дата |
 |---|---|---|---|
-| — | пока нет | — | — |
+| [0001](0001-contract-cream-v1.md) | контракт cream/v1: формат расширения, пути на машине, CLI, коды выхода, `--json` | Accepted | 2026-10-18 |
+| [0002](0002-single-dependency-stdlib-cli.md) | одна внешняя зависимость (yaml), CLI на stdlib `flag`, `.deb` через nfpm без goreleaser | Accepted | 2026-10-18 |
