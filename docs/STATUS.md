@@ -1,5 +1,11 @@
 # Статус cream
 
+**1.1.0 (ветка `feature/cream-1.1`, задача 1 плана перевода каталога `cream-extensions`):** стадии configure
+`early`, `cloud-user`, `graphical` (§6.4, манифест требует `cream: ">=1.1.0"`) и `cream resolve --installed FILE`
+готовы; сборка не с тега (`git describe`) теперь dev. Проверено: `make ci`, `make vuln`, `make test-integration`
+debian-12 и ubuntu-24.04 (с набором `desktop`: gdm3 + cloud-init, без `ordering cycle`). Статическая проверка графа
+в `cream validate --catalog` и выпуск 1.1.0 — задача 4 того же плана.
+
 **Фаза:** MVP 1.0 готов к выпуску — все 23 задачи [плана](plans/2026-10-18-cream-core.md) закрыты (2026-10-19);
 ветка `feature/cream-mvp` ждёт PR в `main` с футером `Release-As: 1.0.0`.
 
@@ -22,6 +28,8 @@
 3. Интеграция bisquite: фаза build по [docs/cli.md «Для bisquite»](cli.md#для-bisquite-фаза-build).
 
 ## Бэклог
+- `cream system init` перемещает ссылку стадии `cloud-user`, но `configure.target` в реестре остаётся прежним
+  (поле справочное; пересчёт — при следующем `install`/`upgrade`).
 - `runner` ставит действию `Setpgid`: с `stdin: pass` оно в фоновой группе терминала, чтение с tty даст SIGTTIN.
 - Образы CI и тестов закреплять по digest, а не по тегу.
 - CI на PR release-please: PR, открытый под `GITHUB_TOKEN`, не запускает workflow — проверки релизного PR не идут.
