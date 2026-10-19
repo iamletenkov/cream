@@ -87,6 +87,7 @@ check_tarball() {
 	cat >"$work/want" <<-LIST
 		-rw-r--r-- 0/0 LICENSE
 		-rw-r--r-- 0/0 NOTICE
+		-rw-r--r-- 0/0 copyright
 		-rw-r--r-- 0/0 cream-configure@.service
 		-rwxr-xr-x 0/0 cream
 	LIST
@@ -98,6 +99,9 @@ check_tarball() {
 	mkdir "$work/t" && tar -xzf "$tgz" -C "$work/t"
 	cmp -s "$work/t/cream-configure@.service" "$unit_src" || bad "$tgz: юнит отличается от $unit_src"
 	cmp -s "$work/t/LICENSE" LICENSE || bad "$tgz: LICENSE отличается"
+	cmp -s "$work/t/copyright" packaging/copyright || bad "$tgz: copyright отличается от packaging/copyright"
+	grep -q 'Permission is hereby granted' "$work/t/copyright" || bad "$tgz: в copyright нет текста MIT"
+	grep -q 'Neither the name of Google LLC' "$work/t/copyright" || bad "$tgz: в copyright нет текста BSD-3-Clause"
 	[ "$(elf_machine "$work/t/cream")" = "$(machine_of "$arch")" ] || bad "$tgz: cream не под $arch"
 	[ "$fail" = 0 ] && echo "check-deb: $tgz — состав верен"
 }
