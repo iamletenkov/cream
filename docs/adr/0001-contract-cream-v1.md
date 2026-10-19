@@ -71,9 +71,13 @@ golden-формы позволяют bisquite и stvor-agent ветвиться 
 - **Р10** — тип `host`: DNS-имя, IPv4 или IPv6 с необязательным `:port`.
 - **Р11** — расширение A может класть файлы в каталог настроек B; владение — по реестру A, конфликт 67 — только при
   том же `dst` у другого расширения.
+- **Р28** — в `cream resolve` секретный ключ задаётся только именем: `KEY=-` или голое `KEY` (stdin не читается,
+  в `params_digest` секрет всё равно `<secret>`); литеральное значение — 64 `secret.in_argv`.
+- **Р29** — ввод-вывод файлов — 74 `io.read` / `io.write`, чтение stdin — 74 `io.stdin`; `state.corrupt` и
+  `state.newer` — о содержимом реестра, не о вводе-выводе.
 
 ## Связанные ADR / документы
 - [docs/specs/2026-10-18-cream-core.md](../specs/2026-10-18-cream-core.md) — §4, §5, §10, §11, §12.4, §18
-- [docs/plans/2026-10-18-cream-core.md](../plans/2026-10-18-cream-core.md) — рулинги Р1–Р24
+- [docs/plans/2026-10-18-cream-core.md](../plans/2026-10-18-cream-core.md) — рулинги Р1–Р31
 - [docs/cli.md](../cli.md) — справочник CLI и формы `result`
 - [ADR 0002](0002-single-dependency-stdlib-cli.md) — как реализован CLI и чем собирается пакет

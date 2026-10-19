@@ -16,6 +16,7 @@ import (
 
 	"github.com/iamletenkov/cream/internal/catalog"
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/resolve"
 	"github.com/iamletenkov/cream/internal/source"
 	"github.com/iamletenkov/cream/internal/state"
@@ -336,10 +337,12 @@ func runResolve(ctx *Context, d catalogDeps, f resolveFlags, args []string) (any
 func resolveParseArgs(args []string) ([]resolveRequest, error) {
 	var reqs []resolveRequest
 	for _, a := range args {
-		if strings.Contains(a, "=") {
+		// K=V или голое имя ключа (секрет без значения, Р28): имена ключей —
+		// [A-Z…], имена расширений — [a-z…], так что спутать их нельзя.
+		if strings.Contains(a, "=") || manifest.ValidKey(a) {
 			if len(reqs) == 0 {
 				name, _, _ := strings.Cut(a, "=")
-				return nil, cerr.New(cerr.ExitUsage, "usage.args", "resolve: параметр %s= до первой ссылки", name)
+				return nil, cerr.New(cerr.ExitUsage, "usage.args", "resolve: параметр %s до первой ссылки", name)
 			}
 			reqs[len(reqs)-1].params = append(reqs[len(reqs)-1].params, a)
 			continue
@@ -358,32 +361,39 @@ func resolveParseArgs(args []string) ([]resolveRequest, error) {
 
 // resolveParams checks K=V of one extension: a key of its config.keys
 // (65 config.unknown_key), given once (64), a valid value (65
-// config.invalid; the value of a secret is never quoted).
+// config.invalid). A secret is named, never valued (ruling Р28): KEY=- or
+// a bare KEY, stdin is not read — params_digest takes "<secret>" anyway;
+// any literal is 64 secret.in_argv. A bare non-secret key is 64 usage.args.
 func resolveParams(e catalog.Entry, args []string) (map[string]string, error) {
 	out := make(map[string]string, len(args))
 	ext := e.Manifest.Name
 	for _, a := range args {
-		k, v, _ := strings.Cut(a, "=")
+		k, v, valued := strings.Cut(a, "=")
 		details := map[string]any{"ext": ext, "key": k}
+		fail := func(ce *cerr.Error) (map[string]string, error) {
+			ce.Details = details
+			return nil, ce
+		}
 		sp, ok := e.Manifest.Config.Lookup(k)
 		if !ok {
-			ce := cerr.New(cerr.ExitData, "config.unknown_key", "%s: ключа %s нет в config.keys", ext, k)
-			ce.Details = details
-			return nil, ce
+			return fail(cerr.New(cerr.ExitData, "config.unknown_key", "%s: ключа %s нет в config.keys", ext, k))
 		}
 		if _, dup := out[k]; dup {
-			ce := cerr.New(cerr.ExitUsage, "usage.duplicate_key", "%s: ключ %s задан дважды", ext, k)
-			ce.Details = details
-			return nil, ce
+			return fail(cerr.New(cerr.ExitUsage, "usage.duplicate_key", "%s: ключ %s задан дважды", ext, k))
+		}
+		if sp.Secret != "" {
+			if valued && v != "-" {
+				return fail(cerr.New(cerr.ExitUsage, "secret.in_argv",
+					"%s: %s — секрет: значение в аргументах запрещено, укажите %s=- или %s", ext, k, k, k))
+			}
+			out[k] = ""
+			continue
+		}
+		if !valued {
+			return fail(cerr.New(cerr.ExitUsage, "usage.args", "%s: ключу %s нужно значение %s=V", ext, k, k))
 		}
 		if err := sp.CheckValue(v); err != nil {
-			why := err.Error()
-			if sp.Secret != "" {
-				why = "значение секрета не прошло проверку типа " + sp.Type.Raw
-			}
-			ce := cerr.New(cerr.ExitData, "config.invalid", "%s: %s: %s", ext, k, why)
-			ce.Details = details
-			return nil, ce
+			return fail(cerr.New(cerr.ExitData, "config.invalid", "%s: %s: %v", ext, k, err))
 		}
 		out[k] = v
 	}

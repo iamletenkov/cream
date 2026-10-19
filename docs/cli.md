@@ -155,7 +155,9 @@ uid/gid 0, mtime = `SOURCE_DATE_EPOCH` (неверное значение — 64
 `cream resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] <ref> [K=V…] [<ref> [K=V…]]…`
 — офлайн-разрешение слоёв по кешу (без сети), для bisquite (§12.1, §12.4). Ссылка — `[source/]name[@version]`;
 параметры `K=V` относятся к предыдущей ссылке (до первой ссылки — 64). Неизвестный ключ — 65 `config.unknown_key`,
-неверное значение — 65 `config.invalid`, повтор ключа — 64 `usage.duplicate_key`.
+неверное значение — 65 `config.invalid`, повтор ключа — 64 `usage.duplicate_key`. Секретный ключ задаётся только
+именем — `KEY=-` или голое `KEY` (Р28): значение `resolve` не нужно (в `params_digest` секрет — `<secret>`), stdin
+не читается; литерал, в том числе пустой, — 64 `secret.in_argv`. Голое имя несекретного ключа — 64 `usage.args`.
 
 | Флаг | Смысл |
 |---|---|

@@ -224,7 +224,7 @@ func TestGoldenResolve(t *testing.T) {
 	}{
 		{name: "resolve-depends-lib", args: append(build[:len(build):len(build)], "depends-lib", "fx/lib-fixture@1.0.0")},
 		{name: "resolve-params", args: append(build[:len(build):len(build)], "with-config", "COUNT=7",
-			"TOKEN=s3cr3t", "MODE=slow")},
+			"TOKEN=-", "MODE=slow")},
 		{name: "resolve-deps-missing", args: append(build[:len(build):len(build)], "depends-lib"), wantExit: 67},
 		{name: "resolve-arch-barrier", args: []string{"resolve", "--json", "--phase", "build", "--target-arch",
 			"arm64", "--host-arch", "amd64", "noop"}, wantExit: 68},
@@ -261,6 +261,10 @@ func TestResolveRefusals(t *testing.T) {
 		{"неизвестный ключ", append(b[:4:4], "with-config", "NOPE=1"), 65, "config.unknown_key"},
 		{"неверное значение", append(b[:4:4], "with-config", "COUNT=many"), 65, "config.invalid"},
 		{"ключ дважды", append(b[:4:4], "with-config", "COUNT=1", "COUNT=2"), 64, "usage.duplicate_key"},
+		{"секрет литералом", append(b[:4:4], "with-config", "TOKEN=s3cr3t"), 64, "secret.in_argv"},
+		{"пустой секрет", append(b[:4:4], "with-config", "TOKEN="), 64, "secret.in_argv"},
+		{"ключ без значения", append(b[:4:4], "with-config", "COUNT"), 64, "usage.args"},
+		{"голый ключ до ссылки", append(b[:4:4], "TOKEN", "with-config"), 64, "usage.args"},
 		{"нет расширения", append(b[:4:4], "nope"), 66, "not_found.extension"},
 		{"версия не та", append(b[:4:4], "noop@2.0.0"), 66, "version.mismatch"},
 		{"неверная фаза", []string{"--phase", "boot", "noop"}, 64, "usage.phase"},
@@ -274,6 +278,20 @@ func TestResolveRefusals(t *testing.T) {
 			t.Errorf("%s: exit %d code %q, want %d %q\n%s", tc.name, out.Code, sourceErrCode(t, out),
 				tc.wantExit, tc.wantCode, out.Stdout)
 		}
+	}
+
+	// Р28: секрет — только KEY=- или голое KEY; stdin не читается, оба дают один params_digest.
+	secretForms := map[string]string{}
+	for _, form := range []string{"TOKEN=-", "TOKEN"} {
+		out := sourceRunCLI(t, d, cliIn{Root: root, Stdin: "never-read"}, "resolve", "--json", "--phase", "build",
+			"--family", "deb", "with-config", form)
+		if out.Code != 0 || strings.Contains(out.Stdout, "never-read") {
+			t.Fatalf("%s: exit %d\n%s", form, out.Code, out.Stdout)
+		}
+		secretForms[form] = out.Stdout
+	}
+	if secretForms["TOKEN=-"] != secretForms["TOKEN"] {
+		t.Errorf("TOKEN=- и TOKEN дают разный вывод:\n%s\n%s", secretForms["TOKEN=-"], secretForms["TOKEN"])
 	}
 
 	// Источник не синхронизирован — 69, а не 66.

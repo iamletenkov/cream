@@ -48,6 +48,13 @@ func reservedName(name string) bool {
 	return strings.HasPrefix(name, "CREAM_") || slices.Contains(reservedKeys, name)
 }
 
+// ValidKey сообщает, годится ли s в имена ключей домена и параметров
+// действий: [A-Z][A-Z0-9_]*, не занятое окружением хука (CREAM_*,
+// reservedKeys). Тот же список держит runner, пропуская ключи в окружение.
+func ValidKey(s string) bool {
+	return reKey.MatchString(s) && !reservedName(s)
+}
+
 // ValidName сообщает, годится ли s в имена расширений: регэксп §4.2, кроме
 // зарезервированных имён и префикса "cream-" (рулинг Р15).
 func ValidName(s string) bool {

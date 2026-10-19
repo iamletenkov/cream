@@ -407,6 +407,22 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   нового дерева с ними не запускается. Без смены дерева действие видит запись, прочитанную под блокировкой
   (`CREAM_EXT_VERSION`, домен).
 
+Рулинги контроллера после финального ревью (2026-10-19, задача 23):
+- **Р28.** `cream resolve`: секретный ключ — только `KEY=-` (stdin не читается: значение не нужно, в `params_digest`
+  всё равно `<secret>`) или голое имя `KEY`; литерал, в том числе пустой, — 64 `secret.in_argv`. Голое имя
+  несекретного ключа — 64 `usage.args`.
+- **Р29.** Строковые коды стабильны с 1.0, поэтому сведены сейчас: ошибка чтения файла или каталога (в том числе
+  `stat`/`lstat` существующего пути) — 74 `io.read` вместо `state.read`/`state.io`/`config.io`/`io.params_file`;
+  запись (создание каталога, запись, перенос, удаление) — 74 `io.write` вместо `state.write`/`config.io`; чтение
+  stdin — 74 `io.stdin` вместо 64 `usage.stdin`. `state.corrupt`/`state.newer` (содержимое) остаются, как и
+  `state.lock_*`, `file.stat`, `io.stdout`/`io.stderr`.
+- **Р30.** Фаза build совместима с `virt-customize` 1.48 (Debian 12, нет `--tar-in`): `--mkdir
+  /var/lib/cream/incoming/<id>` → `--copy-in <id>.tar:/var/lib/cream/incoming/` → `--run-command 'tar -C
+  /var/lib/cream/incoming/<id> --numeric-owner -xf /var/lib/cream/incoming/<id>.tar && rm -f
+  /var/lib/cream/incoming/<id>.tar'` → `--run-command 'cream --json install --phase build …'`.
+- **Р31.** release-please: `initial-version: "1.0.0"`, первая версия — 1.0.0; коммит слияния несёт футер
+  `Release-As: 1.0.0` (ставит контроллер). PR «release 0.1.0» не трогается.
+
 ## Задачи
 
 ### Волна 1 — фундамент (T1 ∥ T2 ∥ T3)
