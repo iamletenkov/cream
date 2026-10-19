@@ -15,6 +15,7 @@
 2. Задача 23: ревью ветки, `make ci`, PR `feature/cream-mvp` → `main` с `Release-As: 1.0.0`.
 3. После выпуска — шаг 2 §16 спеки: пилот в `cream-extensions`.
 4. Карта репозитория в `AGENTS.md` (`internal/*`, `packaging/`, `test/`, `testdata/`) — ещё «каркас», обновить.
+5. Бэклог: `runner` ставит действию `Setpgid` — с `stdin: pass` оно в фоновой группе терминала, чтение с tty даст SIGTTIN (остановку).
 
 ## Сломано
 - Ничего известного.
