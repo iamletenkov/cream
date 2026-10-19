@@ -50,7 +50,8 @@ type ActionResult struct {
 // start: the extension and the action (66), the phase (68 action.phase), root
 // (77), the arguments (64/65), then lock/<ext> by the action's lock (75);
 // under the lock the extension and its domain are read again (an upgrade
-// that changed the action's lock is 75 lock.changed). The action's own code 0–63 is ActionResult.ExitCode with a nil error; a code
+// that replaced the tree meanwhile is 75 lock.changed, Р27). The action's own
+// code 0–63 is ActionResult.ExitCode with a nil error; a code
 // outside that range or stdout that is not exactly one JSON object for
 // output: json is 76 action.protocol; a timeout is 79 action.timeout.
 //
@@ -88,10 +89,14 @@ func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, 
 		if err != nil {
 			return res, err
 		}
-		if a2.Lock != a.Lock {
+		// An upgrade the action waited for replaced the tree (Р27): the
+		// arguments were checked against the old manifest, so the caller retries.
+		if again.Record.ExtDigest != in.Record.ExtDigest {
 			ce := cerr.New(cerr.ExitLock, "lock.changed",
-				"%s: расширение обновлено во время ожидания блокировки (lock: %s → %s) — повторите", res.Action, a.Lock, a2.Lock)
-			ce.Details = map[string]any{"action": res.Action, "lock": string(a.Lock), "found": string(a2.Lock)}
+				"%s: расширение обновлено во время ожидания блокировки (%s → %s) — повторите",
+				res.Action, in.Record.Version, again.Record.Version)
+			ce.Details = map[string]any{"action": res.Action, "lock": string(a.Lock), "found": string(a2.Lock),
+				"version": in.Record.Version, "found_version": again.Record.Version}
 			return res, ce
 		}
 		in, a = again, a2
