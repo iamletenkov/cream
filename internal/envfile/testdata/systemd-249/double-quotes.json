@@ -1,0 +1,9 @@
+{
+  "env": [
+    "A=x y  ",
+    "B=q\" b\\ d$ t`",
+    "C=a\\nb\\x",
+    "D=abcd",
+    "E=multi\nline"
+  ]
+}
