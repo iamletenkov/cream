@@ -58,6 +58,16 @@ inst() {
 	exists "$W/$2.wants/cream-configure@${1#*/}.service" "${1#*/}: ссылка в $2.wants"
 }
 inst fixtures/configure-cloud-user cloud-init.target
+# cloud-init «исчез» и вернулся: system init переносит ссылку и цель в реестре.
+mv /usr/lib/systemd/system/cloud-final.service /tmp/cloud-final.service
+c system init
+want_rc 0 "system init без cloud-init"
+eq "$(reg configure-cloud-user .configure.target)" multi-user.target "cloud-user: цель в реестре без cloud-init"
+exists $W/multi-user.target.wants/cream-configure@configure-cloud-user.service "cloud-user: ссылка в multi-user.target.wants"
+mv /tmp/cloud-final.service /usr/lib/systemd/system/cloud-final.service
+c system init
+want_rc 0 "system init с cloud-init"
+eq "$(reg configure-cloud-user .configure.target)" cloud-init.target "cloud-user: цель в реестре с cloud-init"
 absent $W/multi-user.target.wants/cream-configure@configure-cloud-user.service "cloud-user не в multi-user.target.wants"
 inst fixtures/configure-graphical graphical.target
 inst desk/desktop-like multi-user.target

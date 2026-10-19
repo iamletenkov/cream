@@ -1,0 +1,10 @@
+schema: cream/v1
+name: cyc-a
+version: 1.0.0
+summary: фикстура графа cyc-a
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Ошибка: цикл depends cyc-a → cyc-b → cyc-a.
+depends: [{name: cyc-b}]
+hooks:
+  install: {}

@@ -1,0 +1,9 @@
+schema: cream/v1
+name: newer
+version: 1.0.0
+summary: фикстура графа newer
+cream: ">=1.99.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Требует cream новее исполнителя: в каталоге пропускается (Р22).
+hooks:
+  install: {}

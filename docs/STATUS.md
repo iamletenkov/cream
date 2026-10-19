@@ -1,13 +1,13 @@
 # Статус cream
 
-**1.1.0 (ветка `feature/cream-1.1`, задача 1 плана перевода каталога `cream-extensions`):** стадии configure
-`early`, `cloud-user`, `graphical` (§6.4, манифест требует `cream: ">=1.1.0"`) и `cream resolve --installed FILE`
-готовы; сборка не с тега (`git describe`) теперь dev. Проверено: `make ci`, `make vuln`, `make test-integration`
-debian-12 и ubuntu-24.04 (с набором `desktop`: gdm3 + cloud-init, без `ordering cycle`). Статическая проверка графа
-в `cream validate --catalog` и выпуск 1.1.0 — задача 4 того же плана.
+**1.1.0 (ветка `feature/cream-1.1`, задачи 1 и 4 плана перевода каталога `cream-extensions`):** стадии configure
+`early`, `cloud-user`, `graphical` (§6.4, манифест требует `cream: ">=1.1.0"`; `graphical` — после `multi-user.target`
+и менеджера входа), `cream resolve --installed FILE`, граф каталога в `cream validate --catalog`, `system init`
+обновляет `configure.target` реестра; сборка не с тега (`git describe`) — dev. Проверено: `make ci`, `make vuln`,
+`make test-integration` debian-12 и ubuntu-24.04 (с набором `desktop`: gdm3 + cloud-init, без `ordering cycle`).
+Дальше — PR в `main` и выпуск 1.1.0 через release-please.
 
-**Фаза:** MVP 1.0 готов к выпуску — все 23 задачи [плана](plans/2026-10-18-cream-core.md) закрыты (2026-10-19);
-ветка `feature/cream-mvp` ждёт PR в `main` с футером `Release-As: 1.0.0`.
+**Фаза:** 1.0.0 выпущен (2026-10-19) — все 23 задачи [плана](plans/2026-10-18-cream-core.md) закрыты.
 
 ## Сделано
 - Формат `cream/v1`, источники archive/path и `catalog pack`, резолвер, исполнитель (`install`/`upgrade`/`remove`,
@@ -22,14 +22,12 @@ debian-12 и ubuntu-24.04 (с набором `desktop`: gdm3 + cloud-init, бе�
   [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), README, карта `AGENTS.md`.
 
 ## Дальше
-1. PR `feature/cream-mvp` → `main` (`Release-As: 1.0.0`), зелёный `gh pr checks` (в том числе arm64), выпуск
-   `v1.0.0`, сверка ассетов с `SHA256SUMS`.
-2. Шаг 2 §16 спеки: пилот каталога в `cream-extensions`.
+1. PR `feature/cream-1.1` → `main`, зелёный `gh pr checks` (в том числе arm64), выпуск `v1.1.0`, сверка ассетов
+   с `SHA256SUMS`.
+2. Шаг 3 §16 спеки: перевод каталога `cream-extensions` на cream/v1 (пин 1.1.0).
 3. Интеграция bisquite: фаза build по [docs/cli.md «Для bisquite»](cli.md#для-bisquite-фаза-build).
 
 ## Бэклог
-- `cream system init` перемещает ссылку стадии `cloud-user`, но `configure.target` в реестре остаётся прежним
-  (поле справочное; пересчёт — при следующем `install`/`upgrade`).
 - `runner` ставит действию `Setpgid`: с `stdin: pass` оно в фоновой группе терминала, чтение с tty даст SIGTTIN.
 - Образы CI и тестов закреплять по digest, а не по тегу.
 - CI на PR release-please: PR, открытый под `GITHUB_TOKEN`, не запускает workflow — проверки релизного PR не идут.

@@ -79,6 +79,8 @@ func TestGoldenValidate(t *testing.T) {
 		{name: "validate-invalid", args: []string{"validate", "--json", "--catalog", "catalog-next",
 			"invalid/hook-undeclared/extensions/hook-undeclared"}, wantExit: 65},
 		{name: "validate-usage", args: []string{"validate", "--json"}, wantExit: 64},
+		// cream 1.1.0: граф каталога — depends (ошибки), requires и conflicts (предупреждения).
+		{name: "validate-graph", args: []string{"validate", "--json", "--catalog", "graph"}, wantExit: 65},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,0 +1,10 @@
+schema: cream/v1
+name: app
+version: 1.0.0
+summary: фикстура графа app
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Ошибка: в каталоге lib-a 1.0.0, а нужна >=2.0.0.
+depends: [{name: lib-a, version: ">=2.0.0 <3"}]
+hooks:
+  install: {}

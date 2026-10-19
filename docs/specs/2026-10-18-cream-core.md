@@ -394,7 +394,7 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 | `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
 | `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk; desktop и vino-vnc — с `before: [display-manager.service, …]` (настройка до менеджера входа) |
 | `cloud-user` (с 1.1.0) | `cloud-init.target.wants`, если в системе есть `cloud-final.service`, иначе `multi-user.target.wants` | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
-| `graphical` (с 1.1.0) | `graphical.target.wants` | `After=display-manager.service` (+ `after` манифеста) | kiosk, x11vnc, selkies, pixelflux-* |
+| `graphical` (с 1.1.0) | `graphical.target.wants` | `After=multi-user.target display-manager.service` (+ `after` манифеста; `multi-user` — чтобы на машине без менеджера входа стадия не стартовала раньше системных служб) | kiosk, x11vnc, selkies, pixelflux-* |
 
 `after`/`before`/`wants` манифеста дописываются к порядку стадии (у `early` — к `Before`/`Wants` стадии тоже).
 Стадия `graphical` — для того, что работает **поверх** запущенного менеджера входа; то, что менеджер входа
@@ -405,7 +405,7 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 Стадия `cloud-user` кодирует урок описи. `cloud-final` упорядочен `After=multi-user.target`, поэтому
 `WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Выбор цели по наличию cloud-init закрывает и случай
 «на живой машине без cloud-init configure не запускается никогда». cream пересчитывает цель при каждом
-`cream system init` и `upgrade`; cloud-init, поставленный на машину после расширения, требует `cream system init`
+`cream system init` (вместе с `configure.target` реестра) и `upgrade`; cloud-init, поставленный на машину после расширения, требует `cream system init`
 (иначе ссылка в `multi-user.target.wants` вместе с `After=cloud-final` — цикл). Порядок стадий и отсутствие циклов
 на загрузке проверяет интеграция cream (§14): `ubuntu:24.04` с `gdm3` и cloud-init, `journalctl -b` без
 `ordering cycle`.
@@ -1006,7 +1006,9 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 
 **Вошло в `v1.1.0`** (минорная версия, только добавления, ADR-0001): стадии configure `early`, `cloud-user`,
 `graphical` (§6.4; манифест с ними требует `cream: ">=1.1.0"`) — для шага 3 §16 (firewall, рабочие столы);
-`cream resolve --installed FILE` — расширения базы `FROM` слоя bisquite в графе фазы build (docs/cli.md).
+`cream resolve --installed FILE` — расширения базы `FROM` слоя bisquite в графе фазы build; статическая проверка графа
+в `cream validate --catalog` (`depends` и цикл — ошибки, `requires`/`conflicts` — предупреждения; синхронизацию не
+меняет); `cream system init` обновляет `configure.target` реестра (docs/cli.md).
 
 **Откладывается** (поле или команда резервируется, позже — минорная версия с подъёмом `cream:`):
 

@@ -121,7 +121,7 @@ func runValidate(ctx *Context, d catalogDeps, cat string, dirs []string) (any, e
 	for _, t := range targets {
 		var r catalog.Report
 		if t.kind == "catalog" {
-			r, _ = catalog.Validate(t.path, d.cream)
+			r, _ = catalog.ValidateCatalog(t.path, d.cream)
 		} else {
 			r, _ = catalog.ValidateDir(t.path, d.cream)
 		}

@@ -73,11 +73,17 @@ type loaded struct {
 // (Р22): it goes to NotApplicable with a catalog.cream_newer warning, so a
 // catalog published for a newer cream still syncs; installing it stays 68.
 func Validate(root string, cream manifest.CreamBuild) (Report, error) {
+	r, _ := validate(root, cream)
+	return r, r.Err()
+}
+
+// validate is Validate returning also the valid extensions (for the graph).
+func validate(root string, cream manifest.CreamBuild) (Report, []loaded) {
 	r := newReport()
 	cat, err := manifest.LoadCatalog(root)
 	if err != nil {
 		r.failErr("", manifest.CatalogFile, err)
-		return r, r.Err()
+		return r, nil
 	}
 	r.Catalog, r.CatalogVersion = cat.Name, cat.Version.String()
 	var exts []loaded
@@ -126,7 +132,7 @@ func Validate(root string, cream manifest.CreamBuild) (Report, error) {
 	for _, x := range exts {
 		warnExtension(&r, x, idx)
 	}
-	return r, r.Err()
+	return r, exts
 }
 
 // ValidateDir checks one extension directory (cream validate DIR…): the same

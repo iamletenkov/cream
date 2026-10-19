@@ -24,8 +24,12 @@ for t in sysinit.target network-pre.target; do
 	[ "$at" -gt 0 ] && [ "$early_done" -le "$at" ] || fail "early завершился ($early_done) не раньше $t ($at)"
 	ok "early завершился раньше $t"
 done
+gr_start=$(mono "cream-configure@$G.service" ExecMainStartTimestampMonotonic)
+mu=$(mono multi-user.target ActiveEnterTimestampMonotonic)
+[ "$mu" -gt 0 ] && [ "$gr_start" -ge "$mu" ] || fail "graphical стартовал ($gr_start) раньше multi-user.target ($mu)"
+ok "graphical стартовал после multi-user.target (машина без менеджера входа)"
 # Порядок cloud-user и graphical рядом с настоящими cloud-final и менеджером
-# входа — набор desktop (ubuntu-24.04): здесь их нет, After= на них пуст.
+# входа — набор desktop (ubuntu-24.04).
 
 step "журнал загрузки без циклов"
 eq "$(journalctl -b --no-pager | grep -c 'ordering cycle' || true)" 0 "ordering cycle в journalctl -b"

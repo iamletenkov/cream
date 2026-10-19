@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/state"
+	"github.com/iamletenkov/cream/internal/systemd"
 )
 
 func TestInstalledAndList(t *testing.T) {
@@ -170,6 +173,40 @@ func TestSystemInit(t *testing.T) {
 				t.Errorf("calls %v", te.Sys.Calls())
 			}
 		})
+	}
+}
+
+// cream 1.1.0: system init переносит ссылку стадии cloud-user по наличию
+// cloud-init и обновляет configure.target в реестре; прочие записи не трогает.
+func TestSystemInitUpdatesConfigureTarget(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	te.Cream = manifest.ParseCreamBuild("1.1.0")
+	seedInstalled(t, te, fixtureDir(t, "configure-cloud-user"))
+	seedInstalled(t, te, fixtureDir(t, "configure-system"))
+	for ext, stage := range map[string]string{"configure-cloud-user": "cloud-user", "configure-system": "system"} {
+		if _, err := systemd.Enable(te.L, ext, systemd.StageSpec{Stage: stage}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := os.ReadFile(te.L.InstalledFile("configure-system"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, te, "/usr/lib/systemd/system/cloud-final.service", "[Unit]\n", 0o644)
+	if _, err := te.SystemInit(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rec, ok, err := te.Store.Get("configure-cloud-user")
+	if err != nil || !ok || rec.Configure == nil || rec.Configure.Target != "cloud-init.target" {
+		t.Fatalf("реестр cloud-user: %+v %v %v", rec, ok, err)
+	}
+	link := filepath.Join(te.L.WantsDir("cloud-init.target"), systemd.UnitName("configure-cloud-user"))
+	if _, err := os.Lstat(link); err != nil {
+		t.Errorf("ссылка: %v", err)
+	}
+	if after, _ := os.ReadFile(te.L.InstalledFile("configure-system")); !bytes.Equal(after, before) {
+		t.Errorf("запись system переписана:\n%s", after)
 	}
 }
 

@@ -1,0 +1,10 @@
+schema: cream/v1
+name: cyc-b
+version: 1.0.0
+summary: фикстура графа cyc-b
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Часть цикла с cyc-a.
+depends: [{name: cyc-a}]
+hooks:
+  install: {}

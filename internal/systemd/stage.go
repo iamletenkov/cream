@@ -68,10 +68,12 @@ func stages() map[string]stageDef {
 			after:  []string{"cloud-final.service"},
 		},
 		// After the display manager: graphical.target, not multi-user, so the
-		// DM is not pulled before multi-user.target is reached.
+		// DM is not pulled before multi-user.target is reached; after
+		// multi-user.target too, so on a machine without a DM the stage does
+		// not start before the system services are up.
 		"graphical": {
 			target: fixed("graphical.target"),
-			after:  []string{"display-manager.service"},
+			after:  []string{"multi-user.target", "display-manager.service"},
 		},
 	}
 }
@@ -106,6 +108,16 @@ func lookupStage(stage string) (stageDef, error) {
 		return stageDef{}, e
 	}
 	return def, nil
+}
+
+// Target is the .wants target of stage on the machine of l (cloud-user
+// looks for cloud-init): what Enable links into and Init recomputes.
+func Target(l paths.Layout, stage string) (string, error) {
+	def, err := lookupStage(stage)
+	if err != nil {
+		return "", err
+	}
+	return def.target(l), nil
 }
 
 // Enable writes the stage drop-in of ext and links the instance into the

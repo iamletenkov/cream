@@ -1,0 +1,10 @@
+schema: cream/v1
+name: picky
+version: 1.0.0
+summary: фикстура графа picky
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Предупреждение: конфликт с расширением phantom, которого в каталоге нет.
+conflicts: {extensions: [phantom]}
+hooks:
+  install: {}

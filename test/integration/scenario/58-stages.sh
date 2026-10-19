@@ -38,7 +38,7 @@ has $W/cream-configure@configure-cloud-user.service.d/10-stage.conf '^After=clou
 
 step "graphical: graphical.target, после менеджера входа"
 stage_ok configure-graphical graphical graphical.target
-has $W/cream-configure@configure-graphical.service.d/10-stage.conf '^After=display-manager.service gdm.service$' \
+has $W/cream-configure@configure-graphical.service.d/10-stage.conf '^After=multi-user.target display-manager.service gdm.service$' \
 	"graphical: After=display-manager.service + after манифеста"
 
 step "systemd видит порядок стадий"
@@ -53,6 +53,7 @@ show configure-cloud-user After >/tmp/cu-after.txt
 has /tmp/cu-after.txt '^cloud-final.service$' "cloud-user: After содержит cloud-final.service"
 show configure-graphical After >/tmp/gr-after.txt
 has /tmp/gr-after.txt '^display-manager.service$' "graphical: After содержит display-manager.service"
+has /tmp/gr-after.txt '^multi-user.target$' "graphical: After содержит multi-user.target"
 for e in configure-early configure-cloud-user configure-graphical; do
 	systemd-analyze verify "cream-configure@$e.service" >/tmp/verify-$e.txt 2>&1 || true
 	hasnt /tmp/verify-$e.txt 'cycle' "systemd-analyze verify $e: без цикла"

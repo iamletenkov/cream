@@ -1,0 +1,9 @@
+schema: cream/v1
+name: lib-a
+version: 1.0.0
+summary: фикстура графа lib-a
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Библиотека: даёт способность cap-x.
+provides: [cap-x]
+kind: library
