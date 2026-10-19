@@ -1,10 +1,15 @@
 package catalog
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/iamletenkov/cream/internal/cerr"
 )
 
 // writeExt lays out an extension tree under a temp dir: files maps a path in
@@ -185,6 +190,55 @@ systemctl --no-block reload-or-restart join.service
 				if !strings.Contains(got[0], want) {
 					t.Errorf("в %q нет %q", got[0], want)
 				}
+			}
+		})
+	}
+}
+
+// TestUnitLockBombs: a hostile catalog (cream source add) must not blow up
+// the analysis; what it cannot analyse is warned about (conservative).
+func TestUnitLockBombs(t *testing.T) {
+	t.Parallel()
+	var many strings.Builder
+	for i := range 1000 {
+		fmt.Fprintf(&many, " u%d.service", i)
+	}
+	var chain strings.Builder
+	for i := range 2000 {
+		fmt.Fprintf(&chain, "After=g%d*.service g%d?.service [g%d].service\n", i, i+1, i)
+	}
+	tests := []struct {
+		name  string
+		extra map[string]string
+	}{
+		{"glob chain and cycle in ordering", map[string]string{
+			"files/main.service": "[Unit]\n" + chain.String() + "Before=*.service *\n[Service]\nExecStart=/bin/true\n",
+			"files/join.service": "[Unit]\nAfter=m*.service *\nBefore=j*\n[Service]\nType=oneshot\n" +
+				"ExecStart=/usr/bin/cream run unit-ext retry\n",
+			"files/lib.sh": "#!/bin/sh\nsystemctl restart 'g*'\n"}},
+		{"array of 1000 values repeated 10 times", map[string]string{
+			"files/lib.sh": "#!/bin/bash\nU=(" + many.String() + ")\nsystemctl restart " +
+				strings.Repeat("${U[@]}", 10) + "\n"}},
+		{"huge word of references", map[string]string{
+			"files/lib.sh": "#!/bin/bash\nA=a\nsystemctl restart " + strings.Repeat("$A", 50000) + "\n"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := writeExt(t, unitExt("", tc.extra))
+			cream := cream100(t)
+			done := make(chan Report, 1)
+			go func() {
+				r, _ := ValidateDir(dir, cream)
+				done <- r
+			}()
+			select {
+			case r := <-done:
+				if !slices.ContainsFunc(r.Warnings, func(w cerr.Warning) bool { return w.Code == warnUnitLock }) {
+					t.Fatalf("нет консервативного предупреждения: %+v (ошибки %+v)", r.Warnings, r.Errors)
+				}
+			case <-time.After(20 * time.Second):
+				t.Fatal("анализ не уложился в 20 с")
 			}
 		})
 	}

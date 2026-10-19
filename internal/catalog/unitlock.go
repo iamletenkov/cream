@@ -56,6 +56,18 @@ var (
 // unresolved marks a systemctl argument that did not resolve to a name.
 const unresolved = "\x00"
 
+// Пределы анализа: каталог может быть чужим (cream source add), поэтому
+// работа ограничена; что не уложилось в предел, считается совпавшим
+// (консервативно — предупреждение, а не молчание).
+const (
+	maxTreeBytes  = 32 << 20 // текста дерева на анализ
+	maxTreeLines  = 1 << 20  // логических строк дерева
+	maxExpansions = 256      // вариантов разворота одного слова и значений переменной
+	maxWordLen    = 1024     // длина аргумента systemctl; имя юнита — до 255
+	maxOrderNodes = 4096     // юнитов, упорядоченных после проверяемого
+	maxMatchWork  = 1 << 20  // сравнений имён при поиске причины для одного юнита
+)
+
 // syncJob is a synchronous systemctl job found in the extension tree.
 type syncJob struct {
 	where string   // файл:строка
@@ -72,10 +84,16 @@ type lockScan struct {
 	unitOf map[string]string   // текст юнита (с drop-in'ами) по имени
 	conf   *manifest.Hook      // hooks.configure, если есть
 	ext    string
+	// truncated — дерево больше пределов, анализ неполон; globOrder — первый
+	// юнит с glob в After=/Before= (systemd их не разворачивает, порядок не
+	// анализируется).
+	truncated, globOrder string
+	waiters              map[string]map[string]bool // юнит → кто упорядочен после него (кеш)
 }
 
 func newLockScan(x loaded) *lockScan {
-	s := &lockScan{after: map[string][]string{}, unitOf: map[string]string{}, ext: x.m.Name}
+	s := &lockScan{after: map[string][]string{}, unitOf: map[string]string{}, ext: x.m.Name,
+		waiters: map[string]map[string]bool{}}
 	if h, ok := x.m.Hooks[manifest.HookConfigure]; ok {
 		s.conf = &h
 	}
@@ -105,7 +123,14 @@ func (s *lockScan) addUnits(x loaded) {
 				continue
 			}
 			for _, u := range strings.Fields(val) {
-				switch strings.TrimSpace(key) {
+				k := strings.TrimSpace(key)
+				if (k == "After" || k == "Before") && isGlob(u) {
+					if s.globOrder == "" {
+						s.globOrder = name + ": " + k + "=" + u
+					}
+					continue
+				}
+				switch k {
 				case "After":
 					s.after[name] = append(s.after[name], unitName(u))
 				case "Before":
@@ -124,9 +149,13 @@ func (s *lockScan) scanTree(dir string) {
 		where, text string
 	}
 	var lines []logical
+	total := 0
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || !d.Type().IsRegular() {
 			return nil
+		}
+		if s.truncated != "" {
+			return fs.SkipAll
 		}
 		rel, _ := filepath.Rel(dir, p)
 		rel = filepath.ToSlash(rel)
@@ -137,7 +166,15 @@ func (s *lockScan) scanTree(dir string) {
 		if err != nil || !utf8.Valid(data) || slices.Contains(data, 0) {
 			return nil
 		}
+		if total += len(data); total > maxTreeBytes {
+			s.truncated = "текст дерева больше " + strconv.Itoa(maxTreeBytes>>20) + " МиБ"
+			return fs.SkipAll
+		}
 		raw := strings.Split(string(data), "\n")
+		if len(lines)+len(raw) > maxTreeLines {
+			s.truncated = "в дереве больше " + strconv.Itoa(maxTreeLines) + " строк"
+			return fs.SkipAll
+		}
 		for i := 0; i < len(raw); i++ {
 			start, text := i, raw[i]
 			for strings.HasSuffix(text, `\`) && i+1 < len(raw) {
@@ -165,6 +202,10 @@ func (s *lockScan) scanTree(dir string) {
 		for _, stmt := range strings.FieldsFunc(text, func(r rune) bool { return r == ';' || r == '&' || r == '|' }) {
 			if m := reAssign.FindStringSubmatch(strings.TrimSpace(stmt)); m != nil {
 				vars[m[1]] = append(vars[m[1]], assignedValues(m[2])...)
+				if len(vars[m[1]]) > maxExpansions {
+					dynamic[m[1]] = true // слишком много значений — неразрешимо
+					vars[m[1]] = vars[m[1]][:0]
+				}
 			}
 		}
 	}
@@ -241,92 +282,127 @@ func assignedValues(v string) []string {
 
 // expand substitutes the variables of w by every value assigned in the tree;
 // a variable assigned dynamically, unknown or with a value that is not a
-// literal gives unresolved.
+// literal gives unresolved, and so does a word longer than maxWordLen or
+// with more than maxExpansions variants.
 func expand(w string, vars map[string][]string, dynamic map[string]bool) []string {
-	if !strings.Contains(w, "$") {
-		return []string{w}
-	}
-	m := reVarRef.FindStringSubmatchIndex(w)
-	if m == nil {
+	if len(w) > maxWordLen {
 		return []string{unresolved}
 	}
-	var name string
-	if m[2] >= 0 {
-		name = w[m[2]:m[3]] // ${NAME}
-	} else {
-		name = w[m[4]:m[5]] // $NAME
-	}
-	vals, ok := vars[name]
-	if !ok || dynamic[name] {
-		return []string{unresolved}
-	}
-	var out []string
-	for _, v := range vals {
-		if strings.Contains(v, "$") {
+	out := []string{""}
+	for w != "" {
+		i := strings.IndexByte(w, '$')
+		if i < 0 {
+			for k := range out {
+				out[k] += w
+			}
+			break
+		}
+		m := reVarRef.FindStringSubmatchIndex(w[i:])
+		if m == nil || m[0] != 0 {
 			return []string{unresolved}
 		}
-		for _, rest := range expand(w[m[1]:], vars, dynamic) {
-			if rest == unresolved {
-				return []string{unresolved}
-			}
-			out = append(out, w[:m[0]]+v+rest)
+		var name string
+		if m[2] >= 0 {
+			name = w[i+m[2] : i+m[3]] // ${NAME}
+		} else {
+			name = w[i+m[4] : i+m[5]] // $NAME
 		}
-	}
-	if len(out) == 0 {
-		return []string{unresolved}
+		vals, ok := vars[name]
+		if !ok || dynamic[name] || len(vals) == 0 || len(out)*len(vals) > maxExpansions {
+			return []string{unresolved}
+		}
+		next := make([]string, 0, len(out)*len(vals))
+		for _, prefix := range out {
+			for _, v := range vals {
+				if strings.Contains(v, "$") {
+					return []string{unresolved}
+				}
+				next = append(next, prefix+w[:i]+v)
+			}
+		}
+		out, w = next, w[i+m[1]:]
 	}
 	return out
 }
 
 // waitsFor reports whether a synchronous job on target waits for a job of
-// unit: target is unit, matches it as a glob, or is ordered after it.
-func (s *lockScan) waitsFor(target, unit string) bool {
+// unit: target is unit, is ordered after it, or matches such a unit as a
+// glob. ok is false when the units ordered after unit exceed maxOrderNodes
+// (the caller then warns conservatively).
+func (s *lockScan) waitsFor(target, unit string) (wait, ok bool) {
 	if target == unresolved {
-		return true
+		return true, true
 	}
-	if strings.ContainsAny(target, "*?[") {
-		for _, cand := range append(s.unitNames(), unit) {
-			if ok, _ := path.Match(target, cand); ok && s.waitsFor(cand, unit) {
-				return true
-			}
+	w, ok := s.waitersOf(unit)
+	if !ok {
+		return false, false
+	}
+	if !isGlob(target) {
+		return w[unitName(target)], true
+	}
+	for cand := range w {
+		if m, _ := path.Match(target, cand); m {
+			return true, true
 		}
-		return false
 	}
-	seen := map[string]bool{}
-	queue := []string{unitName(target)}
+	return false, true
+}
+
+// waitersOf returns unit and every unit ordered after it (transitively), by
+// a breadth-first walk over the reversed After= edges; ok is false past
+// maxOrderNodes.
+func (s *lockScan) waitersOf(unit string) (map[string]bool, bool) {
+	if w, ok := s.waiters[unit]; ok {
+		return w, w != nil
+	}
+	before := map[string][]string{} // юнит → кто упорядочен после него
+	for u, deps := range s.after {
+		for _, d := range deps {
+			before[d] = append(before[d], u)
+		}
+	}
+	w := map[string]bool{unit: true}
+	queue := []string{unit}
 	for len(queue) > 0 {
 		u := queue[0]
 		queue = queue[1:]
-		if u == unit {
-			return true
+		for _, next := range before[u] {
+			if w[next] {
+				continue
+			}
+			if len(w) >= maxOrderNodes {
+				s.waiters[unit] = nil
+				return nil, false
+			}
+			w[next] = true
+			queue = append(queue, next)
 		}
-		if seen[u] {
-			continue
-		}
-		seen[u] = true
-		queue = append(queue, s.after[u]...)
 	}
-	return false
-}
-
-func (s *lockScan) unitNames() []string {
-	names := make([]string, 0, len(s.after)+len(s.unitOf))
-	for u := range s.unitOf {
-		names = append(names, u)
-	}
-	for u := range s.after {
-		names = append(names, u)
-	}
-	return names
+	s.waiters[unit] = w
+	return w, true
 }
 
 // evidence explains why a holder of the lock can wait for a job of unit;
 // "" when nothing in the tree points to it.
 func (s *lockScan) evidence(unit string) string {
+	if s.truncated != "" {
+		return "анализ неполон: " + s.truncated
+	}
+	work := 0
 	for _, j := range s.jobs {
 		for _, u := range j.units {
-			if s.waitsFor(u, unit) {
+			if work += 1 + len(s.waiters[unit]); work > maxMatchWork {
+				return "анализ неполон: больше " + strconv.Itoa(maxMatchWork) + " сравнений имён юнитов"
+			}
+			wait, ok := s.waitsFor(u, unit)
+			switch {
+			case !ok:
+				return "после " + unit + " упорядочено больше " + strconv.Itoa(maxOrderNodes) + " юнитов"
+			case wait:
 				return j.where + ": `" + j.cmd + "` без --no-block"
+			case s.globOrder != "":
+				return j.where + ": `" + j.cmd + "` без --no-block, а порядок с glob (" + s.globOrder +
+					") не анализируется"
 			}
 		}
 	}
@@ -415,9 +491,11 @@ func isUnitName(name string) bool {
 	return i > 0 && slices.Contains(unitTypes, name[i+1:])
 }
 
+func isGlob(w string) bool { return strings.ContainsAny(w, "*?[") }
+
 // unitName completes a name without a unit type with .service, as systemctl.
 func unitName(w string) string {
-	if isUnitName(w) || strings.ContainsAny(w, "*?[") {
+	if isUnitName(w) || isGlob(w) {
 		return w
 	}
 	return w + ".service"
