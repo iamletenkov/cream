@@ -94,6 +94,8 @@
 | `catalog.requires`, `catalog.conflicts` | с 1.1.0, `cream validate --catalog`: `requires` без поставщика в каталоге; `conflicts.extensions` на имя не из каталога |
 | `catalog.depends_external` | с 1.1.1, `cream validate --catalog`: `depends` на имя не из каталога (зависимость из другого источника раскладки) |
 | `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
+| `manifest.early_timeout` | с 1.1.1: `hooks.configure.timeout` стадии `early` больше 2 мин — зажат до 2 мин (загрузка ждёт `early` до `sysinit.target`) |
+| `manifest.early_network` | с 1.1.1: `hooks.configure.after` стадии `early` на `network.target` или `network-online.target` — цикл порядка (early стоит до `sysinit.target`) |
 | `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей `cream:` манифеста |
 | `platform.os_unknown` | нет os-release: `platform.os` не проверена |
 | `deps.dependents_forced` | `remove --force` убрал расширение, от которого зависят установленные |
@@ -311,7 +313,8 @@ Golden: [remove.json](../internal/cli/testdata/golden/remove.json),
 - `cream configure [--wait] <ext>` — запустить configure расширения (юнит `cream-configure@<ext>` или хук);
   `--from-unit <ext>` — только для вызова из самого юнита. `result`: `{ext, reason, mode, reboot_required}` —
   [configure.json](../internal/cli/testdata/golden/configure.json).
-- Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети), `cloud-user`
+- Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети; с 1.1.1 — с
+  `Conflicts=`/`Before=shutdown.target` и таймаутом configure не больше 2 мин), `cloud-user`
   (с 1.1.1 — `cream-configure-cloud-user.service`: вспомогательный юнит в `multi-user.target.wants` тянет экземпляры,
   те ждут `cloud-final.service`, если cloud-init работает; в 1.1.0 — `cloud-init.target`) и `graphical` (`graphical.target`,
   после `multi-user.target` и `display-manager.service`). Манифест с новыми стадиями обязан требовать `cream: ">=1.1.0"`, иначе 65

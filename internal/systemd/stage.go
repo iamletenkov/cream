@@ -36,9 +36,9 @@ type stageDef struct {
 	target func(l paths.Layout) string
 	// noDefaultDeps writes DefaultDependencies=no (early: before sysinit.target).
 	noDefaultDeps bool
-	// after, before, wants are the stage's own ordering, written before the
-	// manifest's.
-	after, before, wants []string
+	// after, before, wants, conflicts are the stage's own ordering, written
+	// before the manifest's.
+	after, before, wants, conflicts []string
 }
 
 // stages is the stage table: system since cream 1.0; early, cloud-user and
@@ -47,12 +47,15 @@ func stages() map[string]stageDef {
 	fixed := func(t string) func(paths.Layout) string { return func(paths.Layout) string { return t } }
 	return map[string]stageDef{
 		// Before the network: the firewall is up before any interface.
+		// Without default dependencies the shutdown ones are written by hand
+		// (cream 1.1.1), as systemd adds them to a unit with defaults.
 		"early": {
 			target:        fixed("sysinit.target"),
 			noDefaultDeps: true,
 			after:         []string{"local-fs.target"},
-			before:        []string{"network-pre.target", "sysinit.target"},
+			before:        []string{"network-pre.target", "sysinit.target", "shutdown.target"},
 			wants:         []string{"network-pre.target"},
+			conflicts:     []string{"shutdown.target"},
 		},
 		"system": {
 			target: fixed("multi-user.target"),
@@ -162,6 +165,7 @@ func dropIn(ext string, st StageSpec, def stageDef) ([]byte, error) {
 			fmt.Fprintf(&b, "%s=%s\n", key, strings.Join(units, " "))
 		}
 	}
+	line("Conflicts", def.conflicts)
 	line("After", dedup(append(slices.Clone(def.after), st.After...)))
 	line("Before", dedup(append(slices.Clone(def.before), st.Before...)))
 	line("Wants", dedup(append(slices.Clone(def.wants), st.Wants...)))

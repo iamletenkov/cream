@@ -315,7 +315,7 @@ files:
 |---|---|---|---|
 | `install` | первая установка; повтор — при `status: failed`, при смене ключа `scope: install` или с `--reinstall` (§6.5) | да (кроме `library`) | нет (сборка ядра идёт часами); явный `timeout` рекомендован |
 | `upgrade` | установлена версия ниже новой. Если хука нет, вызывается `install` с `CREAM_PREV_VERSION` | нет | как у `install` |
-| `configure` | на каждой загрузке (юнит `cream-configure@<ext>`, стадия §6.4); после `install`/`upgrade` на живой машине; по `apply` без своего хука | нет | 15 мин |
+| `configure` | на каждой загрузке (юнит `cream-configure@<ext>`, стадия §6.4); после `install`/`upgrade` на живой машине; по `apply` без своего хука | нет | 15 мин; у стадии `early` — 2 мин и не больше (с 1.1.1, §6.4) |
 | `apply` | после `cream set` с изменёнными ключами (§8.4) | нет | 60 с |
 | `secret` | `cream set`/`install` ключа с `secret: hook`. На stdin — значение, `$1` — ключ. Хук печатает пары производных `readonly`-ключей | при наличии такого ключа | 60 с |
 | `remove` | `cream remove` | нет: без хука `remove` отказывает, остаётся `--forget` | 30 мин |
@@ -392,7 +392,7 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 
 | Стадия | Подключение | Порядок | Пример |
 |---|---|---|---|
-| `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
+| `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target shutdown.target`, `Wants=network-pre.target`, `Conflicts=shutdown.target` (с 1.1.1; без зависимостей по умолчанию их пишет cream); таймаут configure — не больше 2 мин (по умолчанию 2 мин, больший зажимается с предупреждением `manifest.early_timeout`); `after` на `network.target`/`network-online.target` — цикл, предупреждение `manifest.early_network` | firewall |
 | `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk; desktop и vino-vnc — с `before: [display-manager.service, …]` (настройка до менеджера входа) |
 | `cloud-user` (с 1.1.0) | `cream-configure-cloud-user.service.wants` (с 1.1.1; сам `cream-configure-cloud-user.service` — в `multi-user.target.wants`) | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
 | `graphical` (с 1.1.0) | `graphical.target.wants` | `After=multi-user.target display-manager.service` (+ `after` манифеста; `multi-user` — чтобы на машине без менеджера входа стадия не стартовала раньше системных служб) | kiosk, x11vnc, selkies, pixelflux-* |
