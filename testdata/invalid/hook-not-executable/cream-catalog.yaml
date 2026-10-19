@@ -1,0 +1,4 @@
+schema: cream/v1
+name: invalid-hook-not-executable
+version: 1.0.0
+roots: [extensions]

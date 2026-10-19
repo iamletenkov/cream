@@ -1,0 +1,29 @@
+{
+  "cream": "dev",
+  "command": "resolve",
+  "ok": true,
+  "result": {
+    "phase": "build",
+    "layers": [
+      {
+        "name": "with-config",
+        "version": "1.0.0",
+        "source": "fx",
+        "source_resolved": "sha256:<FX_TREE>",
+        "catalog_version": "1.0.0",
+        "ext_digest": "sha256:71feada2bf94040b2f8c848b1c0a4e90aa3b7ab9090a4c26705f82baf8e2ec39",
+        "params_digest": "sha256:67a90954928ad62441887790e9fd70e847c2ea7edc3ba3092d605a6f69b2edc2",
+        "deps": [],
+        "mode": "exec",
+        "token": "fx/with-config@1.0.0#<FX_TREE>",
+        "pinned": false,
+        "secret_params": [
+          "TOKEN"
+        ],
+        "dir": "<ROOT>/var/cache/cream/sources/fx/extensions/with-config"
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

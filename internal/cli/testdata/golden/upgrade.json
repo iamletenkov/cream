@@ -1,0 +1,37 @@
+{
+  "cream": "dev",
+  "command": "upgrade",
+  "ok": true,
+  "result": {
+    "schema": "cream-state/v1",
+    "name": "upgrade-fixture",
+    "version": "2.0.0",
+    "kind": "extension",
+    "status": "installed",
+    "source": {
+      "name": "fixtures",
+      "type": "path",
+      "origin": "<ROOT>/srv/next",
+      "resolved": "sha256:18155748825ad4cc43abc00183e012e6f3b0dd8c48d6b4a4ee589139d8267c0f",
+      "catalog_version": "1.1.0"
+    },
+    "ext_digest": "sha256:4685ff513527097c4b254ca4442518ce18080476af58e6b8b412829da6f999f5",
+    "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "phase": "live",
+    "installed_at": "2026-10-18T10:00:00Z",
+    "updated_at": "2026-10-18T10:00:00Z",
+    "cream_version": "dev",
+    "files": [],
+    "bin": [],
+    "configure": null,
+    "reboot_required": false,
+    "changed": true
+  },
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "upgrade-fixture: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": null
+}

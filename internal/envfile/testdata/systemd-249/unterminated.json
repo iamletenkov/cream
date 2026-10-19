@@ -1,0 +1,5 @@
+{
+  "env": [
+    "A=unterminated\nB=still-in-A"
+  ]
+}

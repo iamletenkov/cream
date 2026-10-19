@@ -1,0 +1,13 @@
+#!/bin/sh
+# Модель join teleport: секрет регистрации приходит только на stdin и никуда
+# не пишется; адрес proxy сохраняется в readonly-ключ вложенным cream set
+# (блокировка домена унаследована через CREAM_LOCK_FD). Пауза 2 с — окно,
+# в которое сценарий ищет секрет в ps. Строка в stderr с секретом проверяет
+# фильтр вывода cream: до журнала она доходит маской ***.
+set -eu
+secret=$(cat)
+[ -n "$secret" ] || { echo "join: пустой секрет" >&2; exit 2; }
+echo "join: proxy=$FTL_PROXY secret=$secret" >&2
+sleep 2
+cream set --allow-readonly --no-apply fixture-teleport-like "FTL_PROXY=$FTL_PROXY" >&2
+printf '{"joined":true,"proxy":"%s","secret_len":%d}\n' "$FTL_PROXY" "${#secret}"

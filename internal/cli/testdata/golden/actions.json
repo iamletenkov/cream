@@ -1,0 +1,83 @@
+{
+  "cream": "dev",
+  "command": "actions",
+  "ok": true,
+  "result": {
+    "ext": "action-json",
+    "version": "1.0.0",
+    "actions": [
+      {
+        "name": "echo-args",
+        "summary": "печатает аргументы как есть",
+        "args": "free",
+        "params": [],
+        "stdin": "none",
+        "lock": "shared",
+        "output": "text",
+        "timeout_seconds": 120,
+        "phases": [
+          "live"
+        ],
+        "root": true
+      },
+      {
+        "name": "exit-code",
+        "summary": "завершается кодом из аргумента",
+        "args": "free",
+        "params": [],
+        "stdin": "none",
+        "lock": "none",
+        "output": "text",
+        "timeout_seconds": 120,
+        "phases": [
+          "live"
+        ],
+        "root": true
+      },
+      {
+        "name": "join",
+        "summary": "регистрация: секрет со stdin",
+        "args": "pairs",
+        "params": [
+          {
+            "name": "FIXTURE_PROXY",
+            "type": "host",
+            "required": true,
+            "secret": false
+          },
+          {
+            "name": "FIXTURE_SECRET",
+            "type": "str",
+            "required": true,
+            "secret": true
+          }
+        ],
+        "stdin": "secret",
+        "lock": "exclusive",
+        "output": "json",
+        "timeout_seconds": 30,
+        "phases": [
+          "live"
+        ],
+        "root": true
+      },
+      {
+        "name": "status",
+        "summary": "состояние одним JSON-объектом",
+        "args": "none",
+        "params": [],
+        "stdin": "none",
+        "lock": "none",
+        "output": "json",
+        "timeout_seconds": 120,
+        "phases": [
+          "build",
+          "live"
+        ],
+        "root": true
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "set",
+  "ok": true,
+  "result": {
+    "ext": "with-config",
+    "changed": true,
+    "changed_keys": [
+      "MODE"
+    ],
+    "apply": "none",
+    "reboot_required": false
+  },
+  "warnings": [],
+  "error": null
+}

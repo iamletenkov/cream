@@ -11,51 +11,51 @@
 ## Progress Tracker
 <!-- Пункты разделены пустой строкой: параллельные отметки из разных worktree сливаются без конфликта. -->
 
-- [ ] Task 1: Каркас CLI, коды ошибок, раскладка путей, зависимость yaml
+- [x] Task 1: Каркас CLI, коды ошибок, раскладка путей, зависимость yaml
 
-- [ ] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
+- [x] Task 2: semver-диапазоны и типы ключей (`semver`, `keytype`)
 
-- [ ] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
+- [x] Task 3: EnvironmentFile и файловые примитивы (`envfile`, `fsx`)
 
-- [ ] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
+- [x] Task 4: Манифест `cream/v1`, `cream-catalog.yaml` и фикстуры §14 (`manifest`, `testdata/`)
 
-- [ ] Task 5: Домен настроек (`config`)
+- [x] Task 5: Домен настроек (`config`)
 
-- [ ] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
+- [x] Task 6: Реестр, журнал и блокировки (`state`, `lock`)
 
-- [ ] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
+- [x] Task 7: Источники archive/path, синхронизация, `catalog pack` (`source`)
 
-- [ ] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
+- [x] Task 8: Запуск хуков и действий, фильтр секретов (`runner`)
 
-- [ ] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
+- [x] Task 9: systemd-стадии, `system init`, раскладка `files` (`systemd`, `place`)
 
-- [ ] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
+- [x] Task 10: Индекс и валидация каталога, поиск ссылки (`catalog`)
 
-- [ ] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
+- [x] Task 11: Резолвер: платформа, граф, порядок, lineage (`resolve`)
 
-- [ ] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
+- [x] Task 12: Ядро исполнителя: `set/show/get/list/config`, apply, `configure`, `system init` (`engine` core)
 
-- [ ] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
+- [x] Task 13: `install` и `upgrade` на живой машине (`engine/install`)
 
-- [ ] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
+- [x] Task 14: `remove` (`--purge`, `--forget`, `--force`) (`engine/remove`)
 
-- [ ] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
+- [x] Task 15: Действия: `cream run`, `cream actions` (`engine/action`)
 
-- [ ] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
+- [x] Task 16: Фаза build: `install --phase build --from-dir --record --params-file`, `policy-rc.d`
 
-- [ ] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
+- [x] Task 17: CLI источников и каталога: `source …`, `validate`, `catalog pack`, `resolve --json`
 
-- [ ] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
+- [x] Task 18: Упаковка `.deb` (nfpm), тарболы, воспроизводимость, `govulncheck`
 
-- [ ] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
+- [x] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
 
-- [ ] Task 20: CI-матрица и сборка ассетов релиза (release-please)
+- [x] Task 20: CI-матрица и сборка ассетов релиза (release-please)
 
-- [ ] Task 21: Документация: `docs/cli.md`, ADR, README, карта AGENTS.md
+- [x] Task 21: Документация: `docs/cli.md`, ADR, README, карта AGENTS.md
 
-- [ ] Task 22: Фаза build на живом `virt-customize` (`make test-build`)
+- [x] Task 22: Фаза build на живом `virt-customize` (`make test-build`)
 
-- [ ] Task 23: Финальная интеграция + `make ci`
+- [x] Task 23: Финальная интеграция + `make ci`
 
 ## Волны и владение файлами
 
@@ -91,8 +91,9 @@
 cmd/cream → cli → engine → {catalog, resolve, source, config, state, lock, runner, systemd, place}
 catalog → manifest, fsx, source(только тип SourceDir)   resolve → manifest, semver, state
 manifest → semver, keytype                              config → envfile, keytype, fsx, paths
-place → manifest, state, fsx, paths; systemd → fsx, paths  state, lock → fsx, paths
-все → cerr                                              source → fsx, paths (валидатор — функцией)
+place → manifest, state, fsx, paths; systemd → fsx, paths  state → envfile, fsx, paths; lock → fsx, paths
+keytype → envfile                                       все → cerr
+source → fsx, paths (валидатор — функцией)
 ```
 Сигнатуры ниже — договор. Имена неэкспортируемого исполнитель выбирает сам; менять экспортируемое после слияния
 волны — только через контроллера.
@@ -105,7 +106,7 @@ type Error struct{ Exit int; Code, Message string; Details map[string]any; Err e
 func New(exit int, code, format string, a ...any) *Error
 func Wrap(err error, exit int, code, format string, a ...any) *Error
 func ExitCode(err error) int          // nil→0, *Error (errors.As)→Exit, иначе 70
-type Warning struct{ Code, Message string }
+type Warning struct{ Code, Message string; Details map[string]any /* omitempty */ } // AddDetails(code, details, fmt, …) — Р20
 type Warnings struct{ list []Warning }   // Add(code, fmt, …), List() []Warning; передаётся явно
 ```
 **`internal/paths`** (T1)
@@ -154,7 +155,10 @@ func Quote(v string) string               // значение, которое Pa
 func WriteAtomic(path string, data []byte, perm fs.FileMode) error // tmp в том же каталоге, fsync, rename, fsync dir
 func CopyTree(src, dst string) error        // без следования ссылкам; ссылка наружу дерева — ошибка
 func TreeDigest(root string) (string, error) // "sha256:<hex>" по §9.5 (F/L/D, режим 0644|0755)
-func CheckOwnerPerm(path string, wantMode fs.FileMode) error // не-root/группа на запись → cerr 77
+func CheckOwnerPerm(path string, wantMode fs.FileMode) error // = OpenTrusted(path, 0, …) + Close
+func OpenTrusted(path string, uid int, wantMode fs.FileMode) (*os.File, error) // openat+O_NOFOLLOW от /, каждый каталог — владелец uid, без записи группе/всем; читать через этот fd
+func CheckOwnerPermFile(f *os.File, uid int, wantMode fs.FileMode) error // по открытому fd
+// всё это → sentinel fsx.ErrUnsafePerm (у потребителя — cerr 77); CopyTree/TreeDigest — через os.Root
 ```
 **`internal/manifest`** (T4)
 ```go
@@ -171,8 +175,10 @@ type Action struct{ Summary string; Args ArgsMode; Params map[string]Param; Stdi
   Output OutputMode; Timeout time.Duration; Phases []Phase; Root bool }
 type Param struct{ Type *keytype.Type; Required, Secret bool }
 type File struct{ Src, Dst string; Mode fs.FileMode }
-func Parse(data []byte, cream semver.Version) (*Manifest, error)
-func Load(dir string, cream semver.Version) (*Manifest, error) // dir/extension.yaml
+type CreamBuild struct{ Version semver.Version; Dev bool }  // Р18
+func ParseCreamBuild(raw string) CreamBuild // version.Version: "v" отбрасывается, не semver → Dev
+func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // w — platform.dev_build, может быть nil
+func Load(dir string, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) // dir/extension.yaml
 type Catalog struct{ Schema, Name string; Version semver.Version; Roots []string }
 func ParseCatalog(data []byte) (*Catalog, error)
 func CanonArch(s string) (string, bool)  // aarch64→arm64, x86_64→amd64
@@ -200,10 +206,11 @@ type FileRec struct{ Dst, SHA256 string }
 type ConfigureRec struct{ Stage, Target string }
 type Record struct{ Schema, Name, Version, Kind, Status string; Source SourceRef; ExtDigest, ParamsDigest, Phase string
   InstalledAt, UpdatedAt time.Time; CreamVersion string; Files []FileRec; Bin []string
-  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:",omitempty"` }
+  Configure *ConfigureRec; RebootRequired bool; PrevVersion string `json:"prev_version,omitempty"` }
 type Store struct{ /* Layout, Now */ }
 func NewStore(l paths.Layout, now func() time.Time) *Store
-func (s *Store) Get(name string) (*Record, bool, error); List() ([]Record, error); Put(Record) error; Delete(name string) error
+func (s *Store) Get(name string) (*Record, bool, error); List(w *cerr.Warnings) ([]Record, error) // битая запись — пропуск + state.corrupt (Р20)
+func (s *Store) Put(Record) error; Delete(name string) error
 type HistoryEntry struct{ Time time.Time; Op, Ext, From, To, Status, Phase string }
 func (s *Store) Append(HistoryEntry) error
 func ParamsDigest(params map[string]string, secret func(key string) bool) string
@@ -212,7 +219,7 @@ type Mode int // Exclusive | Shared
 type Locker struct{ /* Layout, Timeout, inherited *os.File из CREAM_LOCK_FD */ }
 func NewLocker(l paths.Layout, timeout time.Duration, env func(string) string) *Locker
 func (l *Locker) Global(ctx context.Context) (*Handle, error)
-func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же файла → без ожидания
+func (l *Locker) Ext(ctx context.Context, ext string, m Mode) (*Handle, error) // унаследованный fd того же занятого файла → без ожидания (Р19)
 type Handle struct{ /* *os.File */ }; func (h *Handle) Release(); func (h *Handle) File() *os.File
 ```
 **`internal/source`** (T7)
@@ -228,7 +235,7 @@ type Syncer struct{ Layout paths.Layout; Fetch Fetcher; Validate func(dir string
 func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error)
 func ReadLock(path string) ([]LockEntry, error)
 type SourceDir struct{ Source Source; Dir string; Synced bool; Lock *LockEntry }
-func Dirs(l paths.Layout, f *File, lock []LockEntry) []SourceDir  // в порядке приоритета
+func Dirs(l paths.Layout, f *File, lock []LockEntry) ([]SourceDir, error) // в порядке приоритета; при --root / кеш чужой или доступен на запись группе/всем → 77 perm.cache (§13)
 func ExtractTarGz(r io.Reader, dst string) error   // враждебные архивы — отказ
 func Pack(dir string, w io.Writer, epoch time.Time) error // детерминированный tar.gz
 ```
@@ -241,7 +248,8 @@ type Runner interface{ Run(ctx context.Context, s Spec) (Result, error) }
 type Exec struct{}                              // Setpgid, kill группы по таймауту, без shell
 func NewSecretFilter(w io.Writer, secrets []string) io.WriteCloser // потоковая замена на "***", стыки чанков
 type EnvInput struct{ Phase, Ext, ExtVersion, PrevVersion, ExtDir, EtcDir, StateDir, Root, ConfigFile,
-  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; Values map[string]string }
+  SecretsFile, Reason, Action, Output string; ChangedKeys []string; LockFD int; LockMode string; Values map[string]string }
+// LockFD > 0 → CREAM_LOCK_FD и CREAM_LOCK_MODE (LockMode "exclusive", иначе "shared") — Р19
 func BuildEnv(in EnvInput) []string             // чистое окружение §6.3 + несекретные ключи
 type Outcome int // OK | Reboot (10) | NotApplicable (20) | Failed
 func Classify(code int) Outcome
@@ -258,8 +266,8 @@ type Systemctl interface{ Running(ctx context.Context) (state string, ok bool)
 type ExecFunc func(ctx context.Context, name string, args ...string) (stdout []byte, code int, err error)
 func NewSystemctl(l paths.Layout, run ExecFunc) Systemctl; type Fake struct{ … } // для тестов движка
 
-type Owner func(dst string) (ext string, ok bool) // владелец по реестру
-func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) // 67 при чужом dst
+type Owner func(dst string) (ext string, ok bool) // владелец по реестру: все записи любого статуса, свои тоже (Р21)
+func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) // 67 при чужом dst и при занятом dst без владельца (Р21)
 func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // изменённый → <dst>.cream-modified
 ```
 **`internal/catalog`** (T10), **`internal/resolve`** (T11)
@@ -267,13 +275,13 @@ func Unplace(l paths.Layout, recs []state.FileRec, w *cerr.Warnings) error // и
 type Entry struct{ Source source.SourceDir; Dir string; Manifest *manifest.Manifest; Digest string }
 type Ref struct{ Source, Name string; Version *semver.Version }
 func ParseRef(s string) (Ref, error)            // [source/]name[@version]
-func Validate(root string, cream semver.Version) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4
-func LoadExtension(dir string, cream semver.Version) (Entry, error) // для --from-dir
-func Lookup(dirs []source.SourceDir, ref Ref, cream semver.Version, w *cerr.Warnings) (Entry, error)
+func Validate(root string, cream manifest.CreamBuild) (Report, error) // §4.1 + предупреждения §6.3/§7.3/§8.4; cream новее — Р22
+func LoadExtension(dir string, cream manifest.CreamBuild) (Entry, error) // для --from-dir
+func Lookup(dirs []source.SourceDir, ref Ref, cream manifest.CreamBuild, w *cerr.Warnings) (Entry, error)
 
 type Node struct{ Manifest *manifest.Manifest; Installed bool; Files []string; Source state.SourceRef; Digest string }
 type Host struct{ Phase, TargetArch, HostArch, Family string; OSID, OSVersion string
-  HasCommand func(string) bool; AcceptRisk bool }
+  HasCommand func(string) bool; AcceptRisk bool; Detected bool } // Detected — Р23
 func DetectHost(l paths.Layout, phase string, lookPath func(string) (string, error)) (Host, error)
 type Layer struct{ Name, Version, Source, SourceResolved, CatalogVersion, ExtDigest, ParamsDigest string
   Deps []string; Mode, Token string; Pinned bool; SecretParams []string } // §12.4; это же — record.json (Р6)
@@ -283,7 +291,7 @@ func Dependents(installed []Node, name string) []string // для remove
 **`internal/engine`** (T12 — ядро; T13–T16 — свои файлы)
 ```go
 type Engine struct{ L paths.Layout; Store *state.Store; Locks *lock.Locker; Run runner.Runner
-  Systemctl systemd.Systemctl; Now func() time.Time; Cream semver.Version; Warn *cerr.Warnings
+  Systemctl systemd.Systemctl; Now func() time.Time; Cream manifest.CreamBuild; Warn *cerr.Warnings
   LookPath func(string) (string, error); Env func(string) string
   Stdin io.Reader; Stdout, Stderr io.Writer }
 type Installed struct{ Record state.Record; Manifest *manifest.Manifest }
@@ -329,6 +337,91 @@ string; Flags func(*flag.FlagSet); Run func(*Context, []string) (result any, err
   уже записан в реестре другого расширения. `remove A` убирает только свой файл; `remove --purge B` удаляет каталог B
   целиком, запись A становится висячей, и `Unplace` A потом пропускает отсутствующий файл.
   Это нужно stvor-agent: drop-in командной метки в каталог `teleport`.
+
+Рулинги контроллера после волны 1 (2026-10-18):
+- **Р12.** С `--cache` файл `sources.lock` лежит в `<CacheDir>/sources.lock`, а не в общем `/var/lib/cream/` —
+  сборка bisquite со своим кешем не трогает lock машины. Делает T7 (`paths.SourcesLock()` учитывает `--cache`).
+- **Р13.** `cream run`: флаги cream — только до `<ext>`; T15 ставит `PermuteUntil: 1`, T21 описывает в `docs/cli.md`.
+- **Р14.** Флаги команд не повторяют имена глобальных (`json`, `root`, `sources`, `cache`, `lock-timeout`, `q`, `v`):
+  совпадение — паника регистрации (70). Исполнители T13–T17 проверяют это сами.
+- **Р15.** Имя расширения `global` запрещено (столкновение с `lock/global`), как и префикс `cream-` — проверка в T4.
+- **Р16.** Коды выхода по T1: без аргументов — 64, ошибка записи в stdout — 74 (код 1 — только `check.failed`).
+- **Р17.** Доступ к файлам с секретами и параметрам — только через `fsx.OpenTrusted` (fd, `O_NOFOLLOW`, `Fstat`,
+  проверка каталогов пути); `CopyTree` — через `os.Root` (ревью безопасности T3).
+
+Рулинги контроллера после ревью волны 2 (2026-10-18):
+- **Р18.** Проверка `cream:`: предрелизная сборка cream сравнивается по основной версии (`1.0.0-rc.1` удовлетворяет
+  `>=1.0.0`); версия `dev` или не-semver удовлетворяет любому `cream:` (формат диапазона проверяется всё равно)
+  с предупреждением `platform.dev_build`. Тип `manifest.CreamBuild` заменяет `semver.Version` в сигнатурах
+  `manifest`, `catalog` и `engine.Deps.Cream`. Там же (ревью T4): `cream-` запрещён в любом компоненте `dst`,
+  бинарь cream в `dst` — явно; `reservedKeys` += `LD_PRELOAD`, `LD_LIBRARY_PATH`, `BASH_ENV`, `ENV`, `IFS`;
+  у действия не более одного секретного параметра (65).
+- **Р19.** Родитель передаёт вместе с `CREAM_LOCK_FD` режим `CREAM_LOCK_MODE=shared|exclusive` (`runner.EnvInput.LockMode`;
+  иное — `shared`). Вложенный после сверки (dev, ino) открывает свой дескриптор файла и пробует `LOCK_EX|LOCK_NB`:
+  удалось — никто не держит, наследование ложное, захват на новом дескрипторе; `EWOULDBLOCK` — наследование.
+  Запрос `exclusive` при унаследованном `shared` — 75 `lock.upgrade`.
+- **Р20.** `state.List(w)` пропускает битую запись (`state.corrupt`) с предупреждением того же кода, имя расширения —
+  в тексте предупреждения и в `details.ext`; `Get` этой записи — 74 `state.corrupt`; `state.newer` и ошибка чтения — по-прежнему 74.
+- **Р21.** `place.Place`: `dst`, который уже есть на диске (по `Lstat`, симлинк — тоже занято) и не числится ни в
+  одном реестре, — 67 `conflict.file_unowned` (`details.dst`); проверка — в цикле владельцев, до первой записи.
+  Свой `dst` определяется по реестру этого расширения при любом статусе, `failed` тоже: движок строит `Owner` из
+  всех записей реестра, свои включительно. Прежняя копия `<dst>.cream-modified` не затирается — `Unplace` берёт
+  первый свободный `.cream-modified.N`.
+
+Рулинги контроллера после повторного ревью (2026-10-18):
+- **Р22.** `catalog.Validate`: расширение, которому нужен cream новее текущего (68 `platform.cream_version` из
+  `manifest.Load`), не делает каталог невалидным — оно попадает в `Report.NotApplicable` (не в `Extensions`) и в
+  `Report.Warnings` с кодом `catalog.cream_newer` (`details`: `ext`, `required`, `cream`); остальные ошибки каталога —
+  как были. `ValidateDir` (отдельный каталог расширения) и установка (`LoadExtension`, `Lookup`) по-прежнему дают 68.
+  Так источник, опубликованный под более новый cream, синхронизируется, а ставится из него только применимое.
+- **Р23.** `resolve.Probe.Detect`: при наличии os-release `Family` не пустой — `deb` для debian-подобных (по `ID` или
+  `ID_LIKE`), `rpm`/`apk`/`openwrt` для известных чужих, иначе значение `ID` (`linux`, если `ID` нет, как в
+  os-release(5)); пустой — только если os-release нет вовсе. Хост от `Detect` помечен `Host.Detected`: на нём пустой
+  `Family` — 68 `platform.family` (`details.found: ""`), а не «применимо», — `platform.family` в манифесте
+  обязателен (§4), а машину без os-release cream не опознаёт. `Host`, собранный вызывающим (`cream resolve` без
+  `--family`), по-прежнему пропускает проверку семейства. os-release читается через `os.OpenInRoot(Root, …)`;
+  `HasCommand` под чужим `--root` смотрит PATH хоста.
+- **Р26.** Toolchain — `golang:1.26.9` во всём репозитории (`go 1.26` в `go.mod`, `Makefile`, lefthook, CI, хук
+  `lint-after-edit`, `AGENTS.md`, `README.md`, правило `go.md`); `govulncheck@v1.8.0`. Ветка 1.25 больше не получает
+  исправлений: на `golang:1.25.11` `make vuln` находит 16 уязвимостей stdlib с достижимыми вызовами, на 1.25.14 — 10,
+  исправленных только в go1.26.9; на 1.26.9 — ни одной. Правило «образ не моложе двух недель» ввёл контроллер, на
+  патч-релизы Go с исправлениями безопасности оно не распространяется (1.26.9 вышел 2026-10-08).
+
+Рулинги контроллера после ревью волн 4–5 (2026-10-18):
+- **Р24.** Свои источники (XDG или `--sources` вместе с `--cache`) не берут `lock/global` машины, но `source add`,
+  `remove` и `sync` сериализуются: `source.LockCache` — `flock` (exclusive, ожидание по `--lock-timeout`, сигнал
+  прерывает) на `<CacheRoot>/.lock`. Источники машины — по-прежнему root и `lock/global`.
+- **Р25.** `remove` при работающем systemd останавливает экземпляр `cream-configure@<ext>` (`systemctl stop`; в
+  `systemd.Systemctl` добавлен `Stop`) до снятия юнита и drop-in; сбой остановки — предупреждение
+  `systemd.stop_failed`, не отказ. `remove --forget` снимает и битую запись реестра (Р20: `Get` — 74
+  `state.corrupt`): предупреждение `state.corrupt`, `files` такой записи неизвестны и не убираются, дерево и
+  артефакты cream — убираются. Поле `target_version` в записи `failed-upgrade` **не вводится**: формат реестра
+  §10 — контракт, а целевая версия уже есть в `history.jsonl` (`to` записи `failed-upgrade`) и в манифесте дерева
+  `/opt/cream/ext/<ext>` (прежняя лежит в `.<ext>.prev`); вернуться — после MVP, через спеку, если понадобится
+  `cream show`/stvor-agent.
+
+Рулинги контроллера после ревью раунда 6 (2026-10-19):
+- **Р27.** `cream run` с `lock: exclusive|shared` после захвата `lock/<ext>` перечитывает запись и манифест и
+  отказывает 75 `lock.changed`, если `ext_digest` записи сменился за время ожидания (upgrade или переустановка
+  заменили дерево), — а не только при смене `lock` действия: аргументы проверены по старому манифесту, и действие
+  нового дерева с ними не запускается. Без смены дерева действие видит запись, прочитанную под блокировкой
+  (`CREAM_EXT_VERSION`, домен).
+
+Рулинги контроллера после финального ревью (2026-10-19, задача 23):
+- **Р28.** `cream resolve`: секретный ключ — только `KEY=-` (stdin не читается: значение не нужно, в `params_digest`
+  всё равно `<secret>`) или голое имя `KEY`; литерал, в том числе пустой, — 64 `secret.in_argv`. Голое имя
+  несекретного ключа — 64 `usage.args`.
+- **Р29.** Строковые коды стабильны с 1.0, поэтому сведены сейчас: ошибка чтения файла или каталога (в том числе
+  `stat`/`lstat` существующего пути) — 74 `io.read` вместо `state.read`/`state.io`/`config.io`/`io.params_file`;
+  запись (создание каталога, запись, перенос, удаление) — 74 `io.write` вместо `state.write`/`config.io`; чтение
+  stdin — 74 `io.stdin` вместо 64 `usage.stdin`. `state.corrupt`/`state.newer` (содержимое) остаются, как и
+  `state.lock_*`, `file.stat`, `io.stdout`/`io.stderr`.
+- **Р30.** Фаза build совместима с `virt-customize` 1.48 (Debian 12, нет `--tar-in`): `--mkdir
+  /var/lib/cream/incoming/<id>` → `--copy-in <id>.tar:/var/lib/cream/incoming/` → `--run-command 'tar -C
+  /var/lib/cream/incoming/<id> --numeric-owner -xf /var/lib/cream/incoming/<id>.tar && rm -f
+  /var/lib/cream/incoming/<id>.tar'` → `--run-command 'cream --json install --phase build …'`.
+- **Р31.** release-please: `initial-version: "1.0.0"`, первая версия — 1.0.0; коммит слияния несёт футер
+  `Release-As: 1.0.0` (ставит контроллер). PR «release 0.1.0» не трогается.
 
 ## Задачи
 
@@ -588,7 +681,9 @@ system-init}*.json`.
 **Тесты первыми.** На фикстурах `testdata/catalog` (синхронизированных в тесте через `source.Syncer` с `path`):
 таблица сценариев — первая установка `noop` (`changed:true`, реестр по §10); двойная → `changed:false`, хук не
 вызван (счётчик в `CREAM_STATE_DIR`); `failing-install` → `status: failed`, повтор вызывает хук; `install-scope`
-с новым значением → хук вызван, со старым — нет; `depends-lib` без `lib-fixture` → 67, после — успех и порядок;
+с новым значением → хук вызван, со старым — нет; `depends-lib` без `lib-fixture` → 67, после — успех и порядок; `deps.missing`: кандидаты ищутся по `details.missing`
+через `catalog.Lookup` по всем источникам и кладутся в `details.candidates` (§9.4; тест — `depends-lib` с
+`lib-fixture` в источнике и без него);
 `conflict-*`, `requires-cap`, `live-confirm` без/с `--accept-risk`, `not-applicable` без/с `--allow-skip`
 (`status: skipped`), `reboot-required` → поле и файл; `files-mode` — режим и sha256; файл A в `/etc/cream/<B>/…` (Р11) — в реестре A, повторный install A не
 конфликтует сам с собой; `upgrade-fixture` 1.0.0 →
@@ -655,7 +750,8 @@ configure только включается ссылками (без вызов�
 **Тесты первыми.** Сквозь `cli.Run` с `--root t.TempDir()`: `source add --path testdata/catalog --sync` →
 `sources.lock`; повтор `add` → 0 без изменений; другие поля → 65, с `--replace` → 0; `add --archive` с голым путём
 → 64; `add --archive file://… --sha256 <неверный> --sync` → 69 и записи нет; `validate testdata/invalid/*` — коды;
-`catalog pack` дважды — одинаковый sha256; `resolve --phase build --target-arch arm64 --host-arch amd64` слоя
+`catalog pack` дважды — одинаковый sha256; `source sync` каталога с расширением под более новый cream — успех,
+`catalog.cream_newer` в `warnings` (Р22), `install` этого расширения — 68; `resolve --phase build --target-arch arm64 --host-arch amd64` слоя
 `exec` → 68 `platform.arch_barrier`; golden `resolve --json` для `depends-lib`.
 **Готово.** `make test PKG="./internal/cli/..."`, `make lint` зелёные.
 **Зависит от:** T7, T10, T11.

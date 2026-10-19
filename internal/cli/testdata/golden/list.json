@@ -1,0 +1,60 @@
+{
+  "cream": "dev",
+  "command": "list",
+  "ok": true,
+  "result": {
+    "extensions": [
+      {
+        "name": "action-json",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "domain": true,
+        "apply": "none",
+        "secret": false,
+        "actions": [
+          "echo-args",
+          "exit-code",
+          "join",
+          "status"
+        ],
+        "reboot_required": false
+      },
+      {
+        "name": "apply-hook",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "domain": true,
+        "apply": "hook",
+        "secret": false,
+        "actions": [],
+        "reboot_required": false
+      },
+      {
+        "name": "configure-system",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "domain": true,
+        "apply": "restart",
+        "secret": false,
+        "actions": [],
+        "reboot_required": false
+      },
+      {
+        "name": "with-config",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "domain": true,
+        "apply": "none",
+        "secret": true,
+        "actions": [],
+        "reboot_required": false
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Модель обёртки stvor-agent: «пакет агента» — счётчик вызовов в состоянии.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+n=$(cat "$CREAM_STATE_DIR/install.count" 2>/dev/null || echo 0)
+echo $((n + 1)) >"$CREAM_STATE_DIR/install.count"

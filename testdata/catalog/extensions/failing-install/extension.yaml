@@ -1,0 +1,14 @@
+schema: cream/v1
+name: failing-install
+version: 1.0.0
+summary: фикстура failing-install
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# install падает (код 1), пока FAIL=1: статус failed и повтор по §6.5
+# (cream install failing-install FAIL=0 — хук вызывается снова).
+hooks:
+  install: {}
+  remove: {}
+config:
+  keys:
+    FAIL: {type: bool, default: "1", description: "1 — install завершается сбоем"}

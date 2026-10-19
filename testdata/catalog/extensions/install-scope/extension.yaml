@@ -1,0 +1,15 @@
+schema: cream/v1
+name: install-scope
+version: 1.0.0
+summary: фикстура install-scope
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# scope: install — смена BIN_VERSION перезапускает хук install (§6.5);
+# cream set BIN_VERSION отказывает 65 config.install_scope.
+hooks:
+  install: {}
+  remove: {}
+config:
+  keys:
+    BIN_VERSION: {type: "re:^[0-9]+\\.[0-9]+\\.[0-9]+$", default: "1.0.0", scope: install, description: "версия «бинаря»"}
+    LEVEL: {type: "enum:low,high", default: low, description: "обычная настройка"}

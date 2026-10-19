@@ -1,16 +1,30 @@
 # Статус cream
 
-**Фаза:** старт — каркас (2026-10-18).
+**Фаза:** MVP 1.0 готов к выпуску — все 23 задачи [плана](plans/2026-10-18-cream-core.md) закрыты (2026-10-19);
+ветка `feature/cream-mvp` ждёт PR в `main` с футером `Release-As: 1.0.0`.
 
 ## Сделано
-- Каркас Go-модуля: `cream version`, `make build/build-all/test/lint/ci` в контейнере `golang:1.25.11`.
-- CI (lint, test, build-all) и release-please (`release-type: go`, первая версия — 0.1.0).
-- Обвязка Claude Code: AGENTS.md, CLAUDE.md, `.claude/` (агенты, skills, правила, хуки), lefthook.
+- Формат `cream/v1`, источники archive/path и `catalog pack`, резолвер, исполнитель (`install`/`upgrade`/`remove`,
+  `set`/`show`/`get`/`list`/`config`, `run`/`actions`, `system init`), фаза build (`install --phase build`).
+- Упаковка: `.deb` (nfpm) с гостевыми бинарями, тарболы с `copyright`, `SHA256SUMS`, `repro-check`, `vuln`
+  (toolchain `golang:1.26.9`, Р26); CI-матрица и ассеты релиза через release-please (первая версия 1.0.0, Р31).
+- Проверки: `make test-integration` (systemd PID 1 в контейнере: debian-12, ubuntu-24.04, debian-13) и
+  `make test-build` (настоящий `virt-customize` — и контейнер Debian 13, и 1.48 хоста, Р30).
+- Финальное ревью (задача 23): секрет в `resolve` только именем (Р28), единые коды ввода-вывода `io.*` (Р29),
+  `stage`/`--require-pinned` — 64 `usage.reserved`, окружение хука по списку валидатора, `lock/` 0700.
+- Документация: [docs/cli.md](cli.md) (полные коды ошибок и предупреждений), [ADR 0001](adr/0001-contract-cream-v1.md),
+  [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), README, карта `AGENTS.md`.
 
 ## Дальше
-1. Исполнение [плана MVP](plans/2026-10-18-cream-core.md) (план прошёл skeptic 2026-10-18), волнами по ≤ 3 исполнителя.
-2. Упаковка `.deb` (amd64/arm64, nfpm) — в плане MVP.
-3. ADR на трудно откатываемое из спеки (формат, пути на машине, зависимости).
+1. PR `feature/cream-mvp` → `main` (`Release-As: 1.0.0`), зелёный `gh pr checks` (в том числе arm64), выпуск
+   `v1.0.0`, сверка ассетов с `SHA256SUMS`.
+2. Шаг 2 §16 спеки: пилот каталога в `cream-extensions`.
+3. Интеграция bisquite: фаза build по [docs/cli.md «Для bisquite»](cli.md#для-bisquite-фаза-build).
+
+## Бэклог
+- `runner` ставит действию `Setpgid`: с `stdin: pass` оно в фоновой группе терминала, чтение с tty даст SIGTTIN.
+- Образы CI и тестов закреплять по digest, а не по тегу.
+- CI на PR release-please: PR, открытый под `GITHUB_TOKEN`, не запускает workflow — проверки релизного PR не идут.
 
 ## Сломано
 - Ничего известного.

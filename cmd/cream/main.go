@@ -1,49 +1,47 @@
-// Command cream is the extension runner. For now it only reports its version;
-// the domain commands come with the spec (docs/specs/).
+// Command cream is the extension runner (docs/specs/2026-10-18-cream-core.md).
+// main only sets the process umask and the signal context and hands over to
+// internal/cli.
 package main
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/iamletenkov/cream/internal/version"
+	"github.com/iamletenkov/cream/internal/cli"
 )
 
-const usage = `usage: cream <command>
-
-commands:
-  version   print the cream version
-`
-
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	// umask 022 once per process; hooks and actions inherit it (spec §6.3, ruling Р7).
+	syscall.Umask(0o022)
+	ctx, stop := signalContext(context.Background())
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv)
+	stop()
+	os.Exit(code)
 }
 
-// run executes one command and returns the process exit code:
-// 0 on success, 1 if stdout cannot be written, 2 on a usage error.
-// Write errors to stderr are ignored: there is nowhere left to report them.
-func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		_, _ = fmt.Fprint(stderr, usage)
-		return 2
-	}
-	switch args[0] {
-	case "version", "--version":
-		return writeOut(stdout, version.Line(version.Version)+"\n")
-	case "help", "-h", "--help":
-		return writeOut(stdout, usage)
-	default:
-		_, _ = fmt.Fprintf(stderr, "cream: unknown command %q\n\n%s", args[0], usage)
-		return 2
-	}
+// signalContext is canceled by the first SIGINT, SIGTERM or SIGHUP: lock waits
+// stop, the process group of a running hook or action is killed, locks are
+// released. Once canceled the signals get their default action back, so a
+// second Ctrl-C kills cream at once if that cleanup hangs.
+func signalContext(parent context.Context) (context.Context, context.CancelFunc) {
+	sig, stopSig := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	ctx, cancel := context.WithCancelCause(parent)
+	go func() {
+		<-sig.Done()
+		stopSig() // the handler is gone before ctx is seen canceled
+		cancel(context.Cause(sig))
+	}()
+	return ctx, func() { stopSig(); cancel(context.Canceled) }
 }
 
-// writeOut writes s to stdout and maps a write failure (closed pipe, full disk)
-// to exit code 1.
-func writeOut(stdout io.Writer, s string) int {
-	if _, err := io.WriteString(stdout, s); err != nil {
-		return 1
-	}
-	return 0
+// run builds the process App and returns the exit code of cli.Run.
+func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) int {
+	return cli.Run(args, cli.App{
+		Stdin: stdin, Stdout: stdout, Stderr: stderr,
+		Env: env, Euid: os.Geteuid, Now: time.Now, Context: ctx,
+	})
 }

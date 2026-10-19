@@ -1,0 +1,108 @@
+{
+  "cream": "dev",
+  "command": "show",
+  "ok": true,
+  "result": {
+    "ext": "with-config",
+    "keys": [
+      {
+        "key": "COUNT",
+        "value": "42",
+        "origin": "default",
+        "type": "int",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "DATA_DIR",
+        "value": "/var/tmp/with-config",
+        "origin": "default",
+        "type": "path",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "FLAG",
+        "value": "0",
+        "origin": "default",
+        "type": "bool",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "GREETING",
+        "value": "привет",
+        "origin": "default",
+        "type": "str",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "LISTEN_PORT",
+        "value": "8080",
+        "origin": "default",
+        "type": "port",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "MODE",
+        "value": "fast",
+        "origin": "default",
+        "type": "enum:fast,slow",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "NOTE",
+        "value": "",
+        "origin": "default",
+        "type": "str",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "PORTS",
+        "value": "80 443",
+        "origin": "default",
+        "type": "list:port",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "RO_KEY",
+        "value": "",
+        "origin": "default",
+        "type": "str",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "TAG",
+        "value": "alpha",
+        "origin": "default",
+        "type": "re:^[a-z][a-z0-9-]{0,15}$",
+        "secret": false,
+        "invalid": false
+      },
+      {
+        "key": "TOKEN",
+        "value": "(пусто)",
+        "origin": "default",
+        "type": "str",
+        "secret": true,
+        "invalid": false
+      },
+      {
+        "key": "UPSTREAM",
+        "value": "proxy.example:443",
+        "origin": "default",
+        "type": "host",
+        "secret": false,
+        "invalid": false
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

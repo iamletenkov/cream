@@ -1,0 +1,11 @@
+{
+  "cream": "dev",
+  "command": "version",
+  "ok": true,
+  "result": {
+    "version": "dev",
+    "contract": "cream/v1"
+  },
+  "warnings": [],
+  "error": null
+}

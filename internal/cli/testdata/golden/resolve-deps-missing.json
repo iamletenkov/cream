@@ -1,0 +1,20 @@
+{
+  "cream": "dev",
+  "command": "resolve",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "deps.missing",
+    "message": "depends-lib: нет зависимостей lib-fixture >=1.0.0 <2 — поставьте их раньше",
+    "details": {
+      "ext": "depends-lib",
+      "missing": [
+        {
+          "name": "lib-fixture",
+          "version": ">=1.0.0 <2"
+        }
+      ]
+    }
+  }
+}

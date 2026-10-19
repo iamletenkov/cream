@@ -1,0 +1,11 @@
+#!/bin/sh
+# Модель configure.sh docker: пользователь машины — из библиотеки cloud-user
+# (группа docker в настоящем расширении), уровень журнала — из настроек.
+# Каждый вызов — строка в configure.log: причина, пользователь, уровень и
+# состояние службы (стадия system упорядочена после fixture-dockerd.service).
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+user=$("${CREAM_ROOT%/}/opt/cream/ext/cloud-user/files/get-cloud-user")
+dockerd=$(systemctl is-active fixture-dockerd.service 2>/dev/null || true)
+printf 'reason=%s user=%s level=%s dockerd=%s\n' \
+	"$CREAM_REASON" "$user" "$DOCKER_LOG_LEVEL" "$dockerd" >>"$CREAM_STATE_DIR/configure.log"

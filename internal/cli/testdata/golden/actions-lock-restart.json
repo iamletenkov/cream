@@ -1,0 +1,42 @@
+{
+  "cream": "dev",
+  "command": "actions",
+  "ok": true,
+  "result": {
+    "ext": "lock-restart",
+    "version": "1.0.0",
+    "actions": [
+      {
+        "name": "render",
+        "summary": "рендер перед стартом юнита",
+        "args": "none",
+        "params": [],
+        "stdin": "none",
+        "lock": "none",
+        "output": "text",
+        "timeout_seconds": 120,
+        "phases": [
+          "build",
+          "live"
+        ],
+        "root": true
+      },
+      {
+        "name": "set-managed",
+        "summary": "пишет метки и синхронно перезапускает юнит",
+        "args": "free",
+        "params": [],
+        "stdin": "none",
+        "lock": "exclusive",
+        "output": "json",
+        "timeout_seconds": 180,
+        "phases": [
+          "live"
+        ],
+        "root": true
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

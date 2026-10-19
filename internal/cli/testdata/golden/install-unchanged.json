@@ -1,0 +1,37 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "ok": true,
+  "result": {
+    "schema": "cream-state/v1",
+    "name": "noop",
+    "version": "1.0.0",
+    "kind": "extension",
+    "status": "installed",
+    "source": {
+      "name": "fixtures",
+      "type": "path",
+      "origin": "<ROOT>/srv/catalog",
+      "resolved": "sha256:6881750cd249812d20377d7490051b9dcc0e44a29a92b1df70289e862b3d8a0c",
+      "catalog_version": "1.0.0"
+    },
+    "ext_digest": "sha256:b59f6dd02fb38c0c7bfc2149f948485fbccc7aab422d7a3ea488c6c6e451b296",
+    "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "phase": "live",
+    "installed_at": "2026-10-18T10:00:00Z",
+    "updated_at": "2026-10-18T10:00:00Z",
+    "cream_version": "dev",
+    "files": [],
+    "bin": [],
+    "configure": null,
+    "reboot_required": false,
+    "changed": false
+  },
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "noop: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": null
+}

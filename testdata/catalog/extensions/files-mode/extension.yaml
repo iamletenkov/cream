@@ -1,0 +1,17 @@
+schema: cream/v1
+name: files-mode
+version: 1.0.0
+summary: фикстура files-mode
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# files: явные режимы, режим по биту исполнения источника и файл в каталоге
+# настроек чужого расширения (рулинг Р11).
+hooks:
+  install: {}
+  remove: {}
+files:
+  - {src: files/plain.conf, dst: /etc/files-mode/plain.conf, mode: "0644"}
+  - {src: files/private.conf, dst: /etc/files-mode/private.conf, mode: "0600"}
+  - {src: files/files-mode-tool, dst: /usr/local/bin/files-mode-tool, mode: "0755"}
+  - {src: files/by-bit.conf, dst: /etc/files-mode/by-bit.conf}
+  - {src: files/label, dst: /etc/cream/noop/labels.d/files-mode}

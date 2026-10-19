@@ -1,0 +1,21 @@
+schema: cream/v1
+name: fixture-docker-like
+version: 1.0.0
+summary: модель расширения docker — configure стадии system после службы, пользователь из cloud-user
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Как docker пилота (§16 шаг 2): depends на библиотеку cloud-user, configure
+# стадии system после своей службы вместо самописного юнита, live: confirm.
+# Служба — пустышка fixture-dockerd.service из files.
+targets: {build: exec, live: confirm, live_note: "модель docker: на живой машине заменяет пакеты docker.io — нужен --accept-risk"}
+provides: [container-runtime]
+depends: [{name: cloud-user, version: ">=1.0.0 <2"}]
+hooks:
+  install: {timeout: 5m}
+  configure: {stage: system, after: [fixture-dockerd.service], wants: [fixture-dockerd.service]}
+  remove: {}
+config:
+  keys:
+    DOCKER_LOG_LEVEL: {type: "enum:info,debug,warn", default: info, description: "уровень журнала службы; применяется перезапуском configure"}
+files:
+  - {src: files/fixture-dockerd.service, dst: /etc/systemd/system/fixture-dockerd.service, mode: "0644"}

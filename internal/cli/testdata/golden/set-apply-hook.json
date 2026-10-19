@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "set",
+  "ok": true,
+  "result": {
+    "ext": "apply-hook",
+    "changed": true,
+    "changed_keys": [
+      "LEVEL"
+    ],
+    "apply": "hook",
+    "reboot_required": false
+  },
+  "warnings": [],
+  "error": null
+}

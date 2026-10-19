@@ -1,0 +1,15 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "action.protocol",
+    "message": "action-bad-protocol/two-objects: output: json — stdout должен содержать ровно один JSON-объект: после объекта есть ещё данные",
+    "details": {
+      "action": "action-bad-protocol/two-objects",
+      "exit_code": 0
+    }
+  }
+}

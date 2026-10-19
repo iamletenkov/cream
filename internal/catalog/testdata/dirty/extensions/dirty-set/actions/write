@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+v=$(cream get dirty-set LEVEL)
+[ -n "$v" ] && /usr/bin/cream -q set --allow-readonly dirty-set LEVEL=1

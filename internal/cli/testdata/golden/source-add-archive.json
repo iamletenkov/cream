@@ -1,0 +1,18 @@
+{
+  "cream": "dev",
+  "command": "source",
+  "ok": true,
+  "result": {
+    "source": {
+      "name": "next",
+      "type": "archive",
+      "url": "file://<ROOT>/next.tar.gz",
+      "sha256": "<NEXT_SHA256>",
+      "synced": false,
+      "lock": null
+    },
+    "changed": true
+  },
+  "warnings": [],
+  "error": null
+}

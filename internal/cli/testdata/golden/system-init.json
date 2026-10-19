@@ -1,0 +1,11 @@
+{
+  "cream": "dev",
+  "command": "system",
+  "ok": true,
+  "result": {
+    "unit": "cream-configure@.service",
+    "daemon_reload": false
+  },
+  "warnings": [],
+  "error": null
+}

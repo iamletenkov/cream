@@ -1,0 +1,14 @@
+{
+  "cream": "dev",
+  "command": "show",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "not_found.extension",
+    "message": "расширение noop не установлено",
+    "details": {
+      "ext": "noop"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+schema: cream/v1
+name: dirty-apply
+version: 1.0.0
+summary: грязная фикстура — apply ждёт задание systemd
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+hooks:
+  install: {}
+  apply: {}

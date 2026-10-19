@@ -1,0 +1,3 @@
+#!/bin/sh
+# files-mode: исполняемый файл 0755
+echo files-mode-tool

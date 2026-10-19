@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+# systemctl restart в комментарии не считается
+systemctl --no-block restart dirty-apply.service
+systemctl is-active --quiet dirty-apply.service || true
+systemctl restart dirty-apply-helper.service

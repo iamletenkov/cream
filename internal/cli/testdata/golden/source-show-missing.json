@@ -1,0 +1,14 @@
+{
+  "cream": "dev",
+  "command": "source",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "not_found.source",
+    "message": "источника next нет в sources.yaml",
+    "details": {
+      "source": "next"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+schema: cream/v1
+name: with-config
+version: 1.0.0
+summary: фикстура with-config
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Все типы ключей §8.2, secret: file, readonly, шаблон PREFIX_*.
+hooks:
+  install: {}
+  remove: {}
+config:
+  keys:
+    FLAG: {type: bool, default: "0", description: "флаг (bool — 0 или 1)"}
+    COUNT: {type: int, default: "42", description: "целое"}
+    LISTEN_PORT: {type: port, default: "8080", description: "порт"}
+    UPSTREAM: {type: host, default: "proxy.example:443", description: "адрес с портом (Р10)"}
+    DATA_DIR: {type: path, default: /var/tmp/with-config, description: "абсолютный путь"}
+    GREETING: {type: str, default: "привет", description: "строка"}
+    MODE: {type: "enum:fast,slow", default: fast, description: "перечисление"}
+    TAG: {type: "re:^[a-z][a-z0-9-]{0,15}$", default: alpha, description: "выражение RE2"}
+    PORTS: {type: "list:port", default: "80 443", description: "список портов через пробел"}
+    NOTE: {type: str, default: "", empty: true, description: "пустое допустимо"}
+    RO_KEY: {type: str, default: "", empty: true, readonly: true, description: "пишет только хук или --allow-readonly"}
+    TOKEN: {type: str, default: "", empty: true, secret: file, description: "секрет в /etc/cream/with-config/secrets"}
+    LBL_*: {type: "re:^[a-z0-9-]+$", pattern: true, description: "метки LBL_<имя>"}

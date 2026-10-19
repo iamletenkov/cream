@@ -1,0 +1,17 @@
+schema: cream/v1
+name: apply-hook
+version: 1.0.0
+summary: фикстура apply-hook
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Хук apply получает CREAM_CHANGED_KEYS; даёт способность fixture-runtime
+# (поставщик для requires-cap и соперник conflict-cap).
+provides: [fixture-runtime]
+hooks:
+  install: {}
+  apply: {}
+  remove: {}
+config:
+  keys:
+    LEVEL: {type: "enum:low,high", default: low, description: "уровень"}
+    LIMIT: {type: int, default: "10", description: "предел"}

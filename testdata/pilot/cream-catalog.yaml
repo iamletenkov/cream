@@ -1,0 +1,9 @@
+# Пилотный каталог (спека §17 «Сверка с потребителем», §16 шаг 2): модели
+# cloud-user, docker, teleport и обёртки stvor-agent из cream-extensions в
+# форме cream/v1 — на них живой сценарий test/integration и make test-build
+# проверяют то, на что опирается спека stvor-agent. Не настоящие расширения:
+# сети, пакетов и бинарей нет, вместо служб — юниты-пустышки.
+schema: cream/v1
+name: cream-pilot
+version: 1.0.0
+roots: [extensions]

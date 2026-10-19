@@ -1,0 +1,62 @@
+# nfpm: .deb cream (спека §5, §15). Собирается make deb / make dist-release в
+# контейнере goreleaser/nfpm (тег закреплён в Makefile) из корня репозитория.
+# Переменные окружения: ARCH (amd64|arm64), DEB_VERSION (без «v»), STAGE
+# (каталог changelog.gz от scripts/dist-release.sh stage); mtime всех записей —
+# SOURCE_DATE_EPOCH. Состав проверяет scripts/check-deb.sh.
+name: cream
+arch: ${ARCH}
+platform: linux
+version: ${DEB_VERSION}
+version_schema: none
+section: admin
+priority: optional
+maintainer: Letenkov Maksim <letenkovmaksim@yandex.ru>
+vendor: Letenkov Maksim
+homepage: https://github.com/iamletenkov/cream
+license: Apache-2.0
+description: |-
+  Extension executor for Debian machines and image builds
+  cream reads extension.yaml manifests and runs the extension lifecycle
+  (install, upgrade, configure, remove) on a live machine and the build phase
+  inside virt-customize. It keeps the registry of installed extensions,
+  manages their settings (cream set / cream show) and syncs extension
+  catalogs. The package also ships guest binaries for linux/amd64 and
+  linux/arm64 for offline image builds.
+
+# Бинарь статический: Depends нет.
+suggests:
+  - git
+  - libguestfs-tools
+
+contents:
+  - src: dist/cream-linux-${ARCH}
+    dst: /usr/bin/cream
+    expand: true
+    file_info:
+      mode: 0755
+  - src: internal/systemd/cream-configure@.service
+    dst: /usr/lib/systemd/system/cream-configure@.service
+    file_info:
+      mode: 0644
+  - src: dist/cream-linux-amd64
+    dst: /usr/lib/cream/guest/linux-amd64/cream
+    file_info:
+      mode: 0755
+  - src: dist/cream-linux-arm64
+    dst: /usr/lib/cream/guest/linux-arm64/cream
+    file_info:
+      mode: 0755
+  - src: packaging/copyright
+    dst: /usr/share/doc/cream/copyright
+    file_info:
+      mode: 0644
+  - src: ${STAGE}/changelog.gz
+    dst: /usr/share/doc/cream/changelog.gz
+    expand: true
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: packaging/scripts/postinst
+  preremove: packaging/scripts/prerm
+  postremove: packaging/scripts/postrm

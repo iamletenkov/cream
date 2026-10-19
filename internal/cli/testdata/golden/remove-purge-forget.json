@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "remove",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "usage.flag",
+    "message": "--purge и --forget несовместимы",
+    "details": null
+  }
+}

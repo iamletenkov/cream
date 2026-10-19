@@ -1,0 +1,5 @@
+#!/bin/sh
+# cream set здесь только в комментарии
+set -eu
+cream show dirty-set
+echo "cream setting"

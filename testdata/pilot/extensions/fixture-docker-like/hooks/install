@@ -1,0 +1,12 @@
+#!/bin/sh
+# Модель docker: «ставит» службу (юнит уже разложил cream через files) и
+# включает её. На живой машине — ещё и запускает, как apt-пакет docker.io;
+# в build systemd не работает, служба поднимется на загрузке.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+n=$(cat "$CREAM_STATE_DIR/install.count" 2>/dev/null || echo 0)
+echo $((n + 1)) >"$CREAM_STATE_DIR/install.count"
+systemctl enable fixture-dockerd.service
+if [ "$CREAM_PHASE" = live ] && [ -d /run/systemd/system ]; then
+	systemctl start fixture-dockerd.service
+fi

@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": true,
+  "result": {
+    "action": "action-json/join",
+    "exit_code": 0,
+    "output": {
+      "joined": true,
+      "proxy": "proxy.example:443",
+      "secret_len": 6
+    }
+  },
+  "warnings": [],
+  "error": null
+}

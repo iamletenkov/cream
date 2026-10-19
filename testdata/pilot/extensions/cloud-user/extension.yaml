@@ -1,0 +1,9 @@
+schema: cream/v1
+name: cloud-user
+version: 1.0.0
+summary: библиотека — имя пользователя машины (cloud-init или первая обычная учётка)
+cream: ">=1.0.0"
+kind: library
+platform: {family: deb, arch: [amd64, arm64]}
+# kind: library — только файлы, без хуков (§4.5). Потребители зовут
+# ${CREAM_ROOT%/}/opt/cream/ext/cloud-user/files/get-cloud-user и берут имя из stdout.

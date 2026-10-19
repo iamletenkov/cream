@@ -1,0 +1,16 @@
+schema: cream/v1
+name: dirty-unit
+version: 1.0.0
+summary: грязная фикстура — Exec юнита зовёт действие под блокировкой
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# render (lock: shared) из ExecStartPre — нарушение §7.3; status (lock: none)
+# из ExecStart — нет; действие чужого расширения валидатор не знает.
+hooks:
+  install: {}
+actions:
+  render: {summary: "рендер", lock: shared}
+  status: {summary: "статус", lock: none}
+files:
+  - {src: files/dirty-unit.service, dst: /etc/systemd/system/dirty-unit.service}
+  - {src: files/notes.conf, dst: /etc/dirty-unit/notes.conf}

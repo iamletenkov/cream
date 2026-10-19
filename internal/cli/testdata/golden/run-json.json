@@ -1,0 +1,16 @@
+{
+  "cream": "dev",
+  "command": "run",
+  "ok": true,
+  "result": {
+    "action": "action-json/status",
+    "exit_code": 0,
+    "output": {
+      "ok": true,
+      "ext": "action-json",
+      "phase": "live"
+    }
+  },
+  "warnings": [],
+  "error": null
+}

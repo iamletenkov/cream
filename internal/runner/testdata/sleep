@@ -1,0 +1,8 @@
+#!/bin/sh
+# $1 — файл для pid внука; $2 = ignore-term — sh и внук игнорируют SIGTERM.
+if [ "$2" = "ignore-term" ]; then
+	trap '' TERM
+fi
+sleep 60 &
+echo $! > "$1"
+wait
