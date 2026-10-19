@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/iamletenkov/cream/compare/v1.1.1...v1.1.2) (2026-10-19)
+
+
+### Исправлено
+
+* **catalog:** validate.unit_lock предупреждает только о реальном тупике §7.3 ([#9](https://github.com/iamletenkov/cream/issues/9)) ([be9944e](https://github.com/iamletenkov/cream/commit/be9944ea3d31c0e2ee98583d0b2f7b33f2e9aa12))
+
 ## [1.1.1](https://github.com/iamletenkov/cream/compare/v1.1.0...v1.1.1) (2026-10-19)
 
 
