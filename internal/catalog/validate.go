@@ -129,8 +129,9 @@ func validate(root string, cream manifest.CreamBuild) (Report, []loaded) {
 		idx[x.m.Name] = x
 		r.Extensions = append(r.Extensions, ExtensionInfo{Name: x.m.Name, Version: x.m.Version.String(), Path: x.rel})
 	}
+	a := newUnitLockAnalysis(defaultUnitLockLimits)
 	for _, x := range exts {
-		warnExtension(&r, x, idx)
+		warnExtension(&r, x, idx, a)
 	}
 	return r, exts
 }
@@ -139,12 +140,18 @@ func validate(root string, cream manifest.CreamBuild) (Report, []loaded) {
 // rules and warnings as Validate, paths relative to dir. A call of another
 // extension's action from a unit is not checked: its manifest is unknown.
 func ValidateDir(dir string, cream manifest.CreamBuild) (Report, error) {
+	return validateDir(dir, cream, defaultUnitLockLimits)
+}
+
+// validateDir is ValidateDir with the limits of the validate.unit_lock
+// analysis (tests lower them).
+func validateDir(dir string, cream manifest.CreamBuild, lim unitLockLimits) (Report, error) {
 	r := newReport()
 	m := checkExtension(&r, dir, ".", cream, false)
 	if m != nil {
 		r.Extensions = append(r.Extensions, ExtensionInfo{Name: m.Name, Version: m.Version.String(), Path: "."})
 		x := loaded{rel: ".", dir: dir, m: m}
-		warnExtension(&r, x, map[string]loaded{m.Name: x})
+		warnExtension(&r, x, map[string]loaded{m.Name: x}, newUnitLockAnalysis(lim))
 	}
 	return r, r.Err()
 }

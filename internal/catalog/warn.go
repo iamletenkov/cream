@@ -19,16 +19,19 @@ var valueFlags = []string{"--lock-timeout", "--root", "--sources", "--cache"}
 // jobVerbs — подкоманды systemctl, которые ставят задание и без --no-block
 // ждут его завершения.
 var jobVerbs = []string{"start", "stop", "restart", "reload", "try-restart", "reload-or-restart",
-	"try-reload-or-restart", "isolate"}
+	"try-reload-or-restart", "reload-or-try-restart", "force-reload", "condrestart", "condreload", "condstop",
+	"isolate"}
 
-// unitExecKeys — строки юнита, которые выполняются при старте и reload (§7.3).
-var unitExecKeys = []string{"ExecStartPre", "ExecStart", "ExecReload"}
+// unitExecKeys — строки юнита, конца которых ждёт задание start, stop или
+// reload (§7.3).
+var unitExecKeys = []string{"ExecCondition", "ExecStartPre", "ExecStart", "ExecStartPost", "ExecReload",
+	"ExecStop", "ExecStopPost"}
 
-func warnExtension(r *Report, x loaded, idx map[string]loaded) {
+func warnExtension(r *Report, x loaded, idx map[string]loaded, a *unitLockAnalysis) {
 	t := tree{r: r, dir: x.dir, rel: x.rel, ext: x.m.Name}
 	t.warnLockNoneSet(x.m)
 	t.warnApplyBlocking(x.m)
-	t.warnUnitLock(x, idx)
+	t.warnUnitLock(x, idx, a)
 }
 
 // script reads an executable file of the tree as text lines; nil for ELF
