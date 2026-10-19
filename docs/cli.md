@@ -15,8 +15,9 @@
 - Флаги можно ставить и после позиционных (`cream set teleport K=V --no-apply`); `--` прекращает разбор.
   Исключение — `cream run`: флаги cream только **до** `<ext>` (рулинг Р13, см. [ниже](#cream-run)).
 - `cream help [<команда>]`, `-h`, `--help` — справка; `cream --version` — то же, что `cream version`.
-- Отложенные команды `search`, `info`, `verify`, `assume`, `lineage`, `check`, `status`, `path`, подкоманда
-  `source pin` и флаги `--with-deps`, `--allow-downgrade`, `--git`, `--ref`, `--commit` распознаются и отвечают
+- Отложенные команды `search`, `info`, `verify`, `assume`, `lineage`, `check`, `status`, `path`, `stage`,
+  подкоманда `source pin` и флаги `--with-deps`, `--allow-downgrade` (`install`), `--require-pinned` (`install`,
+  `resolve`), `--git`, `--ref`, `--commit` (`source add`) распознаются и отвечают
   **64 `usage.reserved`** («зарезервировано в cream/v1, не реализовано в cream 1.0»), см.
   [install-with-deps-reserved.json](../internal/cli/testdata/golden/install-with-deps-reserved.json).
 

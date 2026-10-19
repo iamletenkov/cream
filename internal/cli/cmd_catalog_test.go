@@ -268,6 +268,7 @@ func TestResolveRefusals(t *testing.T) {
 		{"нет расширения", append(b[:4:4], "nope"), 66, "not_found.extension"},
 		{"версия не та", append(b[:4:4], "noop@2.0.0"), 66, "version.mismatch"},
 		{"неверная фаза", []string{"--phase", "boot", "noop"}, 64, "usage.phase"},
+		{"--require-pinned зарезервирован", append(b[:4:4], "--require-pinned", "noop"), 64, "usage.reserved"},
 		{"семейство", []string{"--phase", "build", "--family", "rpm", "noop"}, 68, "platform.family"},
 		{"live без os-release", []string{"noop"}, 68, "platform.family"},
 	}

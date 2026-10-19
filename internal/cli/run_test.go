@@ -125,6 +125,7 @@ func TestRunExitCodesAndErrorCodes(t *testing.T) {
 		{name: "deferred command search", args: []string{"search"}, wantExit: 64, wantCode: "usage.reserved"},
 		{name: "deferred command lineage", args: []string{"lineage"}, wantExit: 64, wantCode: "usage.reserved"},
 		{name: "deferred command path", args: []string{"path", "x"}, wantExit: 64, wantCode: "usage.reserved"},
+		{name: "deferred command stage", args: []string{"stage", "x"}, wantExit: 64, wantCode: "usage.reserved"},
 		{name: "cerr keeps its exit", args: []string{"fail"}, wantExit: 67, wantCode: "deps.missing"},
 		{name: "plain error is internal", args: []string{"plain"}, wantExit: 70, wantCode: "internal"},
 		{name: "panic is internal", args: []string{"panic"}, wantExit: 70, wantCode: "internal"},

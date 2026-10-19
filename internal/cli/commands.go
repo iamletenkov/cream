@@ -62,7 +62,7 @@ func (a App) commands() []Command {
 // they are known to the dispatcher and answer 64 usage.reserved.
 func isReservedCommand(name string) bool {
 	switch name {
-	case "search", "info", "verify", "assume", "lineage", "check", "status", "path":
+	case "search", "info", "verify", "assume", "lineage", "check", "status", "path", "stage":
 		return true
 	}
 	return false

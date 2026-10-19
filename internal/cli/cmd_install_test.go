@@ -124,6 +124,10 @@ func TestInstallCommandText(t *testing.T) {
 	if out := runCLI(t, in, "install", "--allow-downgrade", "noop"); out.Code != 64 {
 		t.Errorf("--allow-downgrade: %+v", out)
 	}
+	if out := runCLI(t, in, "--json", "install", "--require-pinned", "noop"); out.Code != 64 ||
+		!strings.Contains(out.Stdout, `"usage.reserved"`) {
+		t.Errorf("--require-pinned: %+v", out)
+	}
 	if out := runCLI(t, in, "upgrade"); out.Code != 64 {
 		t.Errorf("upgrade без имён: %+v", out)
 	}

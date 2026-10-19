@@ -35,7 +35,7 @@ func (App) installCommands() []Command {
 				fs.StringVar(&fromDir, "from-dir", "", "фаза build: дерево расширения `D` (incoming/<id>/<имя>)")
 				fs.StringVar(&record, "record", "", "фаза build: record.json `F` — слой cream resolve --json")
 				fs.BoolVar(&removeParams, "remove-params-file", false, "фаза build: удалить --params-file после чтения")
-				reserveFlags(fs, "with-deps", "allow-downgrade")
+				reserveFlags(fs, "with-deps", "allow-downgrade", "require-pinned")
 			},
 			Run: func(ctx *Context, args []string) (any, error) {
 				if phase != engine.PhaseLive || fromDir != "" || record != "" || removeParams {

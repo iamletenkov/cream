@@ -47,6 +47,7 @@ func catalogCommandsWith(d catalogDeps) []Command {
 				fs.StringVar(&h.targetArch, "target-arch", "", "архитектура цели `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.hostArch, "host-arch", "", "архитектура хоста сборки `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb); без него не проверяется в build")
+				reserveFlags(fs, "require-pinned")
 			},
 			Run: func(ctx *Context, args []string) (any, error) { return runResolve(ctx, d, h, args) }},
 	}
