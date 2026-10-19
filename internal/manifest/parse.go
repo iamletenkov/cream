@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -165,8 +166,40 @@ func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := checkSince(m, creamRange); err != nil {
+		return nil, err
+	}
 	m.Cream = creamRange
 	return m, nil
+}
+
+// stageSince — версия cream, с которой есть стадия configure; ok = false для
+// стадий cream 1.0.
+func stageSince(st Stage) (semver.Version, bool) {
+	switch st {
+	case StageEarly, StageCloudUser, StageGraphical:
+		return semver.Version{Major: 1, Minor: 1}, true
+	}
+	return semver.Version{}, false
+}
+
+// checkSince — совместимые добавления внутри cream/v1 требуют поднять cream:
+// манифеста до своей версии (§4.2): иначе cream 1.0 отказал бы по полю, а не
+// по cream:. Проверка не зависит от версии исполнителя (и у dev-сборки тоже).
+func checkSince(m *Manifest, cream semver.Range) error {
+	hk, ok := m.Hooks[HookConfigure]
+	if !ok {
+		return nil
+	}
+	since, ok := stageSince(hk.Stage)
+	if !ok || cream.AtLeast(since) {
+		return nil
+	}
+	field := "hooks.configure.stage"
+	e := cerr.New(cerr.ExitData, codeInvalid, "%s: %s появилась в cream %s — нужен cream: \">=%s\" (сейчас %q)",
+		field, hk.Stage, since, since, cream.String())
+	e.Details = map[string]any{"field": field, "since": since.String()}
+	return e
 }
 
 // Load читает dir/extension.yaml и разбирает его Parse.
@@ -288,7 +321,8 @@ func topScalar(root *yaml.Node, key string) string {
 type CreamBuild struct {
 	// Version — версия сборки; при Dev не используется.
 	Version semver.Version
-	// Dev — сборка без semver-версии ("dev", пусто, метаданные +…): она
+	// Dev — сборка без semver-версии ("dev", пусто, метаданные +…) или не с
+	// тега (git describe, describeBuild): она
 	// удовлетворяет любому cream: с предупреждением platform.dev_build.
 	Dev bool
 }
@@ -297,10 +331,20 @@ type CreamBuild struct {
 // отбрасывается; всё, что не строгий semver, — Dev.
 func ParseCreamBuild(raw string) CreamBuild {
 	v, err := semver.Parse(strings.TrimPrefix(strings.TrimSpace(raw), "v"))
-	if err != nil {
+	if err != nil || describeBuild(v.Pre) {
 		return CreamBuild{Dev: true}
 	}
 	return CreamBuild{Version: v}
+}
+
+// reDescribe — хвост git describe не с тега: <число коммитов>-g<хеш>[-dirty].
+var reDescribe = regexp.MustCompile(`^[0-9]+-g[0-9a-f]{4,}(-dirty)?$`)
+
+// describeBuild — версия собрана не с тега (git describe: «1.0.0-3-gabc»,
+// «1.0.0-dirty»): это не релиз и не предрелиз 1.0.0, а сборка разработчика.
+func describeBuild(pre []string) bool {
+	s := strings.Join(pre, ".")
+	return reDescribe.MatchString(s) || s == "dirty" || strings.HasSuffix(s, "-dirty")
 }
 
 // String — версия для сообщений.

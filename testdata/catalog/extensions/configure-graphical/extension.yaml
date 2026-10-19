@@ -1,0 +1,12 @@
+schema: cream/v1
+name: configure-graphical
+version: 1.0.0
+summary: фикстура configure-graphical
+cream: ">=1.1.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure стадии graphical (cream 1.1.0): graphical.target, после менеджера
+# входа; after из манифеста дописывается к порядку стадии.
+hooks:
+  install: {}
+  configure: {stage: graphical, after: [gdm.service]}
+  remove: {}

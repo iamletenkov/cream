@@ -320,13 +320,11 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 				return nil, invalid(field, "stage, after, before, wants — только у configure")
 			}
 		} else {
-			switch Stage(r.Stage) {
-			case StageSystem:
-				hk.Stage = StageSystem
-			case "early", "cloud-user", "graphical":
-				return nil, reserved(field + ".stage: " + r.Stage)
+			switch st := Stage(r.Stage); st {
+			case StageSystem, StageEarly, StageCloudUser, StageGraphical:
+				hk.Stage = st
 			case "":
-				return nil, invalid(field+".stage", "обязательно у configure (system)")
+				return nil, invalid(field+".stage", "обязательно у configure (early, system, cloud-user, graphical)")
 			default:
 				return nil, invalid(field+".stage", "%q: неизвестная стадия", r.Stage)
 			}

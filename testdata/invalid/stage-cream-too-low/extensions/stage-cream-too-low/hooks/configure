@@ -1,0 +1,11 @@
+#!/bin/sh
+# Фикстура cream: хук configure стадии считает вызовы в
+# $CREAM_STATE_DIR/configure.count и дописывает причину вызова в configure.log.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+f="$CREAM_STATE_DIR/configure.count"
+n=0
+if [ -f "$f" ]; then n=$(cat "$f"); fi
+echo $((n + 1)) > "$f"
+printf 'phase=%s reason=%s version=%s\n' \
+    "${CREAM_PHASE:-}" "${CREAM_REASON:-}" "${CREAM_EXT_VERSION:-}" >> "$CREAM_STATE_DIR/configure.log"

@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"fmt"
 	"io/fs"
 	"slices"
 	"strings"
@@ -168,9 +169,9 @@ func TestParseRules(t *testing.T) {
 		{name: "все хуки MVP", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {timeout: 20m}, upgrade: {}, remove: {}, apply: {timeout: 30s}, configure: {stage: system}}")},
 		{name: "хук пустым значением", yaml: mk(t, "", "hooks: {install: {}}", "hooks:\n  install:\n  remove:")},
 		{name: "configure без stage", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {}}"), wantExit: 65, wantCode: "manifest.invalid"},
-		{name: "configure stage graphical — зарезервировано", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: graphical}}"), wantExit: 65, wantCode: "manifest.reserved"},
-		{name: "configure stage early — зарезервировано", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: early}}"), wantExit: 65, wantCode: "manifest.reserved"},
-		{name: "configure stage cloud-user — зарезервировано", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: cloud-user}}"), wantExit: 65, wantCode: "manifest.reserved"},
+		{name: "configure stage graphical при cream >=1.0.0 — нужен 1.1.0", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: graphical}}"), wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "configure stage early при cream >=1.0.0 — нужен 1.1.0", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: early}}"), wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "configure stage cloud-user при cream >=1.0.0 — нужен 1.1.0", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: cloud-user}}"), wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "configure stage чужая", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: late}}"), wantExit: 65, wantCode: "manifest.invalid"},
 		{name: "configure after/before/wants", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: system, after: [docker.service], before: [getty.target], wants: [network-online.target]}}")},
 		{name: "configure after с переводом строки", yaml: mk(t, "", "hooks: {install: {}}", "hooks: {install: {}, configure: {stage: system, after: [\"a.service\\nExecStart=/bin/x\"]}}"), wantExit: 65, wantCode: "manifest.invalid"},
@@ -325,6 +326,63 @@ func TestParseRules(t *testing.T) {
 			}
 			if got := cerr.CodeOf(err); got != tc.wantCode {
 				t.Errorf("error.code %q, ждали %q: %v", got, tc.wantCode, err)
+			}
+		})
+	}
+}
+
+// TestParseStages11: стадии early, cloud-user, graphical (§6.4) появились в
+// cream 1.1.0 — манифест обязан поднять cream: до ">=1.1.0" (§4.2), а cream 1.0
+// отказывает такому манифесту по cream: (68), а не по стадии.
+func TestParseStages11(t *testing.T) {
+	t.Parallel()
+	v11 := ParseCreamBuild("1.1.0")
+	const cfg = "hooks: {install: {}, configure: {stage: %s, after: [a.service]}}"
+	tests := []struct {
+		name, stage, rng string
+		cream            CreamBuild
+		wantExit         int
+		wantCode         string
+	}{
+		{name: "early 1.1", stage: "early", rng: ">=1.1.0", cream: v11},
+		{name: "cloud-user 1.1", stage: "cloud-user", rng: ">=1.1.0 <2", cream: v11},
+		{name: "graphical 1.1", stage: "graphical", rng: ">=1.2.0", cream: ParseCreamBuild("1.2.0")},
+		{name: "graphical на dev-сборке", stage: "graphical", rng: ">=1.1.0", cream: ParseCreamBuild("dev")},
+		{name: "system 1.0 на 1.1", stage: "system", rng: ">=1.0.0", cream: v11},
+		{name: "early при >=1.0.0", stage: "early", rng: ">=1.0.0", cream: v11, wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "cloud-user при >=1.0.5", stage: "cloud-user", rng: ">=1.0.5", cream: v11, wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "graphical на dev при >=1.0.0", stage: "graphical", rng: ">=1.0.0", cream: ParseCreamBuild("dev"), wantExit: 65, wantCode: "manifest.invalid"},
+		{name: "early на cream 1.0", stage: "early", rng: ">=1.1.0", cream: creamV1(t), wantExit: 68, wantCode: "platform.cream_version"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := mk(t, "", `cream: ">=1.0.0"`, `cream: "`+tc.rng+`"`, "hooks: {install: {}}", fmt.Sprintf(cfg, tc.stage))
+			m, err := Parse([]byte(doc), tc.cream, &cerr.Warnings{})
+			if tc.wantExit == 0 {
+				if err != nil {
+					t.Fatalf("Parse: %v\n%s", err, doc)
+				}
+				hk := m.Hooks[HookConfigure]
+				if string(hk.Stage) != tc.stage || !slices.Equal(hk.After, []string{"a.service"}) {
+					t.Errorf("configure = %+v", hk)
+				}
+				return
+			}
+			if cerr.ExitCode(err) != tc.wantExit || cerr.CodeOf(err) != tc.wantCode {
+				t.Fatalf("err = %v (exit %d, code %q), want %d %s", err, cerr.ExitCode(err), cerr.CodeOf(err),
+					tc.wantExit, tc.wantCode)
+			}
+			msg := err.Error()
+			switch tc.wantExit {
+			case 65:
+				if !strings.Contains(msg, "cream 1.1.0") || !strings.Contains(msg, `">=1.1.0"`) {
+					t.Errorf("сообщение не называет нужную версию: %s", msg)
+				}
+			case 68:
+				if !strings.Contains(msg, "требует cream >=1.1.0, а это cream 1.0.0") {
+					t.Errorf("сообщение 68: %s", msg)
+				}
 			}
 		})
 	}
@@ -569,6 +627,11 @@ func TestParseCreamBuild(t *testing.T) {
 		{name: "пусто — dev", build: "", cream: ">=1.0.0", wantWarn: true},
 		{name: "не semver", build: "1.2.0+abc", cream: ">=1.0.0", wantWarn: true},
 		{name: "dev не отменяет проверку диапазона", build: "dev", cream: ">=2.0.0", wantExit: 65},
+		// Сборка из git describe не с тега — не релиз: dev, а не предрелиз 1.0.0.
+		{name: "describe после тега — dev", build: "v1.0.0-3-g0d002ad", cream: ">=1.1.0", wantWarn: true},
+		{name: "describe грязный — dev", build: "v1.0.0-3-g0d002ad-dirty", cream: ">=1.1.0", wantWarn: true},
+		{name: "тег грязный — dev", build: "v1.0.0-dirty", cream: ">=1.1.0", wantWarn: true},
+		{name: "rc с номером — не describe", build: "1.1.0-rc-3", cream: ">=1.2.0", wantExit: 68},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

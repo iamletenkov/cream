@@ -146,3 +146,21 @@ func (r Range) MajorBound() (lo, hi uint64, ok bool) {
 	}
 	return lo, hi, true
 }
+
+// AtLeast reports whether every version the range admits has its main
+// version (pre-release dropped) at or above v's: some lower bound (>=, >, =)
+// is itself at or above v. A manifest that uses a field of cream 1.1 must
+// say so in cream: — ">=1.1.0" passes, ">=1.0.0" or "<2" do not.
+func (r Range) AtLeast(v Version) bool {
+	floor := Version{Major: v.Major, Minor: v.Minor, Patch: v.Patch}
+	for _, c := range r.cmps {
+		switch c.op {
+		case opGE, opGT, opEQ:
+			core := Version{Major: c.ver.Major, Minor: c.ver.Minor, Patch: c.ver.Patch}
+			if Compare(core, floor) >= 0 {
+				return true
+			}
+		}
+	}
+	return false
+}

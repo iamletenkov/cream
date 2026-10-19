@@ -154,3 +154,43 @@ func TestRangeMajorBound(t *testing.T) {
 		})
 	}
 }
+
+func TestRangeAtLeast(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		rng, min string
+		want     bool
+	}{
+		{">=1.1.0", "1.1.0", true},
+		{">=1.2.0 <2", "1.1.0", true},
+		{"=1.1.0", "1.1.0", true},
+		{">1.1.0", "1.1.0", true},
+		{">=1.1.0-rc.1", "1.1.0", true}, // предрелиз сравнивается по основной версии
+		{">=1.0.0", "1.1.0", false},
+		{">=1.0.5 <2", "1.1.0", false},
+		{">1.0.99", "1.1.0", false}, // допускает 1.0.100
+		{"<2", "1.1.0", false},      // нет нижней границы
+		{">=1.0.0 >=1.1.0", "1.1.0", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.rng+" "+tc.min, func(t *testing.T) {
+			t.Parallel()
+			r, err := ParseRange(tc.rng)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := r.AtLeast(mustParse(t, tc.min)); got != tc.want {
+				t.Errorf("AtLeast(%q, %q) = %v, want %v", tc.rng, tc.min, got, tc.want)
+			}
+		})
+	}
+}
+
+func mustParse(t *testing.T, s string) Version {
+	t.Helper()
+	v, err := Parse(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}

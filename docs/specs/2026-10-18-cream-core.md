@@ -151,7 +151,7 @@ roots: [extensions]           # где искать extension.yaml
 | `name` | строка, обязательно | `[a-z0-9][a-z0-9._-]{0,63}` (строже layout 2: без заглавных и без `_` в начале, потому что имя становится частью имён юнитов). Зарезервированы `cream`, `lib`, `ext`, `installed`, `lock` |
 | `version` | semver `X.Y.Z[-pre]`, обязательно | сравнивается при upgrade/downgrade, пишется в реестр и lineage |
 | `summary` | строка ≤ 120 знаков, обязательно | однострочное описание для `cream search` |
-| `cream` | диапазон semver, обязательно | минимальная версия исполнителя, например `">=1.0.0"`. Если cream старее, это отказ (код 68). Мажор диапазона обязан совпадать с мажором схемы. Предрелизная сборка cream сравнивается по основной версии (`1.0.0-rc.1` удовлетворяет `>=1.0.0`); сборка без semver-версии (`dev`) считается удовлетворяющей любому `cream:` с предупреждением `platform.dev_build` |
+| `cream` | диапазон semver, обязательно | минимальная версия исполнителя, например `">=1.0.0"`. Если cream старее, это отказ (код 68). Мажор диапазона обязан совпадать с мажором схемы. Предрелизная сборка cream сравнивается по основной версии (`1.0.0-rc.1` удовлетворяет `>=1.0.0`); сборка без semver-версии (`dev`) или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей любому `cream:` с предупреждением `platform.dev_build` |
 | `kind` | `extension` \| `library`, умолчание `extension` | `library` означает только файлы: хуков нет, ставится по `depends` (§4.5) |
 | `platform.family` | `deb`, обязательно | v1 знает только `deb` |
 | `platform.arch` | непустой список из `amd64`, `arm64` | `aarch64` и `x86_64` канонизируются |
@@ -166,7 +166,7 @@ roots: [extensions]           # где искать extension.yaml
 | `conflicts.extensions` | список имён, `[]` | конфликт по имени; симметрия не требуется: проверяются обе стороны |
 | `conflicts.capabilities` | список способностей, `[]` | «несовместим с любым **другим** поставщиком X». Так выражается взаимоисключение `gnome/xfce4/lxde` (`desktop-session`) без перечня имён |
 | `hooks.<имя>` | объект `{timeout?}` или `{}` | объявленный хук обязан существовать файлом, а файл без объявления — ошибка валидации |
-| `hooks.configure.stage` | `early` \| `system` \| `cloud-user` \| `graphical`, обязательно при `configure` | §6.4 |
+| `hooks.configure.stage` | `early` \| `system` \| `cloud-user` \| `graphical`, обязательно при `configure` | §6.4. `early`, `cloud-user`, `graphical` — с cream 1.1.0: манифест с ними требует `cream: ">=1.1.0"`, иначе 65 `manifest.invalid` |
 | `hooks.configure.after`/`before`/`wants` | списки имён юнитов, `[]` | дополнительный порядок, например `display-manager.service` у x11vnc |
 | `config.keys` | словарь `KEY → описание ключа` | §8.2; заменяет файл `knobs` |
 | `actions.<имя>` | объект (§7.1) | |
@@ -254,7 +254,7 @@ files:
 | Сейчас (`lib/`) | Становится | Почему |
 |---|---|---|
 | `bisquite-conf` (956 строк bash) | встроено в cream (`cream set/show/get/list` и `cream config` для скриптов) | решение владельца; разбор `EnvironmentFile` на Go проверяется одной сюитой |
-| `bisquite-desktop` + `knobs/desktop{,.apply}` | расширение `desktop` (домен `desktop`, хук `configure` стадии `graphical` вместо `bisquite-desktop.service`, действия `apply`, `status`, `defaults`); `gnome`, `xfce4`, `lxde`, `cloud-user-desktop` получают `depends: [{name: desktop}]` | у домена один владелец, и он переживает `remove` одного из столов |
+| `bisquite-desktop` + `knobs/desktop{,.apply}` | расширение `desktop` (домен `desktop`, хук `configure` стадии `system` с `after: [cloud-init.service, guestfs-firstboot.service]` и `before: [display-manager.service, gdm.service, gdm3.service, lightdm.service]` вместо `bisquite-desktop.service` — настройки и автологин готовы **до** менеджера входа, Р5 плана перевода каталога; действия `apply`, `status`, `defaults`); `gnome`, `xfce4`, `lxde`, `cloud-user-desktop` получают `depends: [{name: desktop}]` | у домена один владелец, и он переживает `remove` одного из столов |
 | `get_cloud_user.sh` | `kind: library` `cloud-user` (путь `/opt/cream/ext/cloud-user/get_cloud_user.sh`) | 12 потребителей; версия видна в реестре; один экземпляр вместо россыпи `lib/<sha>` |
 | `l4t` | `kind: library` `l4t` | то же |
 
@@ -391,15 +391,24 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 
 | Стадия | Подключение | Порядок | Пример |
 |---|---|---|---|
-| `early` | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
-| `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk |
-| `cloud-user` | `cloud-init.target.wants`, если в системе есть `cloud-final.service`, иначе `multi-user.target.wants` | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
-| `graphical` | `graphical.target.wants` | `After=display-manager.service` (+ `after` манифеста) | desktop, kiosk, x11vnc, selkies, pixelflux-* |
+| `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
+| `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk; desktop и vino-vnc — с `before: [display-manager.service, …]` (настройка до менеджера входа) |
+| `cloud-user` (с 1.1.0) | `cloud-init.target.wants`, если в системе есть `cloud-final.service`, иначе `multi-user.target.wants` | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
+| `graphical` (с 1.1.0) | `graphical.target.wants` | `After=display-manager.service` (+ `after` манифеста) | kiosk, x11vnc, selkies, pixelflux-* |
+
+`after`/`before`/`wants` манифеста дописываются к порядку стадии (у `early` — к `Before`/`Wants` стадии тоже).
+Стадия `graphical` — для того, что работает **поверх** запущенного менеджера входа; то, что менеджер входа
+должен застать готовым (автологин, сеанс по умолчанию — `desktop`), — стадия `system` с `before:
+[display-manager.service, …]`. Через `multi-user.target.wants` стадию `graphical` не эмулировать: `After=display-manager`
+из `multi-user` тянет менеджер входа раньше `multi-user.target`.
 
 Стадия `cloud-user` кодирует урок описи. `cloud-final` упорядочен `After=multi-user.target`, поэтому
 `WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Выбор цели по наличию cloud-init закрывает и случай
 «на живой машине без cloud-init configure не запускается никогда». cream пересчитывает цель при каждом
-`cream system init` и `upgrade`.
+`cream system init` и `upgrade`; cloud-init, поставленный на машину после расширения, требует `cream system init`
+(иначе ссылка в `multi-user.target.wants` вместе с `After=cloud-final` — цикл). Порядок стадий и отсутствие циклов
+на загрузке проверяет интеграция cream (§14): `ubuntu:24.04` с `gdm3` и cloud-init, `journalctl -b` без
+`ordering cycle`.
 
 Почему один шаблон, а не один общий юнит на все расширения: стадии разные (firewall до сети, рабочий стол после DM),
 а сбой одного расширения не должен останавливать остальные. Отвергнутое — в §18.
@@ -995,6 +1004,10 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 - реестр `cream-state/v1`, `history.jsonl`, `--json`, коды §11.3, блокировки и `CREAM_LOCK_FD`;
 - `.deb` по архитектурам, воспроизводимая сборка, unit-тесты, фикстуры §14, интеграция в контейнерах.
 
+**Вошло в `v1.1.0`** (минорная версия, только добавления, ADR-0001): стадии configure `early`, `cloud-user`,
+`graphical` (§6.4; манифест с ними требует `cream: ">=1.1.0"`) — для шага 3 §16 (firewall, рабочие столы);
+`cream resolve --installed FILE` — расширения базы `FROM` слоя bisquite в графе фазы build (docs/cli.md).
+
 **Откладывается** (поле или команда резервируется, позже — минорная версия с подъёмом `cream:`):
 
 | Что | Почему можно позже |
@@ -1008,7 +1021,6 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 | команда `cream lineage` | lineage для bisquite отдаёт `resolve --json` (§12.4) |
 | `cream search`, `cream info` | поиск человеком — удобство, не контракт |
 | хуки `secret`, `check` и команды `cream check`/`cream status` | секреты пилота идут через stdin действий (`join`) или в `secret: file`; здоровье — действие `status` |
-| стадии `early`, `cloud-user`, `graphical` | пилоту (`docker`, `teleport`, `stvor-agent`) хватает `system`; firewall и рабочие столы — шаг 3 §16 |
 | `--allow-downgrade` | откат — `remove` + `install` нужного пина |
 
 **Матрица MVP.** На каждый PR: `debian:12` и `ubuntu:24.04` на amd64, `debian:13` на arm64 (контейнеры с systemd,

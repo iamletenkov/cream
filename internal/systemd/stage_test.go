@@ -26,15 +26,30 @@ func readGolden(t *testing.T, name string) []byte {
 func TestEnableDropIn(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name, ext, golden string
-		st                StageSpec
+		name, ext, golden, target string
+		st                        StageSpec
 	}{
-		{"plain", "docker", "system-plain.conf", StageSpec{Stage: "system"}},
-		{"ordered", "x11vnc", "system-ordered.conf", StageSpec{
+		{"plain", "docker", "system-plain.conf", "multi-user.target", StageSpec{Stage: "system"}},
+		{"ordered", "x11vnc", "system-ordered.conf", "multi-user.target", StageSpec{
 			Stage:  "system",
 			After:  []string{"display-manager.service", "docker.service", "network.target"},
 			Before: []string{"teleport.service"},
 			Wants:  []string{"display-manager.service"},
+		}},
+		// §6.4, cream 1.1.0: early — до сети, без зависимостей по умолчанию.
+		{"early", "firewall", "early-plain.conf", "sysinit.target", StageSpec{Stage: "early"}},
+		{"early ordered", "firewall", "early-ordered.conf", "sysinit.target", StageSpec{
+			Stage:  "early",
+			After:  []string{"systemd-modules-load.service", "local-fs.target"},
+			Before: []string{"sysinit.target", "ssh.service"},
+			Wants:  []string{"network-pre.target"},
+		}},
+		// Без cloud-final.service в корне — multi-user.target (TestEnableCloudUserTarget).
+		{"cloud-user", "code-server", "cloud-user-plain.conf", "multi-user.target", StageSpec{Stage: "cloud-user"}},
+		{"graphical", "x11vnc", "graphical-ordered.conf", "graphical.target", StageSpec{
+			Stage: "graphical",
+			After: []string{"gdm.service", "display-manager.service"},
+			Wants: []string{"display-manager.service"},
 		}},
 	}
 	for _, tc := range tests {
@@ -45,8 +60,8 @@ func TestEnableDropIn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if target != "multi-user.target" {
-				t.Errorf("target = %q", target)
+			if target != tc.target {
+				t.Errorf("target = %q, want %q", target, tc.target)
 			}
 			got, err := os.ReadFile(l.DropIn(tc.ext))
 			if err != nil {
@@ -56,7 +71,7 @@ func TestEnableDropIn(t *testing.T) {
 				t.Errorf("drop-in mismatch\n--- got\n%s\n--- want\n%s", got, want)
 			}
 			assertMode(t, l.DropIn(tc.ext), 0o644)
-			link := filepath.Join(l.WantsDir("multi-user.target"), "cream-configure@"+tc.ext+".service")
+			link := filepath.Join(l.WantsDir(tc.target), "cream-configure@"+tc.ext+".service")
 			dst, err := os.Readlink(link)
 			if err != nil {
 				t.Fatal(err)
@@ -90,7 +105,7 @@ func TestEnableIdempotentAndReplacesStale(t *testing.T) {
 
 func TestEnableUnknownStage(t *testing.T) {
 	t.Parallel()
-	for _, stage := range []string{"early", "cloud-user", "graphical", "bogus", ""} {
+	for _, stage := range []string{"bogus", "late", "System", ""} {
 		t.Run(stage, func(t *testing.T) {
 			t.Parallel()
 			l := paths.Layout{Root: t.TempDir()}
@@ -102,6 +117,57 @@ func TestEnableUnknownStage(t *testing.T) {
 				t.Errorf("drop-in written on error: %v", err)
 			}
 		})
+	}
+}
+
+// cloud-user (§6.4): с cloud-final.service в корне — cloud-init.target
+// (cloud-final упорядочен после multi-user.target, и ссылка в multi-user дала бы
+// цикл), без него — multi-user.target. Смена стадии убирает ссылку из прежней цели.
+func TestEnableCloudUserTarget(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	wants := func(target string) string {
+		return filepath.Join(l.WantsDir(target), "cream-configure@wallpaper.service")
+	}
+	target, err := Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"})
+	if err != nil || target != "multi-user.target" {
+		t.Fatalf("без cloud-init: %q %v", target, err)
+	}
+	writeFile(t, l.CloudFinalUnit(), "[Unit]\n")
+	target, err = Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"})
+	if err != nil || target != "cloud-init.target" {
+		t.Fatalf("с cloud-init: %q %v", target, err)
+	}
+	if _, err := os.Readlink(wants("cloud-init.target")); err != nil {
+		t.Errorf("нет ссылки в cloud-init.target.wants: %v", err)
+	}
+	if _, err := os.Lstat(wants("multi-user.target")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка в multi-user.target.wants осталась: %v", err)
+	}
+	// Стадия сменилась на graphical (upgrade расширения): ссылка переезжает.
+	if target, err = Enable(l, "wallpaper", StageSpec{Stage: "graphical"}); err != nil || target != "graphical.target" {
+		t.Fatalf("graphical: %q %v", target, err)
+	}
+	if _, err := os.Lstat(wants("cloud-init.target")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка в cloud-init.target.wants осталась: %v", err)
+	}
+	if err := Disable(l, "wallpaper"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tg := range knownTargets() {
+		if _, err := os.Lstat(wants(tg)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s: ссылка после Disable: %v", tg, err)
+		}
+	}
+}
+
+func writeFile(t *testing.T, p, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

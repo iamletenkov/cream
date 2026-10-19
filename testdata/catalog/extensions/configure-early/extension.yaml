@@ -1,0 +1,12 @@
+schema: cream/v1
+name: configure-early
+version: 1.0.0
+summary: фикстура configure-early
+cream: ">=1.1.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure стадии early (cream 1.1.0): до сети, DefaultDependencies=no — так
+# встаёт firewall.
+hooks:
+  install: {}
+  configure: {stage: early}
+  remove: {}

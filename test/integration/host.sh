@@ -28,22 +28,31 @@ it_image() {
 	docker build -q "${IT_PLATFORM[@]}" -t "cream-it:$1" --build-arg "BASE=$2" "$IT_DIR" >/dev/null
 }
 
-# it_start <tag> <name> — поднять контейнер и дождаться загрузки systemd.
+# it_image_desktop <tag> — образ cream-it:<tag>-desktop (Dockerfile.desktop:
+# gdm3 и cloud-init поверх cream-it:<tag>).
+it_image_desktop() {
+	it_log "образ cream-it:$1-desktop (gdm3, cloud-init)"
+	docker build -q "${IT_PLATFORM[@]}" -t "cream-it:$1-desktop" --build-arg "BASE_IMAGE=cream-it:$1" \
+		-f "$IT_DIR/Dockerfile.desktop" "$IT_DIR" >/dev/null
+}
+
+# it_start <tag> <name> [память] — поднять контейнер и дождаться загрузки systemd.
 it_start() {
 	IT_NAME=$2
 	docker rm -f "$IT_NAME" >/dev/null 2>&1 || true
 	docker run -d --name "$IT_NAME" "${IT_PLATFORM[@]}" \
 		--cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
 		--tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
-		--memory 1g --pids-limit 2048 \
+		--memory "${3:-1g}" --pids-limit 2048 \
 		"cream-it:$1" >/dev/null
 	it_wait_boot
 }
 
-# it_wait_boot — systemd дошёл до running/degraded (не дольше 90 с).
+# it_wait_boot — systemd дошёл до running/degraded (не дольше IT_BOOT_TIMEOUT,
+# по умолчанию 90 с).
 it_wait_boot() {
 	local s="" _
-	for _ in $(seq 1 90); do
+	for _ in $(seq 1 "${IT_BOOT_TIMEOUT:-90}"); do
 		s=$(docker exec "$IT_NAME" systemctl is-system-running 2>/dev/null || true)
 		case "$s" in
 		running | degraded) return 0 ;;
