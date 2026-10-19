@@ -38,6 +38,10 @@ contents:
     dst: /usr/lib/systemd/system/cream-configure@.service
     file_info:
       mode: 0644
+  - src: internal/systemd/cream-configure-cloud-user.service
+    dst: /usr/lib/systemd/system/cream-configure-cloud-user.service
+    file_info:
+      mode: 0644
   - src: dist/cream-linux-amd64
     dst: /usr/lib/cream/guest/linux-amd64/cream
     file_info:

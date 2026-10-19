@@ -407,3 +407,28 @@ func TestInheritedFDNotHeld(t *testing.T) {
 		})
 	}
 }
+
+// TryGlobal (system init, cream 1.1.1) does not wait for a busy lock/global,
+// whatever --lock-timeout is.
+func TestTryGlobal(t *testing.T) {
+	t.Parallel()
+	l := layout(t)
+	lk := newLocker(t, l, time.Minute)
+	h, ok, err := lk.TryGlobal()
+	if err != nil || !ok {
+		t.Fatalf("free: ok=%v err=%v", ok, err)
+	}
+	start := time.Now()
+	if _, ok, err := newLocker(t, l, time.Minute).TryGlobal(); err != nil || ok {
+		t.Fatalf("busy: ok=%v err=%v", ok, err)
+	}
+	if el := time.Since(start); el > 5*time.Second {
+		t.Errorf("waited %v", el)
+	}
+	h.Release()
+	h2, ok, err := lk.TryGlobal()
+	if err != nil || !ok {
+		t.Fatalf("after release: ok=%v err=%v", ok, err)
+	}
+	h2.Release()
+}

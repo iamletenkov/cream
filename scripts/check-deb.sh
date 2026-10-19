@@ -10,6 +10,7 @@ set -eu
 
 kind="$1" version="$2" arch="$3" dir="$4"
 unit_src=internal/systemd/cream-configure@.service
+puller_src=internal/systemd/cream-configure-cloud-user.service
 fail=0
 bad() { echo "check-deb: $*" >&2; fail=1; }
 work="$(mktemp -d)"
@@ -27,6 +28,7 @@ check_deb() {
 	dpkg-deb -c "$deb" >"$work/list"
 	awk '$1 !~ /^d/ {sub(/^\.\//, "", $6); print $1, $2, "/" $6}' "$work/list" | sort >"$work/files"
 	cat >"$work/want" <<-LIST
+		-rw-r--r-- root/root /usr/lib/systemd/system/cream-configure-cloud-user.service
 		-rw-r--r-- root/root /usr/lib/systemd/system/cream-configure@.service
 		-rw-r--r-- root/root /usr/share/doc/cream/changelog.gz
 		-rw-r--r-- root/root /usr/share/doc/cream/copyright
@@ -63,6 +65,8 @@ check_deb() {
 	dpkg-deb -x "$deb" "$work/root"
 	cmp -s "$work/root/usr/lib/systemd/system/cream-configure@.service" "$unit_src" ||
 		bad "$deb: юнит отличается от $unit_src"
+	cmp -s "$work/root/usr/lib/systemd/system/cream-configure-cloud-user.service" "$puller_src" ||
+		bad "$deb: юнит отличается от $puller_src"
 	cmp -s "$work/root/usr/bin/cream" "$work/root/usr/lib/cream/guest/linux-$arch/cream" ||
 		bad "$deb: /usr/bin/cream не совпадает с гостевым linux-$arch"
 	for g in amd64 arm64; do
@@ -88,6 +92,7 @@ check_tarball() {
 		-rw-r--r-- 0/0 LICENSE
 		-rw-r--r-- 0/0 NOTICE
 		-rw-r--r-- 0/0 copyright
+		-rw-r--r-- 0/0 cream-configure-cloud-user.service
 		-rw-r--r-- 0/0 cream-configure@.service
 		-rwxr-xr-x 0/0 cream
 	LIST
@@ -98,6 +103,7 @@ check_tarball() {
 	fi
 	mkdir "$work/t" && tar -xzf "$tgz" -C "$work/t"
 	cmp -s "$work/t/cream-configure@.service" "$unit_src" || bad "$tgz: юнит отличается от $unit_src"
+	cmp -s "$work/t/cream-configure-cloud-user.service" "$puller_src" || bad "$tgz: юнит отличается от $puller_src"
 	cmp -s "$work/t/LICENSE" LICENSE || bad "$tgz: LICENSE отличается"
 	cmp -s "$work/t/copyright" packaging/copyright || bad "$tgz: copyright отличается от packaging/copyright"
 	grep -q 'Permission is hereby granted' "$work/t/copyright" || bad "$tgz: в copyright нет текста MIT"

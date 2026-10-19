@@ -60,11 +60,13 @@ func stages() map[string]stageDef {
 		},
 		// After cloud-init created the user. cloud-final is ordered after
 		// multi-user.target, so a link from multi-user.target.wants would be an
-		// ordering cycle: with cloud-init the instance goes to cloud-init.target
-		// (ordered after its wants); without it cloud-final is never there and
-		// multi-user.target is safe (After= on an absent unit is a no-op).
+		// ordering cycle, and cloud-init.target is not reached when cloud-init
+		// is installed but disabled. The instance is pulled by CloudUserUnit
+		// (in multi-user.target.wants, no ordering against the instances):
+		// with cloud-init running the instance waits for cloud-final, without
+		// it After= has nothing to wait for (cream 1.1.1).
 		"cloud-user": {
-			target: cloudUserTarget,
+			target: fixed(CloudUserUnit),
 			after:  []string{"cloud-final.service"},
 		},
 		// After the display manager: graphical.target, not multi-user, so the
@@ -78,19 +80,11 @@ func stages() map[string]stageDef {
 	}
 }
 
-// cloudUserTarget is cloud-init.target when the machine has cloud-final.service,
-// multi-user.target otherwise.
-func cloudUserTarget(l paths.Layout) string {
-	if _, err := os.Stat(l.CloudFinalUnit()); err == nil {
-		return "cloud-init.target"
-	}
-	return "multi-user.target"
-}
-
 // knownTargets is every target a stage may link into: Enable and Disable
 // clear links from all of them, so a stage or machine change leaves no stray.
+// cloud-init.target is where cream 1.1.0 linked cloud-user.
 func knownTargets() []string {
-	return []string{"multi-user.target", "sysinit.target", "cloud-init.target", "graphical.target"}
+	return []string{"multi-user.target", "sysinit.target", "cloud-init.target", "graphical.target", CloudUserUnit}
 }
 
 // stageKey is the systemd-ignored X- key that records the stage in the
@@ -195,21 +189,66 @@ func link(l paths.Layout, ext, target string) error {
 			return fmt.Errorf("включение %s: %w", UnitName(ext), err)
 		}
 	}
-	p := filepath.Join(l.WantsDir(target), UnitName(ext))
-	if cur, err := os.Readlink(p); err == nil && cur == templateTarget {
+	if target == CloudUserUnit {
+		if err := enablePuller(l); err != nil {
+			return fmt.Errorf("включение %s: %w", UnitName(ext), err)
+		}
+	}
+	if err := symlink(filepath.Join(l.WantsDir(target), UnitName(ext)), templateTarget); err != nil {
+		return fmt.Errorf("включение %s: %w", UnitName(ext), err)
+	}
+	if target != CloudUserUnit {
+		return dropPuller(l)
+	}
+	return nil
+}
+
+// symlink makes p a link to dst atomically; an equal link is left alone.
+func symlink(p, dst string) error {
+	if cur, err := os.Readlink(p); err == nil && cur == dst {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return fmt.Errorf("включение %s: %w", UnitName(ext), err)
+		return err
 	}
 	tmp := p + ".cream-tmp"
 	_ = os.Remove(tmp)
-	if err := os.Symlink(templateTarget, tmp); err != nil {
-		return fmt.Errorf("включение %s: %w", UnitName(ext), err)
+	if err := os.Symlink(dst, tmp); err != nil {
+		return err
 	}
 	if err := os.Rename(tmp, p); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("включение %s: %w", UnitName(ext), err)
+		return err
+	}
+	return nil
+}
+
+// enablePuller writes CloudUserUnit (the .deb ships it too; the build phase
+// may run a cream without the package) and links it into
+// multi-user.target.wants.
+func enablePuller(l paths.Layout) error {
+	if err := writeUnit(l.CloudUserUnit(), cloudUserUnit); err != nil {
+		return err
+	}
+	return symlink(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit), cloudUserLink)
+}
+
+// dropPuller unlinks CloudUserUnit from multi-user.target.wants once its own
+// .wants holds no instance; the unit file stays (it belongs to the package).
+func dropPuller(l paths.Layout) error {
+	dir := l.WantsDir(CloudUserUnit)
+	entries, err := os.ReadDir(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s: %w", CloudUserUnit, err)
+	}
+	if len(entries) > 0 {
+		return nil
+	}
+	if err := os.Remove(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s: %w", CloudUserUnit, err)
+	}
+	if err := unlink(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); err != nil {
+		return fmt.Errorf("%s: %w", CloudUserUnit, err)
 	}
 	return nil
 }
@@ -233,13 +272,17 @@ func unlink(p string) error {
 	return nil
 }
 
-// Disable removes the instance links from every known target and the stage
+// Disable removes the instance links from every known target (and the
+// CloudUserUnit link once no cloud-user instance is left) and the stage
 // drop-in; the drop-in directory goes only if nothing else is left in it.
 func Disable(l paths.Layout, ext string) error {
 	for _, t := range knownTargets() {
 		if err := unlink(filepath.Join(l.WantsDir(t), UnitName(ext))); err != nil {
 			return fmt.Errorf("отключение %s: %w", UnitName(ext), err)
 		}
+	}
+	if err := dropPuller(l); err != nil {
+		return fmt.Errorf("отключение %s: %w", UnitName(ext), err)
 	}
 	p := l.DropIn(ext)
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {

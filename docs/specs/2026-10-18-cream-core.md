@@ -285,6 +285,7 @@ files:
 |---|---|---|---|
 | `/usr/bin/cream` | бинарь | `.deb` или bisquite (§12) | 0755 |
 | `/usr/lib/systemd/system/cream-configure@.service` | шаблон юнита configure | `.deb` или `cream system init` | 0644 |
+| `/usr/lib/systemd/system/cream-configure-cloud-user.service` | юнит, который тянет экземпляры стадии `cloud-user` (с 1.1.1, §6.4) | `.deb` или `cream system init` | 0644 |
 | `/usr/lib/cream/guest/linux-{amd64,arm64}/cream` | бинари для гостя (только на хосте сборки) | `.deb` | 0755 |
 | `/opt/cream/ext/<ext>/` | дерево расширения, как в источнике; рабочий каталог хуков и юнитов | cream | root, 0755/0644 по биту исполнения |
 | `/etc/cream/sources.yaml` | источники | `cream source …` (можно править руками) | 0644 |
@@ -393,7 +394,7 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 |---|---|---|---|
 | `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
 | `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk; desktop и vino-vnc — с `before: [display-manager.service, …]` (настройка до менеджера входа) |
-| `cloud-user` (с 1.1.0) | `cloud-init.target.wants`, если в системе есть `cloud-final.service`, иначе `multi-user.target.wants` | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
+| `cloud-user` (с 1.1.0) | `cream-configure-cloud-user.service.wants` (с 1.1.1; сам `cream-configure-cloud-user.service` — в `multi-user.target.wants`) | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
 | `graphical` (с 1.1.0) | `graphical.target.wants` | `After=multi-user.target display-manager.service` (+ `after` манифеста; `multi-user` — чтобы на машине без менеджера входа стадия не стартовала раньше системных служб) | kiosk, x11vnc, selkies, pixelflux-* |
 
 `after`/`before`/`wants` манифеста дописываются к порядку стадии (у `early` — к `Before`/`Wants` стадии тоже).
@@ -403,12 +404,18 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 из `multi-user` тянет менеджер входа раньше `multi-user.target`.
 
 Стадия `cloud-user` кодирует урок описи. `cloud-final` упорядочен `After=multi-user.target`, поэтому
-`WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Выбор цели по наличию cloud-init закрывает и случай
-«на живой машине без cloud-init configure не запускается никогда». cream пересчитывает цель при каждом
-`cream system init` (вместе с `configure.target` реестра) и `upgrade`; cloud-init, поставленный на машину после расширения, требует `cream system init`
-(иначе ссылка в `multi-user.target.wants` вместе с `After=cloud-final` — цикл). Порядок стадий и отсутствие циклов
-на загрузке проверяет интеграция cream (§14): `ubuntu:24.04` с `gdm3` и cloud-init, `journalctl -b` без
-`ordering cycle`.
+`WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Экземпляры стадии тянет вспомогательный oneshot-юнит
+`cream-configure-cloud-user.service` (`ExecStart=/bin/true`, шаблон — в пакете и в `cream system init`, рядом с
+`cream-configure@.service`): он стоит в `multi-user.target.wants`, экземпляры — в его `.wants`, и порядка относительно
+экземпляров у него **нет**. Цикла нет: `multi-user.target` ждёт только вспомогательный юнит, экземпляр ждёт
+`cloud-final`, а тот — `multi-user.target`. При работающем cloud-init экземпляр стартует после `cloud-final`; без
+cloud-init или при выключенном (`/etc/cloud/cloud-init.disabled`, нет источника данных — генератор не подключает
+`cloud-init.target`) `cloud-final` в транзакции загрузки нет, и `After=` ничего не ждёт. Цель от машины не зависит:
+установка или выключение cloud-init после расширения ничего не требует. cream 1.1.0 выбирал `cloud-init.target.wants`
+по наличию `cloud-final.service` — при выключенном cloud-init configure не запускался никогда; `cream system init`
+1.1.1 (его зовёт postinst) переносит такие ссылки и `configure.target` реестра. Ссылка вспомогательного юнита уходит
+вместе с последним экземпляром. Порядок стадий и отсутствие циклов на загрузке проверяет интеграция cream (§14):
+`ubuntu:24.04` с `gdm3` и cloud-init — включённым и выключенным, `journalctl -b` без `ordering cycle`.
 
 Почему один шаблон, а не один общий юнит на все расширения: стадии разные (firewall до сети, рабочий стол после DM),
 а сбой одного расширения не должен останавливать остальные. Отвергнутое — в §18.

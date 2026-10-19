@@ -44,24 +44,34 @@ func Init(l paths.Layout) error {
 			return fmt.Errorf("system init: %w", err)
 		}
 	}
-	if err := writeTemplate(l.UnitTemplate()); err != nil {
+	if err := writeUnit(l.UnitTemplate(), unitTemplate); err != nil {
 		return fmt.Errorf("system init: %w", err)
 	}
-	return relinkAll(l)
+	if err := writeUnit(l.CloudUserUnit(), cloudUserUnit); err != nil {
+		return fmt.Errorf("system init: %w", err)
+	}
+	return relinkAll(l, nil)
 }
 
-// writeTemplate rewrites the template only when its content or mode differ.
-func writeTemplate(p string) error {
-	if cur, err := os.ReadFile(p); err == nil && bytes.Equal(cur, unitTemplate) {
+// writeUnit rewrites a built-in unit only when its content or mode differ.
+func writeUnit(p string, body []byte) error {
+	if cur, err := os.ReadFile(p); err == nil && bytes.Equal(cur, body) {
 		if st, err := os.Lstat(p); err == nil && st.Mode().IsRegular() && st.Mode().Perm() == 0o644 {
 			return nil
 		}
 	}
-	return fsx.WriteAtomic(p, unitTemplate, 0o644)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return fsx.WriteAtomic(p, body, 0o644)
 }
 
 // relinkAll recomputes the target of every instance that has a stage drop-in.
-func relinkAll(l paths.Layout) error {
+// It takes no lock: a remove running at the same time may take the drop-in
+// away after the stage was read, so the drop-in is checked again after the
+// link and, gone, the links are removed. beforeLink is a test seam (nil in
+// production).
+func relinkAll(l paths.Layout, beforeLink func(ext string)) error {
 	base := filepath.Dir(filepath.Dir(l.DropIn("x")))
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -90,8 +100,16 @@ func relinkAll(l paths.Layout) error {
 		if err != nil {
 			return fmt.Errorf("system init: %s: %w", UnitName(ext), err)
 		}
+		if beforeLink != nil {
+			beforeLink(ext)
+		}
 		if err := link(l, ext, def.target(l)); err != nil {
 			return fmt.Errorf("system init: %w", err)
+		}
+		if _, err := os.Lstat(l.DropIn(ext)); errors.Is(err, fs.ErrNotExist) {
+			if err := Disable(l, ext); err != nil {
+				return fmt.Errorf("system init: %w", err)
+			}
 		}
 	}
 	return nil

@@ -101,6 +101,7 @@
 | `state.history` | запись в `history.jsonl` не удалась (операция выполнена) |
 | `file.modified` | файл из `files` изменён после установки — сохранён как `<dst>.cream-modified[.N]` |
 | `file.not_regular` | на месте файла из `files` не обычный файл — оставлен как есть |
+| `system.registry_busy` | с 1.1.1, `cream system init`: `lock/global` занята — `configure.target` реестра не обновлён (ссылки юнитов пересчитаны); повторить `cream system init` |
 | `systemd.reload_failed`, `systemd.stop_failed` | `systemctl daemon-reload` / `stop` не удался (Р25) |
 | `configure.no_block` | systemd ещё загружается: перезапуск configure поставлен в очередь `--no-block`, без ожидания |
 | `install.build_none` | у слоя `targets.build: none` — в фазе build не ставится |
@@ -308,14 +309,16 @@ Golden: [remove.json](../internal/cli/testdata/golden/remove.json),
   `--from-unit <ext>` — только для вызова из самого юнита. `result`: `{ext, reason, mode, reboot_required}` —
   [configure.json](../internal/cli/testdata/golden/configure.json).
 - Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети), `cloud-user`
-  (`cloud-init.target` при `cloud-final.service`, иначе `multi-user.target`) и `graphical` (`graphical.target`,
+  (с 1.1.1 — `cream-configure-cloud-user.service`: вспомогательный юнит в `multi-user.target.wants` тянет экземпляры,
+  те ждут `cloud-final.service`, если cloud-init работает; в 1.1.0 — `cloud-init.target`) и `graphical` (`graphical.target`,
   после `multi-user.target` и `display-manager.service`). Манифест с новыми стадиями обязан требовать `cream: ">=1.1.0"`, иначе 65
   `manifest.invalid`; cream 1.0 отказывает ему по `cream:` — 68 `platform.cream_version` (в каталоге — пропуск с
   `catalog.cream_newer`).
-- `cream system init` — каталоги §5 с режимами, шаблон юнита из встроенной копии, пересчёт целей configure (цель
-  `cloud-user` — по наличию cloud-init на машине: после его установки или удаления — `cream system init`; с 1.1.0
-  пересчитанная цель пишется и в `configure.target` реестра); при
-  работающем systemd — `daemon-reload`. `result`: `{unit, daemon_reload}` —
+- `cream system init` — каталоги §5 с режимами, шаблон юнита и `cream-configure-cloud-user.service` из встроенных
+  копий, пересчёт целей configure (ссылки стадии `cloud-user` cream 1.1.0 переносятся к вспомогательному юниту);
+  пересчитанная цель пишется и в `configure.target` реестра. `lock/global` берётся только для такой записи и без
+  ожидания: занята — предупреждение `system.registry_busy`, реестр не меняется, код 0 (postinst пакета не падает
+  рядом с другим dpkg или хуком). При работающем systemd — `daemon-reload`. `result`: `{unit, daemon_reload}` —
   [system-init.json](../internal/cli/testdata/golden/system-init.json).
 
 ### `cream run`

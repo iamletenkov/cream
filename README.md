@@ -30,7 +30,8 @@ sudo apt install ./cream_1.0.0_amd64.deb
 cream version
 ```
 
-Пакет кладёт `/usr/bin/cream`, шаблон юнита `cream-configure@.service` и
+Пакет кладёт `/usr/bin/cream`, шаблон юнита `cream-configure@.service`,
+юнит стадии `cloud-user` `cream-configure-cloud-user.service` (с 1.1.1) и
 гостевые бинари обеих архитектур для хоста сборки
 (`/usr/lib/cream/guest/linux-{amd64,arm64}/cream`); `postinst` делает
 `cream system init`. Зависимостей нет; `Suggests: git, libguestfs-tools`.

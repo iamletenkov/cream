@@ -236,5 +236,6 @@ func (l Layout) OSRelease() string { return l.sys("etc/os-release") }
 // SystemdRunning is /run/systemd/system: it exists only while systemd is PID 1.
 func (l Layout) SystemdRunning() string { return l.sys("run/systemd/system") }
 
-// CloudFinalUnit is /usr/lib/systemd/system/cloud-final.service.
-func (l Layout) CloudFinalUnit() string { return l.sys(unitDir, "cloud-final.service") }
+// CloudUserUnit is the unit that pulls the configure instances of the
+// cloud-user stage, /usr/lib/systemd/system/cream-configure-cloud-user.service.
+func (l Layout) CloudUserUnit() string { return l.sys(unitDir, "cream-configure-cloud-user.service") }

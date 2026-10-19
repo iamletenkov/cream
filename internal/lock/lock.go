@@ -126,6 +126,22 @@ func (l *Locker) Global(ctx context.Context) (*Handle, error) {
 	return l.acquire(ctx, GlobalName, l.layout.GlobalLock(), Exclusive)
 }
 
+// TryGlobal takes lock/global exclusively in a single attempt, whatever the
+// timeout: a busy lock is (nil, false, nil). `cream system init` uses it — it
+// runs from the package postinst and must not wait for another dpkg or hook.
+func (l *Locker) TryGlobal() (*Handle, bool, error) {
+	once := *l
+	once.timeout = 0
+	h, err := once.acquire(context.Background(), GlobalName, l.layout.GlobalLock(), Exclusive)
+	if cerr.CodeOf(err) == "lock.timeout" {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return h, true, nil
+}
+
 // Ext takes the domain lock of ext in mode m. A CREAM_LOCK_FD that refers to
 // the same, actually held lock file is taken over without waiting when the
 // parent's CREAM_LOCK_MODE covers m; any other value is ignored.

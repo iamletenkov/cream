@@ -106,42 +106,105 @@ func TestInitRelinksTargets(t *testing.T) {
 	}
 }
 
-// Init пересчитывает цель cloud-user по машине (§6.4): cloud-init появился
-// после установки расширения — ссылка переезжает в cloud-init.target.wants, и
-// обратно, когда его не стало.
-func TestInitRecomputesCloudUserTarget(t *testing.T) {
+// cream 1.1.1: Init переносит экземпляры cloud-user из целей 1.1.0
+// (cloud-init.target.wants или multi-user.target.wants) в
+// cream-configure-cloud-user.service.wants и пишет вспомогательный юнит; наличие
+// cloud-init на цель больше не влияет.
+func TestInitMovesCloudUserToPuller(t *testing.T) {
+	t.Parallel()
+	for _, old := range []string{"cloud-init.target", "multi-user.target"} {
+		t.Run(old, func(t *testing.T) {
+			t.Parallel()
+			l := paths.Layout{Root: t.TempDir()}
+			if _, err := Enable(l, "code-server", StageSpec{Stage: "cloud-user"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Enable(l, "firewall", StageSpec{Stage: "early"}); err != nil {
+				t.Fatal(err)
+			}
+			link := func(target, ext string) string {
+				return filepath.Join(l.WantsDir(target), "cream-configure@"+ext+".service")
+			}
+			// Раскладка 1.1.0: ссылка в старой цели, вспомогательного юнита нет.
+			if err := os.Remove(link(CloudUserUnit, "code-server")); err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range []string{l.CloudUserUnit(), filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)} {
+				if err := os.Remove(p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.MkdirAll(l.WantsDir(old), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(templateLink, link(old, "code-server")); err != nil {
+				t.Fatal(err)
+			}
+			if err := Init(l); err != nil {
+				t.Fatal(err)
+			}
+			if dst, err := os.Readlink(link(CloudUserUnit, "code-server")); err != nil || dst != templateLink {
+				t.Errorf("%s.wants: %q %v", CloudUserUnit, dst, err)
+			}
+			if _, err := os.Lstat(link(old, "code-server")); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("%s.wants осталась: %v", old, err)
+			}
+			if _, err := os.Readlink(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); err != nil {
+				t.Errorf("вспомогательный юнит не включён: %v", err)
+			}
+			if got, _ := os.ReadFile(l.CloudUserUnit()); !bytes.Equal(got, CloudUserUnitFile()) {
+				t.Errorf("файл вспомогательного юнита: %s", got)
+			}
+			if _, err := os.Readlink(link("sysinit.target", "firewall")); err != nil {
+				t.Errorf("early: %v", err)
+			}
+		})
+	}
+}
+
+// Init без экземпляров cloud-user вспомогательный юнит пишет (как шаблон), но
+// не включает.
+func TestInitWritesPullerUnitOnly(t *testing.T) {
 	t.Parallel()
 	l := paths.Layout{Root: t.TempDir()}
-	if _, err := Enable(l, "code-server", StageSpec{Stage: "cloud-user"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Enable(l, "firewall", StageSpec{Stage: "early"}); err != nil {
-		t.Fatal(err)
-	}
-	link := func(target, ext string) string {
-		return filepath.Join(l.WantsDir(target), "cream-configure@"+ext+".service")
-	}
-	writeFile(t, l.CloudFinalUnit(), "[Unit]\n")
 	if err := Init(l); err != nil {
 		t.Fatal(err)
 	}
-	if dst, err := os.Readlink(link("cloud-init.target", "code-server")); err != nil || dst != templateLink {
-		t.Errorf("cloud-init.target.wants: %q %v", dst, err)
+	if got, _ := os.ReadFile(l.CloudUserUnit()); !bytes.Equal(got, CloudUserUnitFile()) {
+		t.Errorf("файл вспомогательного юнита: %s", got)
 	}
-	if _, err := os.Lstat(link("multi-user.target", "code-server")); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("multi-user.target.wants осталась: %v", err)
+	assertMode(t, l.CloudUserUnit(), 0o644)
+	if _, err := os.Lstat(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("включён без экземпляров: %v", err)
 	}
-	if _, err := os.Readlink(link("sysinit.target", "firewall")); err != nil {
-		t.Errorf("early: %v", err)
-	}
-	if err := os.Remove(l.CloudFinalUnit()); err != nil {
+}
+
+// Гонка с remove: Init прочёл стадию, и тут remove снял ссылку и drop-in —
+// перевешанная Init ссылка не остаётся.
+func TestRelinkAllRaceWithRemove(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	if _, err := Enable(l, "docker", StageSpec{Stage: "system"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Init(l); err != nil {
+	link := filepath.Join(l.WantsDir("multi-user.target"), "cream-configure@docker.service")
+	removed := false
+	err := relinkAll(l, func(ext string) {
+		if ext == "docker" && !removed {
+			removed = true
+			if err := Disable(l, ext); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Readlink(link("multi-user.target", "code-server")); err != nil {
-		t.Errorf("без cloud-init — обратно в multi-user.target.wants: %v", err)
+	if !removed {
+		t.Fatal("hook not called")
+	}
+	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка снятого расширения осталась: %v", err)
 	}
 }
 

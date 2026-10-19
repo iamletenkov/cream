@@ -34,12 +34,14 @@ archive)
 		rm -rf "$tree"
 		mkdir -p "$tree"
 		cp "dist/cream-linux-$arch" "$tree/cream"
-		cp LICENSE NOTICE packaging/copyright internal/systemd/cream-configure@.service "$tree/"
+		cp LICENSE NOTICE packaging/copyright internal/systemd/cream-configure@.service \
+			internal/systemd/cream-configure-cloud-user.service "$tree/"
 		chmod 0755 "$tree/cream"
-		chmod 0644 "$tree/LICENSE" "$tree/NOTICE" "$tree/copyright" "$tree/cream-configure@.service"
+		chmod 0644 "$tree/LICENSE" "$tree/NOTICE" "$tree/copyright" "$tree/cream-configure@.service" \
+			"$tree/cream-configure-cloud-user.service"
 		tar --sort=name --format=gnu --mtime="@$SOURCE_DATE_EPOCH" \
 			--owner=0 --group=0 --numeric-owner -C "$tree" -cf - \
-			cream LICENSE NOTICE copyright cream-configure@.service |
+			cream LICENSE NOTICE copyright cream-configure@.service cream-configure-cloud-user.service |
 			gzip -9n >"$dir/cream_${version}_linux_${arch}.tar.gz"
 		rm -rf "$tree"
 	done

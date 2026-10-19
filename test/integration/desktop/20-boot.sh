@@ -13,6 +13,7 @@ journalctl -b --no-pager >/tmp/boot.log
 eq "$(grep -c 'ordering cycle' /tmp/boot.log || true)" 0 "ordering cycle в journalctl -b"
 eq "$(p cloud-final.service ActiveState)" active "cloud-final отработал"
 eq "$(p cloud-init.target ActiveState)" active "cloud-init.target достигнута"
+eq "$(p cream-configure-cloud-user.service ActiveState)" active "cream-configure-cloud-user.service active"
 for e in $CU $G $D; do
 	eq "$(p "cream-configure@$e.service" ActiveState)" active "cream-configure@$e active"
 	eq "$(tail -n 1 "$STATE/$e/configure.log")" "phase=live reason=boot version=1.0.0" "$e: configure на загрузке"
