@@ -379,7 +379,9 @@ func TestInheritedFDNotHeld(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = f.Close() }()
-			h, err := NewLocker(l, 0, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
+			// Timeout above zero: shared drops the probe and waits as usual, and
+			// a fork of a parallel test may keep the probe's lock until its exec.
+			h, err := NewLocker(l, 5*time.Second, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
 			if err != nil {
 				t.Fatalf("Ext: %v", err)
 			}
