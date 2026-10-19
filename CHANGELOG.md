@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/iamletenkov/cream/compare/v1.1.0...v1.1.1) (2026-10-19)
+
+
+### Исправлено
+
+* cream 1.1.1 — стадия cloud-user без cloud-init, system init без лишней блокировки ([ddfbd3d](https://github.com/iamletenkov/cream/commit/ddfbd3d6d4ee87bf597f478e41467750901a64c4))
+
 ## [1.1.0](https://github.com/iamletenkov/cream/compare/v1.0.0...v1.1.0) (2026-10-19)
 
 
