@@ -55,7 +55,7 @@
 
 - [x] Task 22: Фаза build на живом `virt-customize` (`make test-build`)
 
-- [ ] Task 23: Финальная интеграция + `make ci`
+- [x] Task 23: Финальная интеграция + `make ci`
 
 ## Волны и владение файлами
 
