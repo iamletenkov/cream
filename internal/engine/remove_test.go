@@ -458,6 +458,57 @@ func TestRemoveStopFailedWarns(t *testing.T) {
 	}
 }
 
+// Р25: stop экземпляра — только у расширения с configure: по записи реестра или
+// по хуку configure манифеста (запись без configure после сбоя установки).
+func TestRemoveStopOnlyWithConfigure(t *testing.T) {
+	t.Parallel()
+	stop := func(ext string) string { return "stop " + systemd.UnitName(ext) }
+	t.Run("без configure нет stop", func(t *testing.T) {
+		t.Parallel()
+		te := newTestEngine(t)
+		seedInstalled(t, te, fixtureDir(t, "noop"))
+		te.systemdRunning("running")
+		if _, err := te.Remove(context.Background(), "noop", RemoveOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(te.Sys.Calls(), stop("noop")) {
+			t.Errorf("stop без configure: calls %v", te.Sys.Calls())
+		}
+	})
+	t.Run("хук configure без записи configure", func(t *testing.T) {
+		t.Parallel()
+		te := newTestEngine(t)
+		seedInstalled(t, te, fixtureDir(t, "configure-system"), func(r *state.Record) { r.Configure = nil })
+		te.systemdRunning("running")
+		if _, err := te.Remove(context.Background(), "configure-system", RemoveOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(te.Sys.Calls(), stop("configure-system")) {
+			t.Errorf("нет stop при хуке configure: calls %v", te.Sys.Calls())
+		}
+	})
+}
+
+// --forget снимает только битую запись (state.corrupt); другая ошибка чтения
+// реестра — отказ, запись не трогается.
+func TestRemoveForgetReadErrorRefused(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	seedInstalled(t, te, fixtureDir(t, "noop"))
+	rec := te.L.InstalledFile("noop")
+	if err := os.Remove(rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(rec, 0o755); err != nil { // чтение — EISDIR, state.read
+		t.Fatal(err)
+	}
+	_, err := te.Remove(context.Background(), "noop", RemoveOptions{Forget: true})
+	wantCode(t, err, cerr.ExitState, "state.read")
+	if !removeExists(t, te.L.ExtTree("noop")) || !removeExists(t, rec) {
+		t.Error("--forget снял установку при ошибке чтения реестра")
+	}
+}
+
 // Р20: битая запись реестра (Get — 74 state.corrupt) снимается remove --forget.
 func TestRemoveForgetCorruptRecord(t *testing.T) {
 	t.Parallel()

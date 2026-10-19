@@ -32,7 +32,7 @@ func TestLockCacheSerializes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = LockCache(ctx, l, time.Second)
-	if cerr.ExitCode(err) != cerr.ExitLock {
+	if cerr.ExitCode(err) != cerr.ExitLock || cerr.CodeOf(err) != "lock.canceled" {
 		t.Fatalf("отменённое ожидание: %v", err)
 	}
 	// Ждавший получает блокировку после снятия.

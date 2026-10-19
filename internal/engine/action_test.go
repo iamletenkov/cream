@@ -12,6 +12,7 @@ import (
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/lock"
+	"github.com/iamletenkov/cream/internal/state"
 )
 
 // actionWrite подменяет файл действия name установленной фикстуры action-json.
@@ -404,5 +405,64 @@ func TestRunActionSeesValueWrittenWhileWaiting(t *testing.T) {
 	}
 	if got := te.Out.String(); got != "proxy.example:443\n" {
 		t.Errorf("действие видит %q, ждали значение, записанное до снятия блокировки", got)
+	}
+}
+
+// actionWaitUpgrade запускает exclusive-действие exit-code фикстуры action-json,
+// пока lock/<ext> держит «upgrade», и до снятия блокировки правит запись реестра
+// mutate. Возвращает ошибку действия.
+func actionWaitUpgrade(t *testing.T, te *testEngine, body string, mutate func(*state.Record)) error {
+	t.Helper()
+	dir := installPatched(t, fixtureDir(t, "action-json"), "action-json", func(s string) string {
+		return strings.Replace(s, `exit-code: {summary: "завершается кодом из аргумента", args: free, lock: none}`,
+			`exit-code: {summary: "завершается кодом из аргумента", args: free, lock: exclusive}`, 1)
+	})
+	in := seedInstalled(t, te, filepath.Join(dir, "extensions", "action-json"))
+	actionWrite(t, te, "exit-code", body)
+	release := holdExtLock(t, te, "action-json", lock.Exclusive)
+	done := make(chan error, 1)
+	go func() {
+		_, err := actionRun(te, "action-json", "exit-code")
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	rec := in.Record
+	mutate(&rec)
+	if err := te.Store.Put(rec); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	return <-done
+}
+
+// TestRunActionUpgradeWhileWaiting — upgrade, сменивший дерево расширения за
+// время ожидания lock/<ext>, — 75 lock.changed, даже если lock действия тот же
+// (Р27): действие не запускается со старыми аргументами на новом дереве.
+func TestRunActionUpgradeWhileWaiting(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	err := actionWaitUpgrade(t, te, `echo ran > "$CREAM_STATE_DIR/ran"`, func(r *state.Record) {
+		r.Version, r.ExtDigest = "1.1.0", "sha256:"+strings.Repeat("0", 64)
+	})
+	wantCode(t, err, 75, "lock.changed")
+	if readState(t, te, "action-json", "ran") != "" {
+		t.Error("действие запустилось на сменившемся дереве")
+	}
+}
+
+// TestRunActionRecordReadUnderLock — без смены дерева действие, ждавшее
+// lock/<ext>, видит запись реестра, прочитанную уже под блокировкой
+// (CREAM_EXT_VERSION — текущая версия).
+func TestRunActionRecordReadUnderLock(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	err := actionWaitUpgrade(t, te, `printf '%s\n' "$CREAM_EXT_VERSION"`, func(r *state.Record) {
+		r.Version = "7.7.7"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := te.Out.String(); got != "7.7.7\n" {
+		t.Errorf("CREAM_EXT_VERSION = %q, ждали версию записи под блокировкой", got)
 	}
 }
