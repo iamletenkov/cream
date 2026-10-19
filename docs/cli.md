@@ -272,8 +272,8 @@ Golden: [remove.json](../internal/cli/testdata/golden/remove.json),
 - Секретный параметр — только `KEY=-`: значение читается со stdin cream и отдаётся на stdin действия; пустой stdin —
   64 `usage.stdin_empty`; значение в argv — 64 `secret.in_argv`.
 - `lock: exclusive|shared|none` — блокировка `lock/<ext>`; занята дольше `--lock-timeout` — 75. Реестр, манифест и
-  значения домена читаются уже под блокировкой; если `upgrade` за время ожидания сменил `lock` действия — 75
-  `lock.changed`.
+  значения домена читаются уже под блокировкой; если `upgrade` за время ожидания сменил дерево расширения
+  (`ext_digest` записи) — 75 `lock.changed` (Р27).
 - Фаза — `CREAM_PHASE` окружения (вложенный вызов из хука), иначе `live` (Р5); недопустимая — 68 `action.phase`.
 - Без `--json` stdout действия идёт насквозь, stderr — через фильтр секретов.
 - Код выхода cream — код действия 0–63; код вне диапазона или не ровно один JSON-объект при `output: json` — 76
