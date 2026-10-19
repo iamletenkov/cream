@@ -124,9 +124,9 @@ func validate(root string, cream manifest.CreamBuild) (Report, []loaded) {
 			exts = append(exts, loaded{rel: rel, dir: filepath.Join(root, filepath.FromSlash(rel)), m: m})
 		}
 	}
-	idx := map[string]*manifest.Manifest{}
+	idx := map[string]loaded{}
 	for _, x := range exts {
-		idx[x.m.Name] = x.m
+		idx[x.m.Name] = x
 		r.Extensions = append(r.Extensions, ExtensionInfo{Name: x.m.Name, Version: x.m.Version.String(), Path: x.rel})
 	}
 	for _, x := range exts {
@@ -143,7 +143,8 @@ func ValidateDir(dir string, cream manifest.CreamBuild) (Report, error) {
 	m := checkExtension(&r, dir, ".", cream, false)
 	if m != nil {
 		r.Extensions = append(r.Extensions, ExtensionInfo{Name: m.Name, Version: m.Version.String(), Path: "."})
-		warnExtension(&r, loaded{rel: ".", dir: dir, m: m}, map[string]*manifest.Manifest{m.Name: m})
+		x := loaded{rel: ".", dir: dir, m: m}
+		warnExtension(&r, x, map[string]loaded{m.Name: x})
 	}
 	return r, r.Err()
 }

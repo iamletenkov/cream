@@ -25,7 +25,7 @@
   "warnings": [
     {
       "code": "validate.unit_lock",
-      "message": "lock-restart-exclusive: extensions/lock-restart-exclusive/files/lock-restart-exclusive.service:7: ExecStartPre вызывает cream run lock-restart-exclusive render с lock: exclusive — действие из Exec* юнита объявляется lock: none, иначе restart под блокировкой домена ждёт сам себя (§7.3)"
+      "message": "lock-restart-exclusive: extensions/lock-restart-exclusive/files/lock-restart-exclusive.service:7: ExecStartPre вызывает cream run lock-restart-exclusive render с lock: exclusive, а держатель lock/lock-restart-exclusive может ждать задание lock-restart-exclusive.service: actions/set-managed:6: `systemctl restart lock-restart-exclusive.service` без --no-block — тупик (§7.3); действие из Exec* такого юнита объявляется lock: none"
     }
   ],
   "error": null

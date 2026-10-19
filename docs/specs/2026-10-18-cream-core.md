@@ -529,8 +529,16 @@ actions:
   `lock: none`. Наследование `CREAM_LOCK_FD` (§6.3) здесь не помогает: юнит — не потомок владельца блокировки;
 - действие с `lock: none` только читает домен (файлы cream пишет атомарно через `rename`, поэтому чтение
   согласовано по файлу); писать домен оно не может (§6.3);
-- `cream validate` предупреждает, если `ExecStartPre`/`ExecStart`/`ExecReload` юнита из `files` вызывает
-  `cream run <ext> <action>` с `lock`, отличным от `none`.
+- `cream validate` предупреждает (`validate.unit_lock`), если `ExecStartPre`/`ExecStart`/`ExecReload` юнита из
+  `files` вызывает `cream run <ext> <action>` с `lock`, отличным от `none`, **и** держатель `lock/<ext>` может ждать
+  задание этого юнита (с 1.1.1): в тексте дерева `<ext>` (кроме `extension.yaml` и `*.md`) есть синхронный (без
+  `--no-block`) `systemctl start|stop|restart|reload|try-restart|reload-or-restart|…` или `enable|disable|reenable|mask
+  --now` на этот юнит или на юнит, упорядоченный после него (`After=` у того, `Before=` у этого, с drop-in'ами из
+  `files`, транзитивно); либо юнит упорядочен или связан с `cream-configure*`, либо `after`/`before`/`wants` хука
+  `configure` называют юнит. Простые присваивания `NAME=…`, `NAME=(…)`, `NAME+=(…)` разрешаются по всему дереву;
+  аргумент, который не разрешился в имя (`$1`, переменная цикла или `read`), считается совпавшим. Вызов под
+  блокировкой, при котором юнит только включают и выключают, а запускают `--no-block` (таймер повтора регистрации
+  `teleport-join`, `teleport-token`), предупреждения не даёт: `lock: none` там нельзя — действие пишет домен.
 
 ## 8. Конфигурация
 ### 8.1 Файлы
