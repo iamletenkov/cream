@@ -53,7 +53,7 @@
 
 - [x] Task 21: Документация: `docs/cli.md`, ADR, README, карта AGENTS.md
 
-- [ ] Task 22: Фаза build на живом `virt-customize` (`make test-build`)
+- [x] Task 22: Фаза build на живом `virt-customize` (`make test-build`)
 
 - [ ] Task 23: Финальная интеграция + `make ci`
 
