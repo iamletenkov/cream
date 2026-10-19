@@ -526,7 +526,7 @@ func TestInstallParamWriteFailsAfterFiles(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(etc, 0o755) })
 	_, err := installRun(t, te, "files-mode", "LEVEL=high")
-	wantCode(t, err, cerr.ExitState, "config.io")
+	wantCode(t, err, cerr.ExitState, "io.write")
 	if rec := installRecord(t, te, "files-mode"); rec.Status != state.StatusFailed {
 		t.Errorf("статус %q, ждали failed", rec.Status)
 	}

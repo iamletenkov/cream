@@ -1,11 +1,13 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/fsx"
@@ -125,3 +127,12 @@ func TestParseAssignmentsMissingParamsFile(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// TestReadStdinError — сбой чтения stdin — ввод-вывод, 74 io.stdin (Р29), а не ошибка вызова.
+func TestReadStdinError(t *testing.T) {
+	t.Parallel()
+	_, err := readStdin(iotest.ErrReader(errors.New("EIO")), "TOKEN")
+	if cerr.ExitCode(err) != cerr.ExitState || cerr.CodeOf(err) != "io.stdin" {
+		t.Fatalf("readStdin = %v (%d %s), ждали 74 io.stdin", err, cerr.ExitCode(err), cerr.CodeOf(err))
+	}
+}

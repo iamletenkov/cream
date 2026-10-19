@@ -169,7 +169,7 @@ func buildReadRecord(path string) (buildRecord, error) {
 	var rec buildRecord
 	data, err := os.ReadFile(path)
 	if err != nil {
-		exit, code := cerr.ExitState, "state.io"
+		exit, code := cerr.ExitState, cerr.CodeIORead
 		if errors.Is(err, fs.ErrNotExist) {
 			exit, code = cerr.ExitNotFound, "record.not_found"
 		}

@@ -41,7 +41,7 @@ func TestExitCode(t *testing.T) {
 
 func TestWrapUnwrapAndMessage(t *testing.T) {
 	t.Parallel()
-	e := Wrap(fs.ErrNotExist, ExitState, "state.read", "чтение реестра %s", "teleport")
+	e := Wrap(fs.ErrNotExist, ExitState, "io.read", "чтение реестра %s", "teleport")
 	if !errors.Is(e, fs.ErrNotExist) {
 		t.Errorf("errors.Is(fs.ErrNotExist) = false, want true")
 	}
@@ -52,8 +52,8 @@ func TestWrapUnwrapAndMessage(t *testing.T) {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
 	var target *Error
-	if !errors.As(fmt.Errorf("x: %w", e), &target) || target.Code != "state.read" {
-		t.Errorf("errors.As did not find *Error with code state.read")
+	if !errors.As(fmt.Errorf("x: %w", e), &target) || target.Code != "io.read" {
+		t.Errorf("errors.As did not find *Error with code io.read")
 	}
 }
 

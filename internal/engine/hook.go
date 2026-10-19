@@ -47,7 +47,7 @@ func (e *Engine) RunHook(ctx context.Context, in Installed, hook manifest.HookNa
 		return runner.Failed, err
 	}
 	if err := os.MkdirAll(e.L.StateDir(name), 0o755); err != nil {
-		return runner.Failed, cerr.Wrap(err, cerr.ExitState, "state.write", "%s: каталог состояния", name)
+		return runner.Failed, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: каталог состояния", name)
 	}
 
 	if env.Phase == "" {
@@ -139,14 +139,14 @@ func (e *Engine) markReboot(ext, phase string) error {
 	}
 	p := e.L.RebootRequired()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s", p)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", p)
 	}
 	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s", p)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", p)
 	}
 	if err := f.Close(); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s", p)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", p)
 	}
 	return nil
 }

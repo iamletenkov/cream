@@ -189,12 +189,12 @@ func readLimited(path, notFound, tooBig string) ([]byte, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, cerr.Wrap(err, cerr.ExitNotFound, notFound, "нет файла %s", path)
 		}
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.io", "чтение %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "чтение %s", path)
 	}
 	defer f.Close() //nolint:errcheck // только чтение: ошибка Close ничего не теряет
 	data, err := io.ReadAll(io.LimitReader(f, maxManifestSize+1))
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.io", "чтение %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "чтение %s", path)
 	}
 	if len(data) > maxManifestSize {
 		return nil, cerr.New(cerr.ExitData, tooBig, "%s: больше %d байт", path, maxManifestSize)

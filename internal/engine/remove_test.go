@@ -499,11 +499,11 @@ func TestRemoveForgetReadErrorRefused(t *testing.T) {
 	if err := os.Remove(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(rec, 0o755); err != nil { // чтение — EISDIR, state.read
+	if err := os.Mkdir(rec, 0o755); err != nil { // чтение — EISDIR, io.read
 		t.Fatal(err)
 	}
 	_, err := te.Remove(context.Background(), "noop", RemoveOptions{Forget: true})
-	wantCode(t, err, cerr.ExitState, "state.read")
+	wantCode(t, err, cerr.ExitState, "io.read")
 	if !removeExists(t, te.L.ExtTree("noop")) || !removeExists(t, rec) {
 		t.Error("--forget снял установку при ошибке чтения реестра")
 	}

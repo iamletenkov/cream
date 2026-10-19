@@ -163,7 +163,7 @@ func loadExtension(dir string, cream manifest.CreamBuild, w *cerr.Warnings) (Ent
 	}
 	digest, err := fsx.TreeDigest(dir)
 	if err != nil {
-		return Entry{}, cerr.Wrap(err, cerr.ExitState, "state.io", "расширение %s", m.Name)
+		return Entry{}, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "расширение %s", m.Name)
 	}
 	return Entry{Dir: dir, Manifest: m, Digest: digest}, nil
 }

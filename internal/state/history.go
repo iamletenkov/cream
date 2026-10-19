@@ -36,22 +36,22 @@ func (s *Store) Append(e HistoryEntry) error {
 	line = append(line, '\n')
 	path := s.layout.History()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "журнал %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "журнал %s", path)
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 	if err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "журнал %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "журнал %s", path)
 	}
 	if _, err := f.Write(line); err != nil {
 		_ = f.Close()
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "журнал %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "журнал %s", path)
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "журнал %s: fsync", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "журнал %s: fsync", path)
 	}
 	if err := f.Close(); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "журнал %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "журнал %s", path)
 	}
 	return nil
 }

@@ -70,7 +70,7 @@ func DetectHost(l paths.Layout, phase string, lookPath func(string) (string, err
 
 // Detect returns the host for phase (build or live; anything else is 64
 // usage.phase). The target arch is the machine's own. A missing os-release
-// leaves Family, OSID and OSVersion empty; an unreadable one is 74 state.io.
+// leaves Family, OSID and OSVersion empty; an unreadable one is 74 io.read.
 // With os-release present Family is never empty (familyOf, Р23).
 func (p Probe) Detect(phase string) (Host, error) {
 	if err := checkPhase(phase); err != nil {
@@ -137,11 +137,11 @@ func (p Probe) readOSRelease() (*envfile.File, error) {
 			continue
 		}
 		if err != nil {
-			return nil, cerr.Wrap(err, cerr.ExitState, "state.io", "чтение %s", path)
+			return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "чтение %s", path)
 		}
 		f, err := envfile.Parse(data)
 		if err != nil {
-			return nil, cerr.Wrap(err, cerr.ExitState, "state.io", "разбор %s", path)
+			return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "разбор %s", path)
 		}
 		return f, nil
 	}

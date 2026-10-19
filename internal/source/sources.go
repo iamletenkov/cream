@@ -128,10 +128,10 @@ func (f *File) Save(path string) error {
 		return cerr.Wrap(err, cerr.ExitInternal, cerr.CodeInternal, "кодирование %s", path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "каталог %s", filepath.Dir(path))
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "каталог %s", filepath.Dir(path))
 	}
 	if err := fsx.WriteAtomic(path, buf.Bytes(), 0o644); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "источники %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "источники %s", path)
 	}
 	return nil
 }
@@ -176,12 +176,12 @@ func readSources(path string, checkPerm bool) ([]byte, error) {
 	case errors.Is(err, fsx.ErrUnsafePerm):
 		return nil, cerr.Wrap(err, cerr.ExitPerm, "perm.sources", "источники %s", path)
 	case err != nil:
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.read", "источники %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "источники %s", path)
 	}
 	defer func() { _ = fd.Close() }()
 	data, err := io.ReadAll(io.LimitReader(fd, maxSourcesFile+1))
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.read", "источники %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "источники %s", path)
 	}
 	if len(data) > maxSourcesFile {
 		return nil, cerr.New(cerr.ExitData, "source.invalid", "источники %s: файл больше %d байт", path, maxSourcesFile)

@@ -214,10 +214,10 @@ func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) 
 		}
 	}
 	if err := systemd.Disable(e.L, ext); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: снятие configure", ext)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: снятие configure", ext)
 	}
 	if err := place.Unplace(e.L, in.Record.Files, e.Warn); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: удаление files", ext)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: удаление files", ext)
 	}
 	if up {
 		if err := e.Systemctl.DaemonReload(ctx); err != nil {
@@ -230,11 +230,11 @@ func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) 
 	}
 	for _, d := range dirs {
 		if err := os.RemoveAll(d); err != nil {
-			return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: удаление %s", ext, d)
+			return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: удаление %s", ext, d)
 		}
 	}
 	if err := os.Remove(e.L.RunReason(ext)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: маркер причины", ext)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: маркер причины", ext)
 	}
 	return nil
 }

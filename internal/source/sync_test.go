@@ -332,7 +332,7 @@ func TestSyncLockWriteFailureRestoresCache(t *testing.T) {
 	errDisk := errors.New("диск полон")
 	s.writeLock = func(string, []byte, os.FileMode) error { return errDisk }
 	_, err := s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v1)})
-	wantCerr(t, err, cerr.ExitState, "state.write")
+	wantCerr(t, err, cerr.ExitState, "io.write")
 	if _, err := os.Lstat(s.Layout.SourceCache("s")); err == nil {
 		t.Error("первый кеш остался без записи в sources.lock")
 	}
@@ -343,7 +343,7 @@ func TestSyncLockWriteFailureRestoresCache(t *testing.T) {
 	s.writeLock = func(string, []byte, os.FileMode) error { return errDisk }
 	ff.bodies[url] = v2
 	_, err = s.Sync(context.Background(), Source{Name: "s", Type: TypeArchive, URL: url, SHA256: sha256Hex(v2)})
-	wantCerr(t, err, cerr.ExitState, "state.write")
+	wantCerr(t, err, cerr.ExitState, "io.write")
 	if got := readFile(t, filepath.Join(s.Layout.SourceCache("s"), "a")); got != "old" {
 		t.Errorf("прежний кеш не возвращён: a = %q", got)
 	}

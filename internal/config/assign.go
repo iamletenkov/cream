@@ -119,7 +119,7 @@ func readStdin(r io.Reader, key string) (string, error) {
 	}
 	data, err := io.ReadAll(io.LimitReader(r, maxFile+1))
 	if err != nil {
-		return "", cerr.Wrap(err, cerr.ExitUsage, "usage.stdin", "%s=-: чтение stdin", key)
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOStdin, "%s=-: чтение stdin", key)
 	}
 	if len(data) > maxFile {
 		return "", cerr.New(cerr.ExitUsage, "usage.stdin_too_large", "%s=-: stdin больше %d байт", key, maxFile)
@@ -148,12 +148,12 @@ func readParams(path string, checkPerm bool, trusted func(string) (*os.File, err
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, cerr.Wrap(err, cerr.ExitNotFound, "not_found.params_file", "--params-file %s", path)
 	case err != nil:
-		return nil, cerr.Wrap(err, cerr.ExitState, "io.params_file", "--params-file %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "--params-file %s", path)
 	}
 	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "io.params_file", "--params-file %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "--params-file %s", path)
 	}
 	if len(data) > maxFile {
 		return nil, cerr.New(cerr.ExitData, "config.params_file", "--params-file %s больше %d байт", path, maxFile)

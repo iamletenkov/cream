@@ -64,11 +64,11 @@ func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error) {
 	cache := s.Layout.SourceCache(src.Name)
 	parent := filepath.Dir(cache)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источников %s", parent)
+		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "кеш источников %s", parent)
 	}
 	staging, err := os.MkdirTemp(parent, "."+src.Name+".sync-*")
 	if err != nil {
-		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источников %s", parent)
+		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "кеш источников %s", parent)
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	tree := filepath.Join(staging, "tree")
@@ -108,7 +108,7 @@ func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error) {
 	}
 	undo, err := swapIn(tree, cache, filepath.Join(staging, "old"), exchange)
 	if err != nil {
-		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источника %s", src.Name)
+		return LockEntry{}, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "кеш источника %s", src.Name)
 	}
 	write := s.writeLock
 	if write == nil {
@@ -116,7 +116,7 @@ func (s *Syncer) Sync(ctx context.Context, src Source) (LockEntry, error) {
 	}
 	if err := writeLockFile(lockPath, data, write); err != nil {
 		if uerr := undo(); uerr != nil {
-			return LockEntry{}, cerr.Wrap(errors.Join(err, uerr), cerr.ExitState, "state.write",
+			return LockEntry{}, cerr.Wrap(errors.Join(err, uerr), cerr.ExitState, cerr.CodeIOWrite,
 				"источник %s: sources.lock не записан, прежний кеш не возвращён", src.Name)
 		}
 		return LockEntry{}, err
@@ -131,7 +131,7 @@ func (s *Syncer) fetchArchive(ctx context.Context, src Source, staging, tree str
 	file := filepath.Join(staging, "archive.tar.gz")
 	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return "", cerr.Wrap(err, cerr.ExitState, "state.write", "загрузка %s", src.Name)
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "загрузка %s", src.Name)
 	}
 	defer func() { _ = f.Close() }()
 	h := sha256.New()
@@ -150,7 +150,7 @@ func (s *Syncer) fetchArchive(ctx context.Context, src Source, staging, tree str
 		return "", e
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return "", cerr.Wrap(err, cerr.ExitState, "state.read", "архив %s", src.Name)
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "архив %s", src.Name)
 	}
 	if err := ExtractTarGz(f, tree); err != nil {
 		return "", cerr.Wrap(err, cerr.ExitSource, "source.bad_archive", "источник %s", src.Name)
@@ -214,7 +214,7 @@ func Forget(l paths.Layout, name string) error {
 		return cerr.New(cerr.ExitUsage, "usage.source", "имя источника %q", name)
 	}
 	if err := os.RemoveAll(l.SourceCache(name)); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "кеш источника %s", name)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "кеш источника %s", name)
 	}
 	return updateLock(l.SourcesLock(), name, nil)
 }

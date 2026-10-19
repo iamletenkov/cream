@@ -38,7 +38,7 @@ func ReadLock(path string) ([]LockEntry, error) {
 		return []LockEntry{}, nil
 	}
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.read", "sources.lock %s", path)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "sources.lock %s", path)
 	}
 	var lf lockFile
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -93,7 +93,7 @@ func prepareLock(path, name string, e *LockEntry) (data []byte, changed bool, er
 // lockDir creates the directory of sources.lock.
 func lockDir(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "каталог %s", filepath.Dir(path))
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "каталог %s", filepath.Dir(path))
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func writeLockFile(path string, data []byte, write func(string, []byte, fs.FileM
 		return err
 	}
 	if err := write(path, data, 0o644); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "sources.lock %s", path)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "sources.lock %s", path)
 	}
 	return nil
 }

@@ -53,7 +53,7 @@ func (s *Store) Get(name string) (rec *Record, ok bool, err error) {
 		return nil, false, nil
 	}
 	if err != nil {
-		return nil, false, cerr.Wrap(err, cerr.ExitState, "state.read", "реестр %s", name)
+		return nil, false, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "реестр %s", name)
 	}
 	r, err := decode(path, name, data)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *Store) List(w *cerr.Warnings) ([]Record, error) {
 		return []Record{}, nil
 	}
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.read", "реестр %s", dir)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "реестр %s", dir)
 	}
 	out := []Record{}
 	for _, e := range ents {
@@ -166,10 +166,10 @@ func (s *Store) Put(r Record) error {
 	}
 	data = append(data, '\n')
 	if err := os.MkdirAll(s.layout.InstalledDir(), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "реестр %s", r.Name)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "реестр %s", r.Name)
 	}
 	if err := s.write(s.layout.InstalledFile(r.Name), data, 0o644); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "реестр %s", r.Name)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "реестр %s", r.Name)
 	}
 	return nil
 }
@@ -184,10 +184,10 @@ func (s *Store) Delete(name string) error {
 		return nil
 	}
 	if err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "удаление записи реестра %s", name)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "удаление записи реестра %s", name)
 	}
 	if err := syncDir(filepath.Dir(s.layout.InstalledFile(name))); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "удаление записи реестра %s: fsync каталога", name)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "удаление записи реестра %s: fsync каталога", name)
 	}
 	return nil
 }

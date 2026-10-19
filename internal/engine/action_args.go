@@ -121,7 +121,7 @@ func actionReadSecret(r io.Reader, key string) (string, error) {
 	}
 	data, err := io.ReadAll(io.LimitReader(r, actionMaxStdin+1))
 	if err != nil {
-		return "", cerr.Wrap(err, cerr.ExitUsage, "usage.stdin", "%s=-: чтение stdin", key)
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOStdin, "%s=-: чтение stdin", key)
 	}
 	if len(data) > actionMaxStdin {
 		return "", cerr.New(cerr.ExitUsage, "usage.stdin_too_large", "%s=-: stdin больше %d байт", key, actionMaxStdin)

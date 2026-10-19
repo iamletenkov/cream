@@ -303,7 +303,7 @@ func TestPutAtomicOnCrash(t *testing.T) {
 	if err := s.Put(r); !errors.Is(err, crash) {
 		t.Fatalf("Put = %v, want the crash", err)
 	} else {
-		assertCode(t, err, "state.write")
+		assertCode(t, err, "io.write")
 	}
 	after, err := os.ReadFile(l.InstalledFile("teleport"))
 	if err != nil {

@@ -104,8 +104,8 @@ func TestProbeDetectUnreadable(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Probe{Layout: paths.Layout{Root: root}, Arch: "amd64"}.Detect(PhaseLive)
-	if cerr.ExitCode(err) != cerr.ExitState || cerr.CodeOf(err) != "state.io" {
-		t.Fatalf("Detect = %v (%d %s), ждали 74 state.io", err, cerr.ExitCode(err), cerr.CodeOf(err))
+	if cerr.ExitCode(err) != cerr.ExitState || cerr.CodeOf(err) != "io.read" {
+		t.Fatalf("Detect = %v (%d %s), ждали 74 io.read", err, cerr.ExitCode(err), cerr.CodeOf(err))
 	}
 }
 

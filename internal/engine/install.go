@@ -520,7 +520,7 @@ func installSystemdErr(err error, ext string) error {
 	if errors.As(err, &ce) {
 		return err
 	}
-	return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: configure", ext)
+	return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: configure", ext)
 }
 
 // installCreamVersion is cream_version of the registry.

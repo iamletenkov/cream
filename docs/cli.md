@@ -149,7 +149,7 @@ Golden: [validate-catalog.json](../internal/cli/testdata/golden/validate-catalog
 ### `cream catalog pack`
 `cream catalog pack DIR --out F` — сначала проверяет каталог, затем пишет детерминированный `tar.gz`: сортировка,
 uid/gid 0, mtime = `SOURCE_DATE_EPOCH` (неверное значение — 64 `usage.source_date_epoch`), gzip без имени и
-времени. Байтовая воспроизводимость — при одной версии Go toolchain. Ошибка записи — 74 `state.write`.
+времени. Байтовая воспроизводимость — при одной версии Go toolchain. Ошибка записи — 74 `io.write`.
 
 ### `cream resolve`
 `cream resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] <ref> [K=V…] [<ref> [K=V…]]…`

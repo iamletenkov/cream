@@ -128,7 +128,7 @@ func (e *Engine) takeReason(ext string) (string, error) {
 		}
 	}
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", cerr.Wrap(err, cerr.ExitState, "state.write", "маркер причины %s", p)
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "маркер причины %s", p)
 	}
 	return reason, nil
 }

@@ -69,11 +69,11 @@ func (r *Report) fail(ext, path, code, format string, a ...any) {
 }
 
 // failErr records err (an *cerr.Error keeps its exit and code; anything
-// else is 74 state.io: the tree could not be read).
+// else is 74 io.read: the tree could not be read).
 func (r *Report) failErr(ext, path string, err error) {
 	exit, code := cerr.ExitCode(err), cerr.CodeOf(err)
 	if code == cerr.CodeInternal {
-		exit, code = cerr.ExitState, "state.io"
+		exit, code = cerr.ExitState, cerr.CodeIORead
 	}
 	r.Errors = append(r.Errors, Problem{Ext: ext, Path: path, Exit: exit, Code: code, Message: err.Error()})
 }

@@ -1,12 +1,15 @@
 package engine
 
 import (
+	"errors"
 	"io"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 
+	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/semver"
 )
@@ -134,5 +137,14 @@ func TestActionEnvValuesDenied(t *testing.T) {
 	want := map[string]string{"PROXY": "p:1", "LEVEL": "low"}
 	if !maps.Equal(got, want) {
 		t.Errorf("окружение действия: %v, ждали %v", got, want)
+	}
+}
+
+// TestActionReadSecretError — сбой чтения stdin — 74 io.stdin (Р29).
+func TestActionReadSecretError(t *testing.T) {
+	t.Parallel()
+	_, err := actionReadSecret(iotest.ErrReader(errors.New("EIO")), "FIXTURE_SECRET")
+	if cerr.ExitCode(err) != cerr.ExitState || cerr.CodeOf(err) != "io.stdin" {
+		t.Fatalf("actionReadSecret = %v (%d %s), ждали 74 io.stdin", err, cerr.ExitCode(err), cerr.CodeOf(err))
 	}
 }

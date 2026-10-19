@@ -72,7 +72,7 @@ func checkCacheDir(dir string, uid int) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
-		return cerr.Wrap(err, cerr.ExitState, "state.read", "кеш источников %s", dir)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "кеш источников %s", dir)
 	}
 	sys, ok := st.Sys().(*syscall.Stat_t)
 	var bad string

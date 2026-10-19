@@ -14,10 +14,10 @@ import (
 func (e *Engine) installStage(ext, src string) error {
 	staging := e.L.ExtNew(ext)
 	if err := os.RemoveAll(staging); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: прежний %s", ext, staging)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: прежний %s", ext, staging)
 	}
 	if err := fsx.CopyTree(src, staging); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: копия дерева", ext)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: копия дерева", ext)
 	}
 	return nil
 }
@@ -40,18 +40,18 @@ func (e *Engine) installSwap(ext string, upgrade bool) error {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
-		return cerr.Wrap(err, cerr.ExitState, "state.io", "%s: дерево %s", ext, tree)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "%s: дерево %s", ext, tree)
 	case upgrade && !installExistsPath(prev):
 		if err := os.Rename(tree, prev); err != nil {
-			return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: перенос дерева в %s", ext, prev)
+			return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: перенос дерева в %s", ext, prev)
 		}
 	default:
 		if err := os.RemoveAll(tree); err != nil {
-			return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: удаление дерева %s", ext, tree)
+			return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: удаление дерева %s", ext, tree)
 		}
 	}
 	if err := os.Rename(staging, tree); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s: дерево на место", ext)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: дерево на место", ext)
 	}
 	return nil
 }

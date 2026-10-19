@@ -24,14 +24,14 @@ func (e *Engine) policyRcDPut() (func(), error) {
 	case err == nil:
 		return func() {}, nil
 	case !errors.Is(err, fs.ErrNotExist):
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.io", "policy-rc.d %s", p)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "policy-rc.d %s", p)
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.write", "policy-rc.d %s", p)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "policy-rc.d %s", p)
 	}
 	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.write", "policy-rc.d %s", p)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "policy-rc.d %s", p)
 	}
 	_, werr := f.WriteString(policyRcDBody)
 	if cl := f.Close(); werr == nil {
@@ -42,7 +42,7 @@ func (e *Engine) policyRcDPut() (func(), error) {
 	}
 	if werr != nil {
 		_ = os.Remove(p)
-		return nil, cerr.Wrap(werr, cerr.ExitState, "state.write", "policy-rc.d %s", p)
+		return nil, cerr.Wrap(werr, cerr.ExitState, cerr.CodeIOWrite, "policy-rc.d %s", p)
 	}
 	return func() { e.policyRcDDrop(p) }, nil
 }

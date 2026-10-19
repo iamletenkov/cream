@@ -33,6 +33,14 @@ const (
 // CodeInternal is the error.code of any error that is not an *Error.
 const CodeInternal = "internal"
 
+// Input/output codes (exit 74, ruling Р29): one code per situation, whatever
+// file is involved — the path goes to the message.
+const (
+	CodeIORead  = "io.read"  // a file or directory could not be read or stat'ed
+	CodeIOWrite = "io.write" // a file or directory could not be created, written, moved or removed
+	CodeIOStdin = "io.stdin" // stdin could not be read
+)
+
 // Error is a cream error with an exit code and a machine-readable code.
 type Error struct {
 	Exit    int

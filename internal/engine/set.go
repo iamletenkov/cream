@@ -123,10 +123,10 @@ func (e *Engine) restartConfigure(ctx context.Context, ext, reason string, wait 
 // writeReason writes the reason marker the unit's configure --from-unit reads.
 func (e *Engine) writeReason(ext, reason string) error {
 	if err := os.MkdirAll(e.L.RunDir(), 0o755); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s", e.L.RunDir())
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", e.L.RunDir())
 	}
 	if err := fsx.WriteAtomic(e.L.RunReason(ext), []byte(reason+"\n"), 0o644); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "state.write", "%s", e.L.RunReason(ext))
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", e.L.RunReason(ext))
 	}
 	return nil
 }

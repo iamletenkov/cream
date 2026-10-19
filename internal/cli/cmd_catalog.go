@@ -196,7 +196,7 @@ func catalogPack(ctx *Context, d catalogDeps, dir, out string) (any, error) {
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(out), "."+filepath.Base(out)+".*")
 	if err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.write", "архив %s", out)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "архив %s", out)
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	h := sha256.New()
@@ -204,13 +204,13 @@ func catalogPack(ctx *Context, d catalogDeps, dir, out string) (any, error) {
 	err = source.Pack(dir, io.MultiWriter(tmp, h, cw), time.Unix(epoch, 0))
 	if err != nil {
 		_ = tmp.Close()
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.write", "упаковка %s", dir)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "упаковка %s", dir)
 	}
 	for _, step := range []func() error{tmp.Sync, func() error { return tmp.Chmod(0o644) }, tmp.Close,
 		func() error { return os.Rename(tmp.Name(), out) }} {
 		if err := step(); err != nil {
 			_ = tmp.Close()
-			return nil, cerr.Wrap(err, cerr.ExitState, "state.write", "архив %s", out)
+			return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "архив %s", out)
 		}
 	}
 	return packResult{Out: out, SHA256: hex.EncodeToString(h.Sum(nil)), Size: cw.n, Catalog: r.Catalog,
@@ -450,7 +450,7 @@ func resolveInstalled(ctx *Context, d catalogDeps) ([]resolve.Node, error) {
 		if errors.As(err, &ce) {
 			return nil, err
 		}
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.read", "реестр")
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "реестр")
 	}
 	out := make([]resolve.Node, 0, len(inst))
 	for _, in := range inst {

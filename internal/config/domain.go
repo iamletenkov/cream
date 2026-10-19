@@ -194,19 +194,19 @@ func (d *Domain) Set(ch []Change, o SetOpts) (changed []string, err error) {
 		return nil, nil
 	}
 	if err := os.MkdirAll(d.l.EtcDir(d.ext), 0o755); err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек", d.ext)
+		return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: каталог настроек", d.ext)
 	}
 	if err := d.checkEtcDir(); err != nil {
 		return nil, err
 	}
 	if secDirty {
 		if err := fsx.WriteAtomic(d.l.SecretsFile(d.ext), sec.Bytes(), 0o600); err != nil {
-			return nil, cerr.Wrap(err, cerr.ExitState, "config.io", "%s: запись секретов", d.ext)
+			return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: запись секретов", d.ext)
 		}
 	}
 	if cfgDirty {
 		if err := fsx.WriteAtomic(d.l.ConfigFile(d.ext), cfg.Bytes(), 0o644); err != nil {
-			return nil, cerr.Wrap(err, cerr.ExitState, "config.io", "%s: запись настроек", d.ext)
+			return nil, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: запись настроек", d.ext)
 		}
 	}
 	return changed, nil
@@ -426,7 +426,7 @@ func (d *Domain) fileErr(err error, what, path string) error {
 	if errors.Is(err, fsx.ErrUnsafePerm) {
 		return cerr.Wrap(err, cerr.ExitPerm, "perm."+what, "%s: %s", d.ext, path)
 	}
-	return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: чтение %s", d.ext, path)
+	return cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "%s: чтение %s", d.ext, path)
 }
 
 // open opens a domain file: on the real root through openTrusted (owner
@@ -457,12 +457,12 @@ func (d *Domain) checkEtcDir() error {
 		return bad("ссылка или не каталог")
 	}
 	if err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек %s", d.ext, dir)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "%s: каталог настроек %s", d.ext, dir)
 	}
 	defer func() { _ = syscall.Close(fd) }()
 	var st syscall.Stat_t
 	if err := syscall.Fstat(fd, &st); err != nil {
-		return cerr.Wrap(err, cerr.ExitState, "config.io", "%s: каталог настроек %s", d.ext, dir)
+		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "%s: каталог настроек %s", d.ext, dir)
 	}
 	if int(st.Uid) != d.uid {
 		return bad("владелец uid %d, нужен %d", st.Uid, d.uid)

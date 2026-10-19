@@ -9,7 +9,7 @@
 // соответствие хуков файлам) — дело пакета catalog.
 //
 // Все ошибки — *cerr.Error: 65 manifest.* (данные), 68 platform.cream_version
-// (манифест требует более новый cream), 66 not_found.* и 74 state.io у Load.
+// (манифест требует более новый cream), 66 not_found.* и 74 io.read у Load.
 package manifest
 
 import (

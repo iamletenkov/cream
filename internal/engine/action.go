@@ -115,7 +115,7 @@ func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, 
 		secrets = append(secrets, args.secret)
 	}
 	if err := os.MkdirAll(e.L.StateDir(r.Ext), 0o755); err != nil {
-		return res, cerr.Wrap(err, cerr.ExitState, "state.write", "%s: каталог состояния", r.Ext)
+		return res, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: каталог состояния", r.Ext)
 	}
 
 	env := runner.EnvInput{Phase: phase, Ext: r.Ext, ExtVersion: in.Record.Version,

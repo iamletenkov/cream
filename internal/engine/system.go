@@ -20,7 +20,7 @@ type SystemInitResult struct {
 func (e *Engine) SystemInit(ctx context.Context) (SystemInitResult, error) {
 	res := SystemInitResult{Unit: "cream-configure@.service"}
 	if err := systemd.Init(e.L); err != nil {
-		return res, cerr.Wrap(err, cerr.ExitState, "state.write", "system init")
+		return res, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "system init")
 	}
 	if _, up := e.Systemctl.Running(ctx); !up {
 		return res, nil
