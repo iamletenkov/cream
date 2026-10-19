@@ -49,7 +49,7 @@
 
 - [x] Task 19: Интеграция в контейнерах с systemd + пилотные фикстуры (`make test-integration`)
 
-- [ ] Task 20: CI-матрица и сборка ассетов релиза (release-please)
+- [x] Task 20: CI-матрица и сборка ассетов релиза (release-please)
 
 - [x] Task 21: Документация: `docs/cli.md`, ADR, README, карта AGENTS.md
 
