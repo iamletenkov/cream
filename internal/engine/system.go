@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/state"
 	"github.com/iamletenkov/cream/internal/systemd"
 )
 
@@ -38,20 +39,57 @@ func (e *Engine) SystemInit(ctx context.Context) (SystemInitResult, error) {
 }
 
 // systemInitTargets brings configure.target of the registry in line with the
-// targets systemd.Init recomputed (the cloud-user stage follows cloud-init):
-// only records whose target changed are rewritten, under the global lock.
+// targets systemd.Init recomputed. lock/global is taken only when some record
+// has to change, and without waiting (system init runs from the package
+// postinst under set -e, next to another dpkg or hook): busy, the registry is
+// left as is with a system.registry_busy warning — the links are already
+// right, and the next system init or upgrade writes the target.
 func (e *Engine) systemInitTargets(ctx context.Context) error {
-	g, err := e.Locks.Global(ctx)
-	if err != nil {
-		return err
-	}
-	defer g.Release()
 	recs, err := e.Store.List(e.Warn)
 	if err != nil {
 		return err
 	}
+	var changed []state.Record
 	for _, rec := range recs {
 		if rec.Configure == nil {
+			continue
+		}
+		target, err := systemd.Target(e.L, rec.Configure.Stage)
+		if err != nil {
+			return fmt.Errorf("system init: %s: %w", rec.Name, err)
+		}
+		if target != rec.Configure.Target {
+			changed = append(changed, rec)
+		}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	g, ok, err := e.Locks.TryGlobal()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		e.warn("system.registry_busy", "lock/global занята: configure.target в реестре не обновлён (%d записей), ссылки юнитов пересчитаны; повторите cream system init", len(changed))
+		return nil
+	}
+	defer g.Release()
+	return e.applyTargets(changed)
+}
+
+// applyTargets rewrites configure.target of recs under lock/global: each
+// record is read again, and one removed or changed meanwhile is taken as it
+// is now (a removed one is not written back).
+func (e *Engine) applyTargets(recs []state.Record) error {
+	for _, old := range recs {
+		rec, ok, err := e.Store.Get(old.Name)
+		if err != nil {
+			return err
+		}
+		if !ok || rec.Configure == nil {
 			continue
 		}
 		target, err := systemd.Target(e.L, rec.Configure.Stage)
@@ -62,7 +100,7 @@ func (e *Engine) systemInitTargets(ctx context.Context) error {
 			continue
 		}
 		rec.Configure.Target = target
-		if err := e.Store.Put(rec); err != nil {
+		if err := e.Store.Put(*rec); err != nil {
 			return err
 		}
 	}

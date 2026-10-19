@@ -356,6 +356,9 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 			hk.Timeout = out[HookInstall].Timeout
 		case HookConfigure:
 			hk.Timeout = DefaultConfigureTimeout
+			if hk.Stage == StageEarly {
+				hk.Timeout = MaxEarlyConfigureTimeout
+			}
 		case HookApply:
 			hk.Timeout = DefaultApplyTimeout
 		case HookRemove:

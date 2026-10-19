@@ -8,9 +8,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/state"
 	"github.com/iamletenkov/cream/internal/systemd"
@@ -176,13 +178,14 @@ func TestSystemInit(t *testing.T) {
 	}
 }
 
-// cream 1.1.0: system init переносит ссылку стадии cloud-user по наличию
-// cloud-init и обновляет configure.target в реестре; прочие записи не трогает.
+// system init переносит экземпляр cloud-user из цели 1.1.0 к вспомогательному
+// юниту (cream 1.1.1) и обновляет configure.target в реестре под lock/global;
+// прочие записи не трогает.
 func TestSystemInitUpdatesConfigureTarget(t *testing.T) {
 	t.Parallel()
 	te := newTestEngine(t)
 	te.Cream = manifest.ParseCreamBuild("1.1.0")
-	seedInstalled(t, te, fixtureDir(t, "configure-cloud-user"))
+	seedInstalled(t, te, fixtureDir(t, "configure-cloud-user"), func(r *state.Record) { r.Configure.Target = "cloud-init.target" })
 	seedInstalled(t, te, fixtureDir(t, "configure-system"))
 	for ext, stage := range map[string]string{"configure-cloud-user": "cloud-user", "configure-system": "system"} {
 		if _, err := systemd.Enable(te.L, ext, systemd.StageSpec{Stage: stage}); err != nil {
@@ -193,20 +196,93 @@ func TestSystemInitUpdatesConfigureTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, te, "/usr/lib/systemd/system/cloud-final.service", "[Unit]\n", 0o644)
 	if _, err := te.SystemInit(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rec, ok, err := te.Store.Get("configure-cloud-user")
-	if err != nil || !ok || rec.Configure == nil || rec.Configure.Target != "cloud-init.target" {
+	if err != nil || !ok || rec.Configure == nil || rec.Configure.Target != systemd.CloudUserUnit {
 		t.Fatalf("реестр cloud-user: %+v %v %v", rec, ok, err)
 	}
-	link := filepath.Join(te.L.WantsDir("cloud-init.target"), systemd.UnitName("configure-cloud-user"))
+	link := filepath.Join(te.L.WantsDir(systemd.CloudUserUnit), systemd.UnitName("configure-cloud-user"))
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf("ссылка: %v", err)
 	}
 	if after, _ := os.ReadFile(te.L.InstalledFile("configure-system")); !bytes.Equal(after, before) {
 		t.Errorf("запись system переписана:\n%s", after)
+	}
+	if len(te.Warn.List()) != 0 {
+		t.Errorf("предупреждения %v", warningCodes(te))
+	}
+}
+
+// cream 1.1.1: system init (postinst пакета под set -e) не ждёт lock/global,
+// когда реестр менять не нужно, а при занятой блокировке и сменившейся цели
+// пропускает запись реестра с предупреждением — ссылки уже пересчитаны.
+func TestSystemInitGlobalLockBusy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		target     string // configure.target записи cloud-user до system init
+		wantTarget string
+		wantWarn   bool
+	}{
+		{"цель не меняется", systemd.CloudUserUnit, systemd.CloudUserUnit, false},
+		{"цель меняется", "cloud-init.target", "cloud-init.target", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			te := newTestEngine(t)
+			te.Cream = manifest.ParseCreamBuild("1.1.0")
+			seedInstalled(t, te, fixtureDir(t, "configure-cloud-user"), func(r *state.Record) { r.Configure.Target = tc.target })
+			if _, err := systemd.Enable(te.L, "configure-cloud-user", systemd.StageSpec{Stage: "cloud-user"}); err != nil {
+				t.Fatal(err)
+			}
+			g, err := lock.NewLocker(te.L, 0, nil).Global(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer g.Release()
+			start := time.Now()
+			if _, err := te.SystemInit(context.Background()); err != nil {
+				t.Fatalf("system init: %v", err)
+			}
+			if d := time.Since(start); d > testLockTimeout/2 {
+				t.Errorf("system init ждал блокировку %s", d)
+			}
+			rec, ok, err := te.Store.Get("configure-cloud-user")
+			if err != nil || !ok || rec.Configure.Target != tc.wantTarget {
+				t.Fatalf("реестр: %+v %v %v", rec, ok, err)
+			}
+			if got := slices.Contains(warningCodes(te), "system.registry_busy"); got != tc.wantWarn {
+				t.Errorf("предупреждения %v", warningCodes(te))
+			}
+			link := filepath.Join(te.L.WantsDir(systemd.CloudUserUnit), systemd.UnitName("configure-cloud-user"))
+			if _, err := os.Lstat(link); err != nil {
+				t.Errorf("ссылка: %v", err)
+			}
+		})
+	}
+}
+
+// Запись, снятая remove, пока system init ждал lock/global, не воскресает.
+func TestSystemInitSkipsRemovedRecord(t *testing.T) {
+	t.Parallel()
+	te := newTestEngine(t)
+	te.Cream = manifest.ParseCreamBuild("1.1.0")
+	seedInstalled(t, te, fixtureDir(t, "configure-cloud-user"), func(r *state.Record) { r.Configure.Target = "cloud-init.target" })
+	recs, err := te.Store.List(te.Warn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := te.Store.Delete("configure-cloud-user"); err != nil {
+		t.Fatal(err)
+	}
+	if err := te.applyTargets(recs); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := te.Store.Get("configure-cloud-user"); ok {
+		t.Error("снятая запись вернулась в реестр")
 	}
 }
 

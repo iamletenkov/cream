@@ -285,6 +285,7 @@ files:
 |---|---|---|---|
 | `/usr/bin/cream` | бинарь | `.deb` или bisquite (§12) | 0755 |
 | `/usr/lib/systemd/system/cream-configure@.service` | шаблон юнита configure | `.deb` или `cream system init` | 0644 |
+| `/usr/lib/systemd/system/cream-configure-cloud-user.service` | юнит, который тянет экземпляры стадии `cloud-user` (с 1.1.1, §6.4) | `.deb` или `cream system init` | 0644 |
 | `/usr/lib/cream/guest/linux-{amd64,arm64}/cream` | бинари для гостя (только на хосте сборки) | `.deb` | 0755 |
 | `/opt/cream/ext/<ext>/` | дерево расширения, как в источнике; рабочий каталог хуков и юнитов | cream | root, 0755/0644 по биту исполнения |
 | `/etc/cream/sources.yaml` | источники | `cream source …` (можно править руками) | 0644 |
@@ -314,7 +315,7 @@ files:
 |---|---|---|---|
 | `install` | первая установка; повтор — при `status: failed`, при смене ключа `scope: install` или с `--reinstall` (§6.5) | да (кроме `library`) | нет (сборка ядра идёт часами); явный `timeout` рекомендован |
 | `upgrade` | установлена версия ниже новой. Если хука нет, вызывается `install` с `CREAM_PREV_VERSION` | нет | как у `install` |
-| `configure` | на каждой загрузке (юнит `cream-configure@<ext>`, стадия §6.4); после `install`/`upgrade` на живой машине; по `apply` без своего хука | нет | 15 мин |
+| `configure` | на каждой загрузке (юнит `cream-configure@<ext>`, стадия §6.4); после `install`/`upgrade` на живой машине; по `apply` без своего хука | нет | 15 мин; у стадии `early` — 2 мин и не больше (с 1.1.1, §6.4) |
 | `apply` | после `cream set` с изменёнными ключами (§8.4) | нет | 60 с |
 | `secret` | `cream set`/`install` ключа с `secret: hook`. На stdin — значение, `$1` — ключ. Хук печатает пары производных `readonly`-ключей | при наличии такого ключа | 60 с |
 | `remove` | `cream remove` | нет: без хука `remove` отказывает, остаётся `--forget` | 30 мин |
@@ -391,9 +392,9 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 
 | Стадия | Подключение | Порядок | Пример |
 |---|---|---|---|
-| `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target`, `Wants=network-pre.target` | firewall |
+| `early` (с 1.1.0) | `sysinit.target.wants` | `DefaultDependencies=no`, `After=local-fs.target`, `Before=network-pre.target sysinit.target shutdown.target`, `Wants=network-pre.target`, `Conflicts=shutdown.target` (с 1.1.1; без зависимостей по умолчанию их пишет cream); таймаут configure — не больше 2 мин (по умолчанию 2 мин, больший зажимается с предупреждением `manifest.early_timeout`); `after` на `network.target`/`network-online.target` — цикл, предупреждение `manifest.early_network` | firewall |
 | `system` | `multi-user.target.wants` | `After=network.target` (+ `after` манифеста) | docker, chromium-kiosk, rustdesk; desktop и vino-vnc — с `before: [display-manager.service, …]` (настройка до менеджера входа) |
-| `cloud-user` (с 1.1.0) | `cloud-init.target.wants`, если в системе есть `cloud-final.service`, иначе `multi-user.target.wants` | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
+| `cloud-user` (с 1.1.0) | `cream-configure-cloud-user.service.wants` (с 1.1.1; сам `cream-configure-cloud-user.service` — в `multi-user.target.wants`) | `After=cloud-final.service` | code-server, wallpaper, jetson-stats |
 | `graphical` (с 1.1.0) | `graphical.target.wants` | `After=multi-user.target display-manager.service` (+ `after` манифеста; `multi-user` — чтобы на машине без менеджера входа стадия не стартовала раньше системных служб) | kiosk, x11vnc, selkies, pixelflux-* |
 
 `after`/`before`/`wants` манифеста дописываются к порядку стадии (у `early` — к `Before`/`Wants` стадии тоже).
@@ -403,12 +404,18 @@ systemd, в том числе в build. Порядок cream пишет в drop-
 из `multi-user` тянет менеджер входа раньше `multi-user.target`.
 
 Стадия `cloud-user` кодирует урок описи. `cloud-final` упорядочен `After=multi-user.target`, поэтому
-`WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Выбор цели по наличию cloud-init закрывает и случай
-«на живой машине без cloud-init configure не запускается никогда». cream пересчитывает цель при каждом
-`cream system init` (вместе с `configure.target` реестра) и `upgrade`; cloud-init, поставленный на машину после расширения, требует `cream system init`
-(иначе ссылка в `multi-user.target.wants` вместе с `After=cloud-final` — цикл). Порядок стадий и отсутствие циклов
-на загрузке проверяет интеграция cream (§14): `ubuntu:24.04` с `gdm3` и cloud-init, `journalctl -b` без
-`ordering cycle`.
+`WantedBy=multi-user` вместе с `After=cloud-final` даёт цикл. Экземпляры стадии тянет вспомогательный oneshot-юнит
+`cream-configure-cloud-user.service` (`ExecStart=/bin/true`, шаблон — в пакете и в `cream system init`, рядом с
+`cream-configure@.service`): он стоит в `multi-user.target.wants`, экземпляры — в его `.wants`, и порядка относительно
+экземпляров у него **нет**. Цикла нет: `multi-user.target` ждёт только вспомогательный юнит, экземпляр ждёт
+`cloud-final`, а тот — `multi-user.target`. При работающем cloud-init экземпляр стартует после `cloud-final`; без
+cloud-init или при выключенном (`/etc/cloud/cloud-init.disabled`, нет источника данных — генератор не подключает
+`cloud-init.target`) `cloud-final` в транзакции загрузки нет, и `After=` ничего не ждёт. Цель от машины не зависит:
+установка или выключение cloud-init после расширения ничего не требует. cream 1.1.0 выбирал `cloud-init.target.wants`
+по наличию `cloud-final.service` — при выключенном cloud-init configure не запускался никогда; `cream system init`
+1.1.1 (его зовёт postinst) переносит такие ссылки и `configure.target` реестра. Ссылка вспомогательного юнита уходит
+вместе с последним экземпляром. Порядок стадий и отсутствие циклов на загрузке проверяет интеграция cream (§14):
+`ubuntu:24.04` с `gdm3` и cloud-init — включённым и выключенным, `journalctl -b` без `ordering cycle`.
 
 Почему один шаблон, а не один общий юнит на все расширения: стадии разные (firewall до сети, рабочий стол после DM),
 а сбой одного расширения не должен останавливать остальные. Отвергнутое — в §18.
@@ -1007,8 +1014,15 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 **Вошло в `v1.1.0`** (минорная версия, только добавления, ADR-0001): стадии configure `early`, `cloud-user`,
 `graphical` (§6.4; манифест с ними требует `cream: ">=1.1.0"`) — для шага 3 §16 (firewall, рабочие столы);
 `cream resolve --installed FILE` — расширения базы `FROM` слоя bisquite в графе фазы build; статическая проверка графа
-в `cream validate --catalog` (`depends` и цикл — ошибки, `requires`/`conflicts` — предупреждения; синхронизацию не
+в `cream validate --catalog` (`depends` вне диапазона и цикл — ошибки, `requires`/`conflicts` и — с 1.1.1 — `depends`
+на имя не из каталога — предупреждения; синхронизацию не
 меняет); `cream system init` обновляет `configure.target` реестра (docs/cli.md).
+
+**Исправлено в `v1.1.1`** (патч по ревью 1.1.0, контракт ADR-0001 не меняется): стадия `cloud-user` через
+вспомогательный `cream-configure-cloud-user.service` — configure запускается и при выключенном cloud-init (§6.4);
+`cream system init` берёт `lock/global` только для смены `configure.target` и без ожидания (`system.registry_busy`);
+`depends` на имя не из каталога в `validate --catalog` — предупреждение `catalog.depends_external`; пределы `early`
+(`shutdown.target`, таймаут ≤ 2 мин, предупреждение об `after` на сеть); `git describe` после rc-тега — dev.
 
 **Откладывается** (поле или команда резервируется, позже — минорная версия с подъёмом `cream:`):
 

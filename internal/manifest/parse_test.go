@@ -632,6 +632,10 @@ func TestParseCreamBuild(t *testing.T) {
 		{name: "describe грязный — dev", build: "v1.0.0-3-g0d002ad-dirty", cream: ">=1.1.0", wantWarn: true},
 		{name: "тег грязный — dev", build: "v1.0.0-dirty", cream: ">=1.1.0", wantWarn: true},
 		{name: "rc с номером — не describe", build: "1.1.0-rc-3", cream: ">=1.2.0", wantExit: 68},
+		// cream 1.1.1: describe после rc-тега — тоже dev, а не предрелиз.
+		{name: "describe после rc — dev", build: "v1.1.0-rc.1-2-gabc1234", cream: ">=1.2.0", wantWarn: true},
+		{name: "describe после rc грязный — dev", build: "1.1.0-rc.1-2-gabc1234-dirty", cream: ">=1.2.0", wantWarn: true},
+		{name: "rc с хешеподобным словом — не describe", build: "1.1.0-rc.gabc1234", cream: ">=1.2.0", wantExit: 68},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -693,5 +697,52 @@ func TestFileModeType(t *testing.T) {
 	}
 	if m.Files[0].Mode != fs.FileMode(0o750) {
 		t.Errorf("mode %o", m.Files[0].Mode)
+	}
+}
+
+// TestParseEarlyLimits (cream 1.1.1): configure стадии early идёт до сети и до
+// sysinit.target — загрузка ждёт его. Таймаут по умолчанию — 2m, больший
+// зажимается до 2m с предупреждением manifest.early_timeout (манифест 1.1.0 не
+// отвергается); after на network.target / network-online.target — цикл
+// (early стоит Before=sysinit.target), предупреждение manifest.early_network.
+func TestParseEarlyLimits(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, hook  string
+		wantTimeout time.Duration
+		wantWarn    []string
+	}{
+		{"по умолчанию", "{stage: early}", 2 * time.Minute, nil},
+		{"в пределе", "{stage: early, timeout: 90s}", 90 * time.Second, nil},
+		{"ровно предел", "{stage: early, timeout: 2m}", 2 * time.Minute, nil},
+		{"больше предела", "{stage: early, timeout: 10m}", 2 * time.Minute, []string{"manifest.early_timeout"}},
+		{"after network-online", "{stage: early, after: [systemd-modules-load.service, network-online.target]}", 2 * time.Minute,
+			[]string{"manifest.early_network"}},
+		{"after network и таймаут", "{stage: early, timeout: 1h, after: [network.target]}", 2 * time.Minute,
+			[]string{"manifest.early_timeout", "manifest.early_network"}},
+		{"system не ограничен", "{stage: system, timeout: 1h, after: [network-online.target]}", time.Hour, nil},
+		{"system по умолчанию", "{stage: system}", DefaultConfigureTimeout, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := mk(t, "", `cream: ">=1.0.0"`, `cream: ">=1.1.0"`, "hooks: {install: {}}",
+				"hooks: {install: {}, configure: "+tc.hook+"}")
+			var w cerr.Warnings
+			m, err := Parse([]byte(doc), ParseCreamBuild("1.1.1"), &w)
+			if err != nil {
+				t.Fatalf("Parse: %v\n%s", err, doc)
+			}
+			if got := m.Hooks[HookConfigure].Timeout; got != tc.wantTimeout {
+				t.Errorf("timeout = %s, want %s", got, tc.wantTimeout)
+			}
+			var codes []string
+			for _, x := range w.List() {
+				codes = append(codes, x.Code)
+			}
+			if !slices.Equal(codes, tc.wantWarn) {
+				t.Errorf("предупреждения %v, ждали %v", codes, tc.wantWarn)
+			}
+		})
 	}
 }

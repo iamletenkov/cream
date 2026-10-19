@@ -110,6 +110,10 @@ const (
 	DefaultConfigureTimeout = 15 * time.Minute
 	DefaultApplyTimeout     = 60 * time.Second
 	DefaultRemoveTimeout    = 30 * time.Minute
+	// MaxEarlyConfigureTimeout bounds configure of the early stage (cream
+	// 1.1.1): the boot waits for it before sysinit.target. It is also the
+	// default there; a larger timeout is clamped with manifest.early_timeout.
+	MaxEarlyConfigureTimeout = 2 * time.Minute
 )
 
 // Stage — стадия загрузки хука configure (§6.4).

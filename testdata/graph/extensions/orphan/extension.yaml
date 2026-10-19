@@ -4,7 +4,8 @@ version: 1.0.0
 summary: фикстура графа orphan
 cream: ">=1.0.0"
 platform: {family: deb, arch: [amd64, arm64]}
-# Ошибка: зависимости ghost в каталоге нет.
+# Предупреждение (с 1.1.1): зависимости ghost в каталоге нет — она может прийти
+# из другого каталога раскладки (§9.4).
 depends: [{name: ghost}, {name: lib-a}]
 hooks:
   install: {}

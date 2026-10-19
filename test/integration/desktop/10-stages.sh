@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# §6.4, cream 1.1.0, рабочий стол в облаке (gdm3 + cloud-init): стадия
-# cloud-user включается в cloud-init.target (cloud-final упорядочен после
-# multi-user.target — ссылка из multi-user.target.wants дала бы цикл), graphical —
+# §6.4, рабочий стол в облаке (gdm3 + cloud-init): стадия cloud-user (cream
+# 1.1.1) — в .wants вспомогательного cream-configure-cloud-user.service, тот — в
+# multi-user.target.wants без порядка относительно экземпляров (After=cloud-final
+# экземпляра цикла не даёт, и выключенный cloud-init его не блокирует), graphical —
 # в graphical.target после менеджера входа, а «desktop» (Р5 плана каталога) —
 # стадия system до менеджера входа. Проверка на загрузке — 20-boot.
 # shellcheck source=../scenario/lib.sh
@@ -57,21 +58,25 @@ inst() {
 	eq "$(reg "${1#*/}" .configure.target)" "$2" "${1#*/}: цель $2"
 	exists "$W/$2.wants/cream-configure@${1#*/}.service" "${1#*/}: ссылка в $2.wants"
 }
-inst fixtures/configure-cloud-user cloud-init.target
-# cloud-init «исчез» и вернулся: system init переносит ссылку и цель в реестре.
-mv /usr/lib/systemd/system/cloud-final.service /tmp/cloud-final.service
+PU=cream-configure-cloud-user.service
+inst fixtures/configure-cloud-user $PU
+exists $W/multi-user.target.wants/$PU "cloud-user: $PU в multi-user.target.wants"
+# Раскладка cream 1.1.0 (ссылка в cloud-init.target.wants, цель в реестре):
+# system init переносит её к вспомогательному юниту и обновляет реестр.
+mkdir -p $W/cloud-init.target.wants
+mv $W/$PU.wants/cream-configure@configure-cloud-user.service $W/cloud-init.target.wants/
+jq '.configure.target = "cloud-init.target"' /var/lib/cream/installed/configure-cloud-user.json >/tmp/cu.json
+cat /tmp/cu.json >/var/lib/cream/installed/configure-cloud-user.json
 c system init
-want_rc 0 "system init без cloud-init"
-eq "$(reg configure-cloud-user .configure.target)" multi-user.target "cloud-user: цель в реестре без cloud-init"
-exists $W/multi-user.target.wants/cream-configure@configure-cloud-user.service "cloud-user: ссылка в multi-user.target.wants"
-mv /tmp/cloud-final.service /usr/lib/systemd/system/cloud-final.service
-c system init
-want_rc 0 "system init с cloud-init"
-eq "$(reg configure-cloud-user .configure.target)" cloud-init.target "cloud-user: цель в реестре с cloud-init"
+want_rc 0 "system init: переход с 1.1.0"
+eq "$(reg configure-cloud-user .configure.target)" $PU "cloud-user: цель в реестре после system init"
+exists $W/$PU.wants/cream-configure@configure-cloud-user.service "cloud-user: ссылка в $PU.wants"
+absent $W/cloud-init.target.wants/cream-configure@configure-cloud-user.service "cloud-user не в cloud-init.target.wants"
 absent $W/multi-user.target.wants/cream-configure@configure-cloud-user.service "cloud-user не в multi-user.target.wants"
 inst fixtures/configure-graphical graphical.target
 inst desk/desktop-like multi-user.target
-for e in configure-cloud-user configure-graphical desktop-like; do
-	systemd-analyze verify "cream-configure@$e.service" >/tmp/verify-$e.txt 2>&1 || true
-	hasnt /tmp/verify-$e.txt 'cycle' "systemd-analyze verify $e: без цикла"
+for u in cream-configure@configure-cloud-user.service cream-configure@configure-graphical.service \
+	cream-configure@desktop-like.service $PU cloud-final.service multi-user.target; do
+	systemd-analyze verify "$u" >/tmp/verify.txt 2>&1 || true
+	hasnt /tmp/verify.txt 'cycle' "systemd-analyze verify $u: без цикла"
 done

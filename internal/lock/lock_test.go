@@ -379,7 +379,9 @@ func TestInheritedFDNotHeld(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = f.Close() }()
-			h, err := NewLocker(l, 0, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
+			// Timeout above zero: shared drops the probe and waits as usual, and
+			// a fork of a parallel test may keep the probe's lock until its exec.
+			h, err := NewLocker(l, 5*time.Second, lockEnv(int(f.Fd()), "exclusive")).Ext(context.Background(), "teleport", m)
 			if err != nil {
 				t.Fatalf("Ext: %v", err)
 			}
@@ -406,4 +408,29 @@ func TestInheritedFDNotHeld(t *testing.T) {
 			mustExt(t, newLocker(t, l, 0), "teleport", Exclusive)
 		})
 	}
+}
+
+// TryGlobal (system init, cream 1.1.1) does not wait for a busy lock/global,
+// whatever --lock-timeout is.
+func TestTryGlobal(t *testing.T) {
+	t.Parallel()
+	l := layout(t)
+	lk := newLocker(t, l, time.Minute)
+	h, ok, err := lk.TryGlobal()
+	if err != nil || !ok {
+		t.Fatalf("free: ok=%v err=%v", ok, err)
+	}
+	start := time.Now()
+	if _, ok, err := newLocker(t, l, time.Minute).TryGlobal(); err != nil || ok {
+		t.Fatalf("busy: ok=%v err=%v", ok, err)
+	}
+	if el := time.Since(start); el > 5*time.Second {
+		t.Errorf("waited %v", el)
+	}
+	h.Release()
+	h2, ok, err := lk.TryGlobal()
+	if err != nil || !ok {
+		t.Fatalf("after release: ok=%v err=%v", ok, err)
+	}
+	h2.Release()
 }

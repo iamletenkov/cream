@@ -31,14 +31,17 @@ ok "graphical стартовал после multi-user.target (машина бе
 # Порядок cloud-user и graphical рядом с настоящими cloud-final и менеджером
 # входа — набор desktop (ubuntu-24.04).
 
+eq "$(mono cream-configure-cloud-user.service ActiveState)" active "cream-configure-cloud-user.service active (тянет cloud-user без cloud-init)"
+
 step "журнал загрузки без циклов"
 eq "$(journalctl -b --no-pager | grep -c 'ordering cycle' || true)" 0 "ordering cycle в journalctl -b"
 
 step "remove снимает экземпляры стадий"
-for pair in "$E sysinit.target" "$CU multi-user.target" "$G graphical.target"; do
+for pair in "$E sysinit.target" "$CU cream-configure-cloud-user.service" "$G graphical.target"; do
 	set -- $pair
 	c remove "$1"
 	want_rc 0 "remove $1"
 	absent "$W/$2.wants/cream-configure@$1.service" "$1: ссылка в $2.wants снята"
 	absent "$W/cream-configure@$1.service.d" "$1: drop-in снят"
 done
+absent $W/multi-user.target.wants/cream-configure-cloud-user.service "без экземпляров cloud-user вспомогательный юнит выключен"

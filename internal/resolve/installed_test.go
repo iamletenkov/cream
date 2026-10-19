@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/iamletenkov/cream/internal/cerr"
@@ -60,6 +61,7 @@ func TestReadInstalledRefusals(t *testing.T) {
 		{"имя неверное", `[{"name": "A", "version": "1.0.0"}]`},
 		{"token неверный", `[{"token": "a"}]`},
 		{"token против name", `[{"token": "a@1.0.0", "name": "b"}]`},
+		{"token против version", `[{"token": "a@1.0.0", "version": "2.0.0"}]`},
 		{"provides неверный", `[{"name": "a", "version": "1.0.0", "provides": ["X"]}]`},
 	}
 	for _, tc := range tests {
@@ -74,6 +76,26 @@ func TestReadInstalledRefusals(t *testing.T) {
 	_, err := ReadInstalled(filepath.Join(t.TempDir(), "nope.json"))
 	if cerr.ExitCode(err) != cerr.ExitNotFound || cerr.CodeOf(err) != "not_found.installed" {
 		t.Errorf("нет файла: %v", err)
+	}
+}
+
+// Предел --installed — 1 МиБ: файл ровно в предел читается, на байт больше —
+// 65 installed.invalid (а не чтение без границы).
+func TestReadInstalledSizeLimit(t *testing.T) {
+	t.Parallel()
+	pad := func(n int) string {
+		body := `[{"name": "a", "version": "1.0.0"}]`
+		return body + strings.Repeat(" ", n-len(body))
+	}
+	if _, err := ReadInstalled(writeInstalled(t, pad(maxInstalledSize))); err != nil {
+		t.Errorf("ровно %d байт: %v", maxInstalledSize, err)
+	}
+	_, err := ReadInstalled(writeInstalled(t, pad(maxInstalledSize+1)))
+	if cerr.ExitCode(err) != cerr.ExitData || cerr.CodeOf(err) != CodeInstalledInvalid {
+		t.Errorf("больше предела: %v", err)
+	}
+	if maxInstalledSize != 1<<20 {
+		t.Errorf("предел %d, по docs/cli.md — 1 МиБ", maxInstalledSize)
 	}
 }
 

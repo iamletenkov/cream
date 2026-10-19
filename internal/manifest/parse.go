@@ -169,8 +169,41 @@ func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) {
 	if err := checkSince(m, creamRange); err != nil {
 		return nil, err
 	}
+	checkEarly(m, w)
 	m.Cream = creamRange
 	return m, nil
+}
+
+// earlyCycleUnit reports a unit an early configure cannot be ordered after:
+// it comes after sysinit.target, which waits for the early stage.
+func earlyCycleUnit(u string) bool { return u == "network.target" || u == "network-online.target" }
+
+// checkEarly applies the limits of the early stage (cream 1.1.1): a configure
+// timeout above MaxEarlyConfigureTimeout is clamped to it (a manifest of
+// cream 1.1.0 is not refused) with manifest.early_timeout; after on the
+// network is an ordering cycle — manifest.early_network.
+func checkEarly(m *Manifest, w *cerr.Warnings) {
+	hk, ok := m.Hooks[HookConfigure]
+	if !ok || hk.Stage != StageEarly {
+		return
+	}
+	if hk.Timeout > MaxEarlyConfigureTimeout {
+		if w != nil {
+			w.AddDetails("manifest.early_timeout", map[string]any{"ext": m.Name, "timeout": hk.Timeout.String(),
+				"max": MaxEarlyConfigureTimeout.String()},
+				"%s: hooks.configure.timeout %s — у стадии early не больше %s (загрузка ждёт её до sysinit.target), взято %s",
+				m.Name, hk.Timeout, MaxEarlyConfigureTimeout, MaxEarlyConfigureTimeout)
+		}
+		hk.Timeout = MaxEarlyConfigureTimeout
+		m.Hooks[HookConfigure] = hk
+	}
+	for _, u := range hk.After {
+		if earlyCycleUnit(u) && w != nil {
+			w.AddDetails("manifest.early_network", map[string]any{"ext": m.Name, "unit": u},
+				"%s: hooks.configure.after %s у стадии early — цикл: early стоит до sysinit.target, а %s — после неё",
+				m.Name, u, u)
+		}
+	}
 }
 
 // stageSince — версия cream, с которой есть стадия configure; ok = false для
@@ -337,11 +370,13 @@ func ParseCreamBuild(raw string) CreamBuild {
 	return CreamBuild{Version: v}
 }
 
-// reDescribe — хвост git describe не с тега: <число коммитов>-g<хеш>[-dirty].
-var reDescribe = regexp.MustCompile(`^[0-9]+-g[0-9a-f]{4,}(-dirty)?$`)
+// reDescribe — хвост git describe не с тега: <число коммитов>-g<хеш>[-dirty],
+// в том числе после предрелизного тега («rc.1-2-gabc»).
+var reDescribe = regexp.MustCompile(`(^|[.-])[0-9]+-g[0-9a-f]{4,}(-dirty)?$`)
 
 // describeBuild — версия собрана не с тега (git describe: «1.0.0-3-gabc»,
-// «1.0.0-dirty»): это не релиз и не предрелиз 1.0.0, а сборка разработчика.
+// «1.1.0-rc.1-2-gabc», «1.0.0-dirty»): это не релиз и не предрелиз, а сборка
+// разработчика.
 func describeBuild(pre []string) bool {
 	s := strings.Join(pre, ".")
 	return reDescribe.MatchString(s) || s == "dirty" || strings.HasSuffix(s, "-dirty")

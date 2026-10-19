@@ -92,8 +92,11 @@
 | `source.not_synced` | источник без кеша пропущен при поиске, расширение взято из другого |
 | `catalog.cream_newer` | расширению каталога нужен cream новее текущего — пропущено, синхронизация не падает (Р22) |
 | `catalog.requires`, `catalog.conflicts` | с 1.1.0, `cream validate --catalog`: `requires` без поставщика в каталоге; `conflicts.extensions` на имя не из каталога |
+| `catalog.depends_external` | с 1.1.1, `cream validate --catalog`: `depends` на имя не из каталога (зависимость из другого источника раскладки) |
 | `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
-| `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей `cream:` манифеста |
+| `manifest.early_timeout` | с 1.1.1: `hooks.configure.timeout` стадии `early` больше 2 мин — зажат до 2 мин (загрузка ждёт `early` до `sysinit.target`) |
+| `manifest.early_network` | с 1.1.1: `hooks.configure.after` стадии `early` на `network.target` или `network-online.target` — цикл порядка (early стоит до `sysinit.target`) |
+| `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0; после предрелизного тега — `1.1.0-rc.1-2-g<хеш>` — с 1.1.1) считается удовлетворяющей `cream:` манифеста |
 | `platform.os_unknown` | нет os-release: `platform.os` не проверена |
 | `deps.dependents_forced` | `remove --force` убрал расширение, от которого зависят установленные |
 | `state.corrupt` | битая запись реестра пропущена в списке или снята `remove --forget` (Р20, Р25) |
@@ -101,6 +104,7 @@
 | `state.history` | запись в `history.jsonl` не удалась (операция выполнена) |
 | `file.modified` | файл из `files` изменён после установки — сохранён как `<dst>.cream-modified[.N]` |
 | `file.not_regular` | на месте файла из `files` не обычный файл — оставлен как есть |
+| `system.registry_busy` | с 1.1.1, `cream system init`: `lock/global` занята — `configure.target` реестра не обновлён (ссылки юнитов пересчитаны); повторить `cream system init` |
 | `systemd.reload_failed`, `systemd.stop_failed` | `systemctl daemon-reload` / `stop` не удался (Р25) |
 | `configure.no_block` | systemd ещё загружается: перезапуск configure поставлен в очередь `--no-block`, без ожидания |
 | `install.build_none` | у слоя `targets.build: none` — в фазе build не ставится |
@@ -172,10 +176,12 @@ cream source sync [<name>…]
 path}], not_applicable: [{ext, path, exit, code, message}], errors: [тот же вид]}]}`.
 
 **Граф каталога** (с 1.1.0, только `--catalog`; `source sync` и `catalog pack` его не проверяют — опубликованный
-каталог не отвергается): `depends` на имя, которого в каталоге нет, или с диапазоном, не включающим версию из
-каталога, — 65 `catalog.depends`; цикл `depends` — 65 `catalog.depends_cycle` (`a → b → a`); `requires` без
-поставщика в каталоге — предупреждение `catalog.requires` (способность может дать `cream assume` или другой
-источник); `conflicts.extensions` на имя не из каталога — предупреждение `catalog.conflicts`. Расширение, пропущенное
+каталог не отвергается): `depends` с диапазоном, не включающим версию из каталога, — 65 `catalog.depends`; цикл
+`depends` — 65 `catalog.depends_cycle` (`a → b → a`); `depends` на имя, которого в каталоге нет, — предупреждение
+`catalog.depends_external` (с 1.1.1; в 1.1.0 — ошибка 65: раскладка машины собирается из нескольких каталогов, §9.4,
+и зависимость может прийти из другого источника — её проверяет резолвер при установке); `requires` без
+поставщика в каталоге (поставщиком себе самому расширение не считается) — предупреждение `catalog.requires`
+(способность может дать `cream assume` или другой источник); `conflicts.extensions` на имя не из каталога — предупреждение `catalog.conflicts`. Расширение, пропущенное
 как требующее cream новее (Р22), считается присутствующим.
 Golden: [validate-catalog.json](../internal/cli/testdata/golden/validate-catalog.json),
 [validate-dirs.json](../internal/cli/testdata/golden/validate-dirs.json),
@@ -212,7 +218,11 @@ JSON-массив, элемент — `{"name", "version", "provides"?}` или 
 игнорируются, повтор имени — побеждает последний (lineage накопительный, база первой). Эти расширения входят в граф
 как установленные: закрывают `depends` (с проверкой диапазона версий — иначе 67 `deps.version`) и `requires` (по
 `provides`) слоя и попадают в его `deps`, но слоями не становятся. Без флага вывод прежний: установленного в build
-нет. Нет файла — 66 `not_found.installed`, неверный формат — 65 `installed.invalid`.
+нет. Нет файла — 66 `not_found.installed`, неверный формат — 65 `installed.invalid`; предел размера — 1 МиБ, `token`,
+расходящийся с `name` или `version`, — тоже 65.
+`FILE` — путь на хосте сборки (как его дал bisquite), **не** под `--root`. Элемент несёт только имя, версию и
+`provides`: `conflicts` и `files` расширений базы в граф не входят — конфликт слоя с базой и владение файлами
+`resolve` не проверяет, их проверяет `install --phase build` по реестру образа.
 
 `result`: `{"phase", "layers": [{name, version, source, source_resolved, catalog_version, ext_digest,
 params_digest, deps, mode, token, pinned, secret_params, dir}]}` в порядке установки. Значения секретных
@@ -307,15 +317,18 @@ Golden: [remove.json](../internal/cli/testdata/golden/remove.json),
 - `cream configure [--wait] <ext>` — запустить configure расширения (юнит `cream-configure@<ext>` или хук);
   `--from-unit <ext>` — только для вызова из самого юнита. `result`: `{ext, reason, mode, reboot_required}` —
   [configure.json](../internal/cli/testdata/golden/configure.json).
-- Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети), `cloud-user`
-  (`cloud-init.target` при `cloud-final.service`, иначе `multi-user.target`) и `graphical` (`graphical.target`,
+- Стадии configure (спека §6.4): `system`; с 1.1.0 — `early` (`sysinit.target`, до сети; с 1.1.1 — с
+  `Conflicts=`/`Before=shutdown.target` и таймаутом configure не больше 2 мин), `cloud-user`
+  (с 1.1.1 — `cream-configure-cloud-user.service`: вспомогательный юнит в `multi-user.target.wants` тянет экземпляры,
+  те ждут `cloud-final.service`, если cloud-init работает; в 1.1.0 — `cloud-init.target`) и `graphical` (`graphical.target`,
   после `multi-user.target` и `display-manager.service`). Манифест с новыми стадиями обязан требовать `cream: ">=1.1.0"`, иначе 65
   `manifest.invalid`; cream 1.0 отказывает ему по `cream:` — 68 `platform.cream_version` (в каталоге — пропуск с
   `catalog.cream_newer`).
-- `cream system init` — каталоги §5 с режимами, шаблон юнита из встроенной копии, пересчёт целей configure (цель
-  `cloud-user` — по наличию cloud-init на машине: после его установки или удаления — `cream system init`; с 1.1.0
-  пересчитанная цель пишется и в `configure.target` реестра); при
-  работающем systemd — `daemon-reload`. `result`: `{unit, daemon_reload}` —
+- `cream system init` — каталоги §5 с режимами, шаблон юнита и `cream-configure-cloud-user.service` из встроенных
+  копий, пересчёт целей configure (ссылки стадии `cloud-user` cream 1.1.0 переносятся к вспомогательному юниту);
+  пересчитанная цель пишется и в `configure.target` реестра. `lock/global` берётся только для такой записи и без
+  ожидания: занята — предупреждение `system.registry_busy`, реестр не меняется, код 0 (postinst пакета не падает
+  рядом с другим dpkg или хуком). При работающем systemd — `daemon-reload`. `result`: `{unit, daemon_reload}` —
   [system-init.json](../internal/cli/testdata/golden/system-init.json).
 
 ### `cream run`

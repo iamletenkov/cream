@@ -1,0 +1,14 @@
+# Pulls the configure instances of the cloud-user stage (cream, spec §6.4):
+# they are linked into cream-configure-cloud-user.service.wants. No ordering
+# against them on purpose: each instance is After=cloud-final.service, and
+# cloud-final is After=multi-user.target, which waits for this unit.
+[Unit]
+Description=cream: configure instances of the cloud-user stage
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target

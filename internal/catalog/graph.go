@@ -12,17 +12,19 @@ import (
 
 // Коды проверки графа каталога (cream 1.1.0, `cream validate --catalog`).
 const (
-	codeDepends      = "catalog.depends"       // 65: depends на имя, которого нет, или вне диапазона
-	codeDependsCycle = "catalog.depends_cycle" // 65: цикл depends внутри каталога
-	warnRequires     = "catalog.requires"      // requires без поставщика в каталоге
-	warnConflicts    = "catalog.conflicts"     // conflicts.extensions на имя не из каталога
+	codeDepends         = "catalog.depends"          // 65: depends вне диапазона имеющейся версии
+	codeDependsCycle    = "catalog.depends_cycle"    // 65: цикл depends внутри каталога
+	warnDependsExternal = "catalog.depends_external" // depends на имя не из каталога (с 1.1.1)
+	warnRequires        = "catalog.requires"         // requires без поставщика в каталоге
+	warnConflicts       = "catalog.conflicts"        // conflicts.extensions на имя не из каталога
 )
 
 // ValidateCatalog is Validate plus the static graph of the catalog (cream
-// 1.1.0, `cream validate --catalog`): a depends on a name the catalog lacks or
-// outside the range of its version, and a depends cycle are errors (65); a
-// requires no extension of the catalog provides (it may come from cream assume
-// or a bare INSTALL) and a conflicts.extensions on a foreign name are
+// 1.1.0, `cream validate --catalog`): a depends outside the range of the
+// version the catalog has and a depends cycle are errors (65); a depends on a
+// name the catalog lacks (since 1.1.1: a layout of several catalogs, §9.4), a
+// requires no other extension of the catalog provides (it may come from cream
+// assume or a bare INSTALL) and a conflicts.extensions on a foreign name are
 // warnings. An extension skipped as needing a newer cream (Р22) counts as
 // present. Sync and catalog pack keep Validate: the graph is a check for
 // catalog authors, not a reason to refuse a published catalog.
@@ -49,7 +51,7 @@ func checkGraph(r *Report, exts []loaded) {
 			switch {
 			case !ok && skipped[d.Name]:
 			case !ok:
-				r.fail(m.Name, where(x), codeDepends, "%s: depends на %s — такого расширения в каталоге нет", m.Name, d.Name)
+				r.warnExt(warnDependsExternal, m.Name, "%s: depends на %s — такого расширения в каталоге нет (нужен другой источник раскладки)", m.Name, d.Name)
 			case d.Version != nil && !d.Version.Contains(t.m.Version):
 				r.fail(m.Name, where(x), codeDepends, "%s: depends на %s %s, а в каталоге %s", m.Name, d.Name,
 					d.Version.String(), t.m.Version.String())

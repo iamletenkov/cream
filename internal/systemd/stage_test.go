@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/iamletenkov/cream/internal/cerr"
@@ -44,8 +45,8 @@ func TestEnableDropIn(t *testing.T) {
 			Before: []string{"sysinit.target", "ssh.service"},
 			Wants:  []string{"network-pre.target"},
 		}},
-		// Без cloud-final.service в корне — multi-user.target (TestEnableCloudUserTarget).
-		{"cloud-user", "code-server", "cloud-user-plain.conf", "multi-user.target", StageSpec{Stage: "cloud-user"}},
+		// cream 1.1.1: экземпляр тянет вспомогательный юнит (TestEnableCloudUserTarget).
+		{"cloud-user", "code-server", "cloud-user-plain.conf", CloudUserUnit, StageSpec{Stage: "cloud-user"}},
 		{"graphical", "x11vnc", "graphical-ordered.conf", "graphical.target", StageSpec{
 			Stage: "graphical",
 			After: []string{"gdm.service", "display-manager.service"},
@@ -120,43 +121,134 @@ func TestEnableUnknownStage(t *testing.T) {
 	}
 }
 
-// cloud-user (§6.4): с cloud-final.service в корне — cloud-init.target
-// (cloud-final упорядочен после multi-user.target, и ссылка в multi-user дала бы
-// цикл), без него — multi-user.target. Смена стадии убирает ссылку из прежней цели.
+// cloud-user (§6.4, cream 1.1.1): экземпляр — в cream-configure-cloud-user.service.wants
+// при любом состоянии cloud-init; вспомогательный юнит (без After= на экземпляры) —
+// в multi-user.target.wants. Так configure запускается и при выключенном cloud-init
+// (cloud-init.target на загрузке не достигается), а при работающем ждёт cloud-final
+// своим After=. Ссылка вспомогательного юнита уходит с последним экземпляром.
 func TestEnableCloudUserTarget(t *testing.T) {
 	t.Parallel()
 	l := paths.Layout{Root: t.TempDir()}
-	wants := func(target string) string {
-		return filepath.Join(l.WantsDir(target), "cream-configure@wallpaper.service")
+	wants := func(target, ext string) string {
+		return filepath.Join(l.WantsDir(target), "cream-configure@"+ext+".service")
 	}
-	target, err := Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"})
-	if err != nil || target != "multi-user.target" {
-		t.Fatalf("без cloud-init: %q %v", target, err)
-	}
-	writeFile(t, l.CloudFinalUnit(), "[Unit]\n")
-	target, err = Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"})
-	if err != nil || target != "cloud-init.target" {
-		t.Fatalf("с cloud-init: %q %v", target, err)
-	}
-	if _, err := os.Readlink(wants("cloud-init.target")); err != nil {
-		t.Errorf("нет ссылки в cloud-init.target.wants: %v", err)
-	}
-	if _, err := os.Lstat(wants("multi-user.target")); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("ссылка в multi-user.target.wants осталась: %v", err)
-	}
-	// Стадия сменилась на graphical (upgrade расширения): ссылка переезжает.
-	if target, err = Enable(l, "wallpaper", StageSpec{Stage: "graphical"}); err != nil || target != "graphical.target" {
-		t.Fatalf("graphical: %q %v", target, err)
-	}
-	if _, err := os.Lstat(wants("cloud-init.target")); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("ссылка в cloud-init.target.wants осталась: %v", err)
-	}
-	if err := Disable(l, "wallpaper"); err != nil {
+	puller := filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)
+	// Ссылка 1.1.0 в cloud-init.target.wants переезжает.
+	writeFile(t, l.DropIn("wallpaper"), "[Unit]\n")
+	if err := os.MkdirAll(l.WantsDir("cloud-init.target"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, tg := range knownTargets() {
-		if _, err := os.Lstat(wants(tg)); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("%s: ссылка после Disable: %v", tg, err)
+	if err := os.Symlink(templateLink, wants("cloud-init.target", "wallpaper")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ext := range []string{"wallpaper", "code-server"} {
+		target, err := Enable(l, ext, StageSpec{Stage: "cloud-user"})
+		if err != nil || target != CloudUserUnit {
+			t.Fatalf("%s: %q %v", ext, target, err)
+		}
+		if dst, err := os.Readlink(wants(CloudUserUnit, ext)); err != nil || dst != templateLink {
+			t.Errorf("%s: ссылка в %s.wants: %q %v", ext, CloudUserUnit, dst, err)
+		}
+	}
+	for _, tg := range []string{"cloud-init.target", "multi-user.target"} {
+		if _, err := os.Lstat(wants(tg, "wallpaper")); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("ссылка в %s.wants осталась: %v", tg, err)
+		}
+	}
+	if dst, err := os.Readlink(puller); err != nil || dst != "/usr/lib/systemd/system/"+CloudUserUnit {
+		t.Errorf("вспомогательный юнит в multi-user.target.wants: %q %v", dst, err)
+	}
+	if got, err := os.ReadFile(l.CloudUserUnit()); err != nil || !bytes.Equal(got, CloudUserUnitFile()) {
+		t.Errorf("файл вспомогательного юнита: %v\n%s", err, got)
+	}
+	assertMode(t, l.CloudUserUnit(), 0o644)
+	// Стадия сменилась на graphical (upgrade расширения): ссылка переезжает,
+	// вспомогательный юнит остаётся — его ещё ждёт code-server.
+	if target, err := Enable(l, "wallpaper", StageSpec{Stage: "graphical"}); err != nil || target != "graphical.target" {
+		t.Fatalf("graphical: %q %v", target, err)
+	}
+	if _, err := os.Lstat(wants(CloudUserUnit, "wallpaper")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка в %s.wants осталась: %v", CloudUserUnit, err)
+	}
+	if _, err := os.Lstat(puller); err != nil {
+		t.Errorf("вспомогательный юнит снят при живом экземпляре: %v", err)
+	}
+	for _, ext := range []string{"wallpaper", "code-server"} {
+		if err := Disable(l, ext); err != nil {
+			t.Fatal(err)
+		}
+		for _, tg := range knownTargets() {
+			if _, err := os.Lstat(wants(tg, ext)); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("%s: %s: ссылка после Disable: %v", ext, tg, err)
+			}
+		}
+	}
+	if _, err := os.Lstat(puller); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("вспомогательный юнит в multi-user.target.wants после последнего Disable: %v", err)
+	}
+	if _, err := os.Lstat(l.WantsDir(CloudUserUnit)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("пустой %s.wants остался: %v", CloudUserUnit, err)
+	}
+}
+
+// Единственное расширение cloud-user сменило стадию (upgrade): ссылка
+// вспомогательного юнита в multi-user.target.wants уходит вместе с ним.
+func TestEnableLastCloudUserChangesStage(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	puller := filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)
+	if _, err := Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); err != nil {
+		t.Fatalf("вспомогательный юнит не включён: %v", err)
+	}
+	if _, err := Enable(l, "wallpaper", StageSpec{Stage: "graphical"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка вспомогательного юнита осталась: %v", err)
+	}
+	if _, err := os.Lstat(l.WantsDir(CloudUserUnit)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("пустой %s.wants остался: %v", CloudUserUnit, err)
+	}
+}
+
+// Непустой .wants вспомогательного юнита (экземпляр, в том числе только что
+// поставленный параллельной установкой) — не ошибка: ссылка остаётся.
+func TestDropPullerNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	if err := enablePuller(l); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(l.WantsDir(CloudUserUnit), "cream-configure@x.service"), "")
+	if err := dropPuller(l); err != nil {
+		t.Fatalf("непустой каталог: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); err != nil {
+		t.Errorf("ссылка снята при живом экземпляре: %v", err)
+	}
+}
+
+// Вспомогательный юнит не упорядочен относительно экземпляров: After= на них
+// вместе с After=cloud-final экземпляра дал бы цикл через multi-user.target.
+func TestCloudUserUnitFile(t *testing.T) {
+	t.Parallel()
+	var body string
+	for _, line := range strings.Split(string(CloudUserUnitFile()), "\n") {
+		if !strings.HasPrefix(line, "#") {
+			body += line + "\n"
+		}
+	}
+	for _, bad := range []string{"After=", "Before=", "Requires=", "BindsTo=", "DefaultDependencies=no"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("в юните есть %s:\n%s", bad, body)
+		}
+	}
+	for _, want := range []string{"Type=oneshot", "RemainAfterExit=yes", "WantedBy=multi-user.target"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("в юните нет %s", want)
 		}
 	}
 }

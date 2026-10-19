@@ -27,14 +27,17 @@ stage_ok configure-early early sysinit.target
 D=$W/cream-configure@configure-early.service.d/10-stage.conf
 has $D '^DefaultDependencies=no$' "early: DefaultDependencies=no"
 has $D '^After=local-fs.target$' "early: After=local-fs.target"
-has $D '^Before=network-pre.target sysinit.target$' "early: Before=network-pre.target sysinit.target"
+has $D '^Before=network-pre.target sysinit.target shutdown.target$' "early: Before=network-pre.target sysinit.target shutdown.target"
+has $D '^Conflicts=shutdown.target$' "early: Conflicts=shutdown.target (1.1.1)"
 has $D '^Wants=network-pre.target$' "early: Wants=network-pre.target"
 
-step "cloud-user: без cloud-init — multi-user.target"
+step "cloud-user: без cloud-init — вспомогательный юнит в multi-user.target.wants (1.1.1)"
 [ ! -e /usr/lib/systemd/system/cloud-final.service ] || fail "в образе есть cloud-init"
-stage_ok configure-cloud-user cloud-user multi-user.target
+stage_ok configure-cloud-user cloud-user cream-configure-cloud-user.service
 has $W/cream-configure@configure-cloud-user.service.d/10-stage.conf '^After=cloud-final.service$' \
 	"cloud-user: After=cloud-final.service"
+exists $W/multi-user.target.wants/cream-configure-cloud-user.service "cloud-user: вспомогательный юнит в multi-user.target.wants"
+exists /usr/lib/systemd/system/cream-configure-cloud-user.service "пакет: cream-configure-cloud-user.service"
 
 step "graphical: graphical.target, после менеджера входа"
 stage_ok configure-graphical graphical graphical.target
