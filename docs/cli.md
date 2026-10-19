@@ -92,6 +92,7 @@
 | `source.not_synced` | источник без кеша пропущен при поиске, расширение взято из другого |
 | `catalog.cream_newer` | расширению каталога нужен cream новее текущего — пропущено, синхронизация не падает (Р22) |
 | `catalog.requires`, `catalog.conflicts` | с 1.1.0, `cream validate --catalog`: `requires` без поставщика в каталоге; `conflicts.extensions` на имя не из каталога |
+| `catalog.depends_external` | с 1.1.1, `cream validate --catalog`: `depends` на имя не из каталога (зависимость из другого источника раскладки) |
 | `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
 | `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей `cream:` манифеста |
 | `platform.os_unknown` | нет os-release: `platform.os` не проверена |
@@ -173,10 +174,12 @@ cream source sync [<name>…]
 path}], not_applicable: [{ext, path, exit, code, message}], errors: [тот же вид]}]}`.
 
 **Граф каталога** (с 1.1.0, только `--catalog`; `source sync` и `catalog pack` его не проверяют — опубликованный
-каталог не отвергается): `depends` на имя, которого в каталоге нет, или с диапазоном, не включающим версию из
-каталога, — 65 `catalog.depends`; цикл `depends` — 65 `catalog.depends_cycle` (`a → b → a`); `requires` без
-поставщика в каталоге — предупреждение `catalog.requires` (способность может дать `cream assume` или другой
-источник); `conflicts.extensions` на имя не из каталога — предупреждение `catalog.conflicts`. Расширение, пропущенное
+каталог не отвергается): `depends` с диапазоном, не включающим версию из каталога, — 65 `catalog.depends`; цикл
+`depends` — 65 `catalog.depends_cycle` (`a → b → a`); `depends` на имя, которого в каталоге нет, — предупреждение
+`catalog.depends_external` (с 1.1.1; в 1.1.0 — ошибка 65: раскладка машины собирается из нескольких каталогов, §9.4,
+и зависимость может прийти из другого источника — её проверяет резолвер при установке); `requires` без
+поставщика в каталоге (поставщиком себе самому расширение не считается) — предупреждение `catalog.requires`
+(способность может дать `cream assume` или другой источник); `conflicts.extensions` на имя не из каталога — предупреждение `catalog.conflicts`. Расширение, пропущенное
 как требующее cream новее (Р22), считается присутствующим.
 Golden: [validate-catalog.json](../internal/cli/testdata/golden/validate-catalog.json),
 [validate-dirs.json](../internal/cli/testdata/golden/validate-dirs.json),

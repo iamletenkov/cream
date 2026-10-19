@@ -12,10 +12,11 @@ import (
 // graphCatalog — каталог фикстур графа (testdata/graph).
 func graphCatalog() string { return filepath.Join(fixturesRoot, "graph") }
 
-// ValidateCatalog (cream 1.1.0): граф каталога. depends на отсутствующее имя,
-// с невыполнимым диапазоном и цикл depends — ошибки 65; requires без
-// поставщика и conflicts.extensions на чужое имя — предупреждения;
-// неприменимое (Р22) расширение считается присутствующим.
+// ValidateCatalog (cream 1.1.0): граф каталога. depends с невыполнимым
+// диапазоном и цикл depends — ошибки 65; depends на имя не из каталога (с
+// 1.1.1: раскладка из нескольких каталогов, §9.4), requires без поставщика
+// (в том числе только сам себе поставщик) и conflicts.extensions на чужое имя —
+// предупреждения; неприменимое (Р22) расширение считается присутствующим.
 func TestValidateCatalogGraph(t *testing.T) {
 	t.Parallel()
 	r, err := ValidateCatalog(graphCatalog(), cream100(t))
@@ -27,15 +28,15 @@ func TestValidateCatalogGraph(t *testing.T) {
 			t.Errorf("%+v: exit/path", p)
 		}
 	}
-	want := []pe{{"app", "catalog.depends"}, {"orphan", "catalog.depends"}, {"cyc-a", "catalog.depends_cycle"}}
+	want := []pe{{"app", "catalog.depends"}, {"cyc-a", "catalog.depends_cycle"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("ошибки %+v, ждали %+v", got, want)
 	}
 	if cerr.ExitCode(err) != cerr.ExitData || cerr.CodeOf(err) != "catalog.depends" {
 		t.Errorf("err = %v", err)
 	}
-	for _, sub := range []string{"lib-a >=2.0.0 <3", "1.0.0", "ghost", "cyc-a → cyc-b → cyc-a"} {
-		if !strings.Contains(r.Errors[0].Message+r.Errors[1].Message+r.Errors[2].Message, sub) {
+	for _, sub := range []string{"lib-a >=2.0.0 <3", "1.0.0", "cyc-a → cyc-b → cyc-a"} {
+		if !strings.Contains(r.Errors[0].Message+r.Errors[1].Message, sub) {
 			t.Errorf("в сообщениях нет %q: %+v", sub, r.Errors)
 		}
 	}
@@ -43,9 +44,16 @@ func TestValidateCatalogGraph(t *testing.T) {
 	for _, w := range r.Warnings {
 		if w.Code != warnCreamNewer {
 			warns = append(warns, w.Code+" "+w.Details["ext"].(string))
+			if w.Code == "catalog.depends_external" && !strings.Contains(w.Message, "ghost") {
+				t.Errorf("в предупреждении нет ghost: %+v", w)
+			}
+			if w.Code == warnRequires && w.Details["ext"] == "self-provider" && !strings.Contains(w.Message, "cap-self") {
+				t.Errorf("в предупреждении нет cap-self: %+v", w)
+			}
 		}
 	}
-	if want := []string{"catalog.requires needy", "catalog.conflicts picky"}; !slices.Equal(warns, want) {
+	if want := []string{"catalog.requires needy", "catalog.depends_external orphan", "catalog.conflicts picky",
+		"catalog.requires self-provider"}; !slices.Equal(warns, want) {
 		t.Errorf("предупреждения %v, ждали %v", warns, want)
 	}
 }

@@ -1014,7 +1014,8 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 **Вошло в `v1.1.0`** (минорная версия, только добавления, ADR-0001): стадии configure `early`, `cloud-user`,
 `graphical` (§6.4; манифест с ними требует `cream: ">=1.1.0"`) — для шага 3 §16 (firewall, рабочие столы);
 `cream resolve --installed FILE` — расширения базы `FROM` слоя bisquite в графе фазы build; статическая проверка графа
-в `cream validate --catalog` (`depends` и цикл — ошибки, `requires`/`conflicts` — предупреждения; синхронизацию не
+в `cream validate --catalog` (`depends` вне диапазона и цикл — ошибки, `requires`/`conflicts` и — с 1.1.1 — `depends`
+на имя не из каталога — предупреждения; синхронизацию не
 меняет); `cream system init` обновляет `configure.target` реестра (docs/cli.md).
 
 **Откладывается** (поле или команда резервируется, позже — минорная версия с подъёмом `cream:`):

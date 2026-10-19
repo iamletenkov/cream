@@ -21,16 +21,30 @@
       }
     },
     {
+      "code": "catalog.depends_external",
+      "message": "orphan: depends на ghost — такого расширения в каталоге нет (нужен другой источник раскладки)",
+      "details": {
+        "ext": "orphan"
+      }
+    },
+    {
       "code": "catalog.conflicts",
       "message": "picky: conflicts.extensions phantom — такого расширения в каталоге нет",
       "details": {
         "ext": "picky"
       }
+    },
+    {
+      "code": "catalog.requires",
+      "message": "self-provider: requires cap-self — в каталоге её никто не даёт (нужен cream assume или поставщик из другого источника)",
+      "details": {
+        "ext": "self-provider"
+      }
     }
   ],
   "error": {
     "code": "catalog.depends",
-    "message": "<TESTDATA>/graph: app: depends на lib-a >=2.0.0 <3, а в каталоге 1.0.0 (и ещё ошибок: 2)",
+    "message": "<TESTDATA>/graph: app: depends на lib-a >=2.0.0 <3, а в каталоге 1.0.0 (и ещё ошибок: 1)",
     "details": {
       "reports": [
         {
@@ -83,6 +97,11 @@
               "name": "picky",
               "version": "1.0.0",
               "path": "extensions/picky"
+            },
+            {
+              "name": "self-provider",
+              "version": "1.0.0",
+              "path": "extensions/self-provider"
             }
           ],
           "not_applicable": [
@@ -101,13 +120,6 @@
               "exit": 65,
               "code": "catalog.depends",
               "message": "app: depends на lib-a >=2.0.0 <3, а в каталоге 1.0.0"
-            },
-            {
-              "ext": "orphan",
-              "path": "extensions/orphan/extension.yaml",
-              "exit": 65,
-              "code": "catalog.depends",
-              "message": "orphan: depends на ghost — такого расширения в каталоге нет"
             },
             {
               "ext": "cyc-a",
