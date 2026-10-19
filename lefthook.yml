@@ -8,7 +8,7 @@ pre-commit:
     gofmt:
       glob: "*.go"
       run: |
-        out="$(docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/src" -w /src golang:1.25.11 gofmt -l {staged_files})"
+        out="$(docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/src" -w /src golang:1.26.9 gofmt -l {staged_files})"
         [ -z "$out" ] || { echo "gofmt: не отформатированы (make fmt):"; echo "$out"; exit 1; }
 
     shellcheck:

@@ -1,0 +1,24 @@
+#!/bin/sh
+# postrm cream (спека §15): purge удаляет кеш источников всегда, а настройки
+# (/etc/cream) и состояние (/var/lib/cream) — только при пустом реестре:
+# данные установленных расширений пакет не трогает.
+set -e
+
+case "$1" in
+purge)
+	rm -rf /var/cache/cream
+	if [ -z "$(ls -A /var/lib/cream/installed 2>/dev/null)" ]; then
+		rm -rf /etc/cream /var/lib/cream
+	else
+		echo "cream: реестр не пуст — /etc/cream и /var/lib/cream сохранены." >&2
+	fi
+	;;
+esac
+
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload || true
+	fi
+fi
+
+exit 0
