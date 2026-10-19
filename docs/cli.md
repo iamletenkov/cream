@@ -58,25 +58,51 @@
 поля.
 
 ### Коды выхода (спека §11.3)
+Строковые `error.code` стабильны с 1.0 (ADR-0001): в минорных версиях коды только добавляются.
+
 | Код | Смысл | `error.code` |
 |---|---|---|
 | 0 | успех; `changed`, `reboot_required` — в `result` | |
 | 1 | `check`/`status`: не применено (команды отложены, Р1) | `check.failed` |
 | 0–63 | `cream run`: код самого действия | |
-| 64 | неверный вызов: флаги, аргументы, секрет в argv, отложенное | `usage.*`, `secret.in_argv` |
-| 65 | неверные данные: манифест, значение ключа, readonly, `record.json` | `manifest.*`, `catalog.*`, `config.*`, `record.*`, `source.invalid`, `source.conflict`, `source.reserved`, `version.downgrade`, `hook.missing_remove` |
-| 66 | не найдено: расширение, источник, ключ, действие, `params-file`; `@version` не совпала | `not_found.*`, `version.mismatch`, `record.not_found` |
-| 67 | граф: зависимость, конфликт, цикл, владение файлом, есть зависимые | `deps.*`, `conflict.*` |
-| 68 | неприменимо: arch, family, os, команды, `targets`, версия cream, хук вернул 20 | `platform.*`, `target.*`, `action.phase`, `hook.not_applicable` |
-| 69 | источник: не синхронизирован, sha256 не совпал, сеть, архив | `source.*` |
+| 64 | неверный вызов: флаги, аргументы, секрет в argv, отложенное | `usage.*` (`args`, `assignment`, `duplicate_key`, `ext_name`, `flag`, `format`, `no_command`, `param_required`, `phase`, `ref`, `reserved`, `root`, `secret`, `source`, `source_date_epoch`, `stdin_empty`, `stdin_param`, `stdin_too_large`, `stdin_twice`, `unknown_command`, `unknown_param`), `secret.in_argv` |
+| 65 | неверные данные: манифест, каталог, значение ключа, readonly, `record.json`, юнит или стадия systemd | `manifest.*`, `catalog.*` (`schema`, `invalid`, `duplicate_name`), `config.*` (`invalid`, `unknown_key`, `readonly`, `reserved`, `install_scope`, `params_file`), `record.invalid`, `record.mismatch`, `source.invalid`, `source.conflict`, `source.reserved`, `source.catalog`, `version.downgrade`, `version.same_digest`, `hook.missing_remove`, `stage.unsupported`, `unit.invalid` |
+| 66 | не найдено: расширение, источник, ключ, действие, манифест, каталог, `params-file`; `@version` не совпала | `not_found.*`, `version.mismatch`, `record.not_found` |
+| 67 | граф: зависимость, версия, способность, цикл, конфликт, владение файлом, есть зависимые | `deps.*` (`missing`, `version`, `requires`, `cycle`, `dependents`), `conflict.*` (`extension`, `capability`, `file`, `file_owner`, `file_unowned`) |
+| 68 | неприменимо: arch, family, os, команды, `targets`, версия cream, хук вернул 20 | `platform.*` (`arch`, `arch_barrier`, `family`, `os`, `commands`, `cream_version`), `target.*` (`build`, `live`, `confirm`), `action.phase`, `hook.not_applicable` |
+| 69 | источник: не синхронизирован, sha256 не совпал, сеть, архив, путь | `source.*` (`not_synced`, `missing`, `fetch`, `redirect`, `too_large`, `bad_archive`, `path`) |
 | 70 | внутренняя ошибка cream | `internal` |
-| 74 | ввод-вывод, реестр, реестр новее исполнителя, ошибка записи в stdout | `state.*`, `io.*`, `config.io` |
+| 74 | ввод-вывод (Р29), реестр повреждён или новее исполнителя, блокировка не открылась | `io.read`, `io.write`, `io.stdin`, `io.stdout`, `io.stderr`, `file.stat`, `state.corrupt`, `state.newer`, `state.tree`, `state.lock_dir`, `state.lock_file` |
 | 75 | блокировка занята, таймаут или ожидание прервано сигналом | `lock.timeout`, `lock.canceled`, `lock.upgrade`, `lock.changed` |
 | 76 | действие нарушило протокол: код > 63, не один JSON-объект | `action.protocol` |
-| 77 | нужен root или небезопасные права файла (`params-file`, кеш, `sources.yaml`, каталог настроек) | `perm.*` |
+| 77 | нужен root или небезопасные права файла (`params-file`, кеш, `sources.yaml`, каталог настроек) | `perm.*` (`root`, `cache`, `sources`, `etc_dir`, `config`, `secrets`, `params_file`) |
 | 79 | хук или действие упали, не запустились, превысили таймаут | `hook.failed` (`details.hook_exit`), `action.failed`, `action.timeout` |
 
 Без команды — 64 `usage.no_command`; неизвестная команда — 64 `usage.unknown_command`.
+
+### Коды предупреждений
+Предупреждение не меняет код выхода; коды стабильны так же, как коды ошибок.
+
+| Код | Когда |
+|---|---|
+| `source.shadowed` | одноимённое расширение есть в нескольких источниках, взято из первого |
+| `source.not_synced` | источник без кеша пропущен при поиске, расширение взято из другого |
+| `catalog.cream_newer` | расширению каталога нужен cream новее текущего — пропущено, синхронизация не падает (Р22) |
+| `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
+| `platform.dev_build` | сборка cream без версии считается удовлетворяющей `cream:` манифеста |
+| `platform.os_unknown` | нет os-release: `platform.os` не проверена |
+| `deps.dependents_forced` | `remove --force` убрал расширение, от которого зависят установленные |
+| `state.corrupt` | битая запись реестра пропущена в списке или снята `remove --forget` (Р20, Р25) |
+| `state.tree` | дерево установленного расширения не читается |
+| `state.history` | запись в `history.jsonl` не удалась (операция выполнена) |
+| `file.modified` | файл из `files` изменён после установки — сохранён как `<dst>.cream-modified[.N]` |
+| `file.not_regular` | на месте файла из `files` не обычный файл — оставлен как есть |
+| `systemd.reload_failed`, `systemd.stop_failed` | `systemctl daemon-reload` / `stop` не удался (Р25) |
+| `configure.no_block` | systemd ещё загружается: перезапуск configure поставлен в очередь `--no-block`, без ожидания |
+| `install.build_none` | у слоя `targets.build: none` — в фазе build не ставится |
+| `install.staging`, `install.prev`, `install.unplace` | не удалось прибрать временное дерево, прежнее дерево или откатить `files` |
+| `upgrade.no_source` | `upgrade --all`: расширение поставлено не из источника — пропущено |
+| `build.params_file`, `build.incoming`, `build.policy_rc_d` | фаза build: не удалён `params.env` / `incoming/<id>`, `policy-rc.d` заменён хуком или не снят |
 
 ### Поведение процесса
 - **Сигналы.** SIGINT, SIGTERM и SIGHUP прерывают операцию: ожидание блокировки заканчивается 75 `lock.canceled`,
