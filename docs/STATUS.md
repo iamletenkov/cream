@@ -3,7 +3,8 @@
 **1.1.1 (ветка `fix/1.1.1`, патч по ревью 1.1.0):** `cloud-user` тянет `cream-configure-cloud-user.service` из
 `multi-user.target.wants` (configure работает и при выключенном cloud-init); `system init` не ждёт `lock/global`
 (`system.registry_busy`); `catalog.depends_external` — предупреждение; `early` — `shutdown.target`, таймаут ≤ 2 мин,
-`manifest.early_network`; describe после rc — dev; тесты на ложно-зелёные места. Дальше — ревью PR и выпуск 1.1.1.
+`manifest.early_network`; describe после rc — dev; тесты на ложно-зелёные места. `validate.unit_lock` сужено до
+реального тупика §7.3 (держатель блокировки синхронно ждёт задание юнита) — без ложных срабатываний на `teleport`. Дальше — ревью PR и выпуск 1.1.1.
 
 **Фаза:** 1.0.0 и 1.1.0 выпущены (2026-10-19); все 23 задачи [плана](plans/2026-10-18-cream-core.md) 1.0 закрыты.
 

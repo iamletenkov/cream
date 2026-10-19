@@ -7,4 +7,4 @@ Type=oneshot
 ExecStartPre=-/usr/bin/cream run --lock-timeout 20s dirty-unit render
 ExecStart=/usr/bin/cream run -q dirty-unit status
 ExecReload=/usr/bin/cream run other-ext render
-ExecStop=/usr/bin/cream run dirty-unit render
+ExecStop=/usr/bin/cream run dirty-unit status

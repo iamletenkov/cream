@@ -19,16 +19,19 @@ var valueFlags = []string{"--lock-timeout", "--root", "--sources", "--cache"}
 // jobVerbs — подкоманды systemctl, которые ставят задание и без --no-block
 // ждут его завершения.
 var jobVerbs = []string{"start", "stop", "restart", "reload", "try-restart", "reload-or-restart",
-	"try-reload-or-restart", "isolate"}
+	"try-reload-or-restart", "reload-or-try-restart", "force-reload", "condrestart", "condreload", "condstop",
+	"isolate"}
 
-// unitExecKeys — строки юнита, которые выполняются при старте и reload (§7.3).
-var unitExecKeys = []string{"ExecStartPre", "ExecStart", "ExecReload"}
+// unitExecKeys — строки юнита, конца которых ждёт задание start, stop или
+// reload (§7.3).
+var unitExecKeys = []string{"ExecCondition", "ExecStartPre", "ExecStart", "ExecStartPost", "ExecReload",
+	"ExecStop", "ExecStopPost"}
 
-func warnExtension(r *Report, x loaded, idx map[string]*manifest.Manifest) {
+func warnExtension(r *Report, x loaded, idx map[string]loaded, a *unitLockAnalysis) {
 	t := tree{r: r, dir: x.dir, rel: x.rel, ext: x.m.Name}
 	t.warnLockNoneSet(x.m)
 	t.warnApplyBlocking(x.m)
-	t.warnUnitLock(x.m, idx)
+	t.warnUnitLock(x, idx, a)
 }
 
 // script reads an executable file of the tree as text lines; nil for ELF
@@ -130,47 +133,6 @@ func (t *tree) warnApplyBlocking(m *manifest.Manifest) {
 			if j := skipFlags(words, i+1); j < len(words) && slices.Contains(jobVerbs, words[j]) {
 				t.r.warn(warnApplyBlocking, "%s: %s:%d: `%s` без --no-block — хук apply не должен ждать заданий "+
 					"systemd (§8.4)", t.ext, path.Join(t.rel, p), n+1, strings.Join(words[i:], " "))
-			}
-		}
-	}
-}
-
-// warnUnitLock: an action called from Exec* of a unit the extension lays
-// out must be lock: none, or a restart under the domain lock deadlocks
-// (§7.3). Actions of extensions outside idx are not known and not checked.
-func (t *tree) warnUnitLock(m *manifest.Manifest, idx map[string]*manifest.Manifest) {
-	for _, f := range m.Files {
-		if !isServiceUnit(f.Dst) {
-			continue
-		}
-		data, err := readHead(t.path(f.Src), maxScript)
-		if err != nil {
-			continue
-		}
-		for n, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			key, val, ok := strings.Cut(line, "=")
-			if !ok || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") ||
-				!slices.Contains(unitExecKeys, strings.TrimSpace(key)) {
-				continue
-			}
-			sub, rest, ok := creamCall(strings.Fields(val))
-			if !ok || sub != "run" {
-				continue
-			}
-			j := skipFlags(rest, 0)
-			if j+1 >= len(rest) {
-				continue
-			}
-			ext, action := rest[j], rest[j+1]
-			target, ok := idx[ext]
-			if !ok {
-				continue
-			}
-			if a, ok := target.Actions[action]; ok && a.Lock != manifest.LockNone {
-				t.r.warn(warnUnitLock, "%s: %s:%d: %s вызывает cream run %s %s с lock: %s — действие из Exec* юнита "+
-					"объявляется lock: none, иначе restart под блокировкой домена ждёт сам себя (§7.3)",
-					t.ext, path.Join(t.rel, f.Src), n+1, strings.TrimSpace(key), ext, action, a.Lock)
 			}
 		}
 	}
