@@ -107,8 +107,8 @@ func lookupStage(stage string) (stageDef, error) {
 	return def, nil
 }
 
-// Target is the .wants target of stage on the machine of l (cloud-user
-// looks for cloud-init): what Enable links into and Init recomputes.
+// Target is the .wants target of stage: what Enable links into and Init
+// recomputes.
 func Target(l paths.Layout, stage string) (string, error) {
 	def, err := lookupStage(stage)
 	if err != nil {
@@ -139,6 +139,9 @@ func Enable(l paths.Layout, ext string, st StageSpec) (target string, err error)
 	target = def.target(l)
 	if err := link(l, ext, target); err != nil {
 		return "", err
+	}
+	if err := dropPuller(l); err != nil {
+		return "", fmt.Errorf("включение %s: %w", UnitName(ext), err)
 	}
 	return target, nil
 }
@@ -183,7 +186,8 @@ func dedup(in []string) []string {
 }
 
 // link puts the instance link into target's .wants and removes it from the
-// other known targets.
+// other known targets; the caller drops the CloudUserUnit link (dropPuller)
+// once its .wants may have become empty.
 func link(l paths.Layout, ext, target string) error {
 	for _, t := range knownTargets() {
 		if t == target {
@@ -200,9 +204,6 @@ func link(l paths.Layout, ext, target string) error {
 	}
 	if err := symlink(filepath.Join(l.WantsDir(target), UnitName(ext)), templateTarget); err != nil {
 		return fmt.Errorf("включение %s: %w", UnitName(ext), err)
-	}
-	if target != CloudUserUnit {
-		return dropPuller(l)
 	}
 	return nil
 }
@@ -239,16 +240,15 @@ func enablePuller(l paths.Layout) error {
 
 // dropPuller unlinks CloudUserUnit from multi-user.target.wants once its own
 // .wants holds no instance; the unit file stays (it belongs to the package).
+// The emptiness check is the removal of the .wants directory itself: a
+// directory not empty (an instance, possibly linked by a parallel install
+// right now) is the normal case, and the link stays.
 func dropPuller(l paths.Layout) error {
-	dir := l.WantsDir(CloudUserUnit)
-	entries, err := os.ReadDir(dir)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("%s: %w", CloudUserUnit, err)
-	}
-	if len(entries) > 0 {
+	err := os.Remove(l.WantsDir(CloudUserUnit))
+	switch {
+	case errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST):
 		return nil
-	}
-	if err := os.Remove(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	case err != nil && !errors.Is(err, fs.ErrNotExist):
 		return fmt.Errorf("%s: %w", CloudUserUnit, err)
 	}
 	if err := unlink(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); err != nil {

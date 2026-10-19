@@ -191,6 +191,46 @@ func TestEnableCloudUserTarget(t *testing.T) {
 	}
 }
 
+// Единственное расширение cloud-user сменило стадию (upgrade): ссылка
+// вспомогательного юнита в multi-user.target.wants уходит вместе с ним.
+func TestEnableLastCloudUserChangesStage(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	puller := filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)
+	if _, err := Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); err != nil {
+		t.Fatalf("вспомогательный юнит не включён: %v", err)
+	}
+	if _, err := Enable(l, "wallpaper", StageSpec{Stage: "graphical"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка вспомогательного юнита осталась: %v", err)
+	}
+	if _, err := os.Lstat(l.WantsDir(CloudUserUnit)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("пустой %s.wants остался: %v", CloudUserUnit, err)
+	}
+}
+
+// Непустой .wants вспомогательного юнита (экземпляр, в том числе только что
+// поставленный параллельной установкой) — не ошибка: ссылка остаётся.
+func TestDropPullerNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	if err := enablePuller(l); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(l.WantsDir(CloudUserUnit), "cream-configure@x.service"), "")
+	if err := dropPuller(l); err != nil {
+		t.Fatalf("непустой каталог: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)); err != nil {
+		t.Errorf("ссылка снята при живом экземпляре: %v", err)
+	}
+}
+
 // Вспомогательный юнит не упорядочен относительно экземпляров: After= на них
 // вместе с After=cloud-final экземпляра дал бы цикл через multi-user.target.
 func TestCloudUserUnitFile(t *testing.T) {

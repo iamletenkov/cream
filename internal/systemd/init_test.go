@@ -162,6 +162,35 @@ func TestInitMovesCloudUserToPuller(t *testing.T) {
 	}
 }
 
+// Init снимает ссылку вспомогательного юнита, оставшуюся без экземпляров
+// (раз после пересчёта всех ссылок), и не трогает её при живом экземпляре.
+func TestInitDropsOrphanPuller(t *testing.T) {
+	t.Parallel()
+	l := paths.Layout{Root: t.TempDir()}
+	if _, err := Enable(l, "docker", StageSpec{Stage: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := enablePuller(l); err != nil {
+		t.Fatal(err)
+	}
+	puller := filepath.Join(l.WantsDir("multi-user.target"), CloudUserUnit)
+	if err := Init(l); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ссылка без экземпляров осталась: %v", err)
+	}
+	if _, err := Enable(l, "wallpaper", StageSpec{Stage: "cloud-user"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Init(l); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(puller); err != nil {
+		t.Errorf("ссылка снята при живом экземпляре: %v", err)
+	}
+}
+
 // Init без экземпляров cloud-user вспомогательный юнит пишет (как шаблон), но
 // не включает.
 func TestInitWritesPullerUnitOnly(t *testing.T) {

@@ -112,6 +112,11 @@ func relinkAll(l paths.Layout, beforeLink func(ext string)) error {
 			}
 		}
 	}
+	// Once for all instances: an instance moved away from cloud-user (or a
+	// helper link left without instances) takes the CloudUserUnit link along.
+	if err := dropPuller(l); err != nil {
+		return fmt.Errorf("system init: %w", err)
+	}
 	return nil
 }
 
