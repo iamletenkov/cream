@@ -2,7 +2,7 @@
 
 **cream** — исполнитель расширений: один статический Go-бинарь `cream` (linux/amd64, linux/arm64), ставится `.deb`. Читает `extension.yaml`, ведёт жизненный цикл install / upgrade / configure / remove на живой машине и фазу build внутри `virt-customize`, хранит состояние установленного, даёт `cream set` / `cream show` (бывший `bisquite-conf`) и работает с источниками каталогов. Лицензия Apache-2.0.
 
-Сейчас — **каркас**: подкоманда `version`, сборка, CI. Доменной логики нет, пока нет спеки (`docs/specs/`). Состояние — [docs/STATUS.md](docs/STATUS.md).
+**MVP 1.0 готов к выпуску** по [спеке](docs/specs/2026-10-18-cream-core.md) и [плану](docs/plans/2026-10-18-cream-core.md): формат `cream/v1`, источники, резолвер, install / upgrade / remove / set / run, фаза build, `.deb` и тарболы. Контракт — [ADR 0001](docs/adr/0001-contract-cream-v1.md), реализация CLI и сборки — [ADR 0002](docs/adr/0002-single-dependency-stdlib-cli.md), справочник CLI и форм `--json` — [docs/cli.md](docs/cli.md). Состояние — [docs/STATUS.md](docs/STATUS.md).
 
 ## Место в экосистеме
 - **bisquite** — собирает образы ВМ; в слоях сборки вызывает `cream` (фаза build).
@@ -17,12 +17,38 @@
 
 ## Карта репозитория
 ```
-cmd/cream/          — точка входа: разбор аргументов, run(args, stdout, stderr) int
-internal/version/   — версия (ставится -ldflags -X при сборке)
-docs/               — README.md (индекс), STATUS.md, adr/, specs/, plans/, research/
-.claude/            — агенты, skills, правила, хуки Claude Code
-.github/            — CI (lint, test, build-all) и release-please
-Makefile            — единственный способ что-либо запускать (`make help`)
+cmd/cream/            — точка входа: run(args, stdout, stderr) int → internal/cli
+internal/cli/         — диспетчер команд: flag с перестановкой, глобальные флаги, конверт --json, коды выхода; golden в testdata/golden
+internal/engine/      — исполнитель: реестр + домен настроек + блокировки + хуки + systemd = install/upgrade/remove/set/run/build
+internal/resolve/     — резолвер: платформа и применимость, граф depends/requires/conflicts, порядок, lineage (§9.4, §12.4)
+internal/catalog/     — валидация каталога (§4.1) и поиск расширения по ссылке в кеше источников (§9.3)
+internal/source/      — sources.yaml, единственный сетевой доступ (sync), кеш и sources.lock, catalog pack
+internal/manifest/    — строгий разбор extension.yaml cream/v1 и cream-catalog.yaml
+internal/config/      — домен настроек расширения: /etc/cream/<ext>/{config,secrets}, присваивания, params-file
+internal/state/       — реестр установленного (cream-state/v1) и журнал history.jsonl
+internal/lock/        — flock-блокировки lock/{global,<ext>} и наследование через CREAM_LOCK_FD
+internal/runner/      — запуск хуков и действий: окружение, группа процессов, таймауты, фильтр секретов
+internal/systemd/     — юнит cream-configure@.service, drop-in стадии, systemctl
+internal/place/       — раскладка files расширения и их снятие при remove (владение по реестру)
+internal/paths/       — раскладка путей на машине (§5), --root и режим пользователя (XDG)
+internal/envfile/     — грамматика EnvironmentFile= systemd: чтение и правка с сохранением комментариев
+internal/fsx/         — файловые примитивы: атомарная запись, копия дерева, дайджест дерева, проверка прав
+internal/keytype/     — типы значений ключей и параметров действий (§8.2)
+internal/semver/      — SemVer 2.0 и диапазоны (своя реализация, без зависимости)
+internal/cerr/        — типизированные ошибки, коды выхода и предупреждения (§11.3)
+internal/version/     — версия (ставится -ldflags -X при сборке)
+testdata/catalog/     — фикстурный каталог §14; testdata/catalog-next/ — следующие версии noop и upgrade-fixture для upgrade
+testdata/invalid/     — заведомо неверные расширения для cream validate
+testdata/pilot/       — пилотные расширения (cloud-user, fixture-{agent,docker,teleport}-like) для интеграции и build
+test/integration/     — make test-integration: .deb в контейнере с systemd PID 1, сценарии scenario/NN-*.sh
+test/build/           — make test-build: фаза build настоящим virt-customize на образе Debian 12
+packaging/            — nfpm.yaml, maintainer-скрипты, copyright (полные тексты сторонних лицензий)
+scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh
+LICENSE, NOTICE       — Apache-2.0 и уведомления о стороннем коде
+docs/                 — README.md (индекс), STATUS.md, cli.md, adr/, specs/, plans/, research/
+.claude/              — агенты, skills, правила, хуки Claude Code
+.github/              — CI (ci, vuln, repro-check, интеграция amd64/arm64), release-please, ассеты релиза
+Makefile              — единственный способ что-либо запускать (`make help`)
 ```
 
 ## Как работать
