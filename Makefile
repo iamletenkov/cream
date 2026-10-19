@@ -28,6 +28,10 @@ GOCACHE_DIR    ?= go-build
 # (= INTEGRATION_DISTROS по очереди); пакет — $(RELEASE_DIR)/cream_<v>_$(ARCH).deb.
 DISTRO             ?= debian-12
 INTEGRATION_DISTROS ?= debian-12 ubuntu-24.04
+# Фаза build на virt-customize (§14, T22): закреплённый cloud-образ Debian 12
+# (кеш .cache/test-build/); TEST_BUILD_HOST=1 — virt-customize хоста вместо контейнера.
+TEST_BUILD_IMAGE_URL    ?= https://cloud.debian.org/images/cloud/bookworm/20261006-2623/debian-12-genericcloud-amd64-20261006-2623.qcow2
+TEST_BUILD_IMAGE_SHA512 ?= a09170d17e13af43da61774666f520e3bbec0f8bd96b4db37c15f3426fb327ccad950b80dbe78c09aa5ca90ce5015e99334b0ba5188fd4018736bc3fb5f0882c
 LDFLAGS        := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 
 UID := $(shell id -u)
@@ -48,7 +52,7 @@ GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -p
 .DEFAULT_GOAL := help
 .PHONY: help build build-all test test-golden lint fmt tidy ci ci-unlocked clean cache \
 	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln \
-	test-integration test-integration-unlocked envfile-refs
+	test-integration test-integration-unlocked test-build test-build-unlocked envfile-refs
 
 help: ## список целей
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -130,6 +134,15 @@ test-integration-unlocked: deb-unlocked
 		echo "== integration $$d ($(ARCH)) → $$log"; \
 		ARCH=$(ARCH) bash test/integration/run.sh $$d $(RELEASE_DIR)/cream_$(DEB_VERSION)_$(ARCH).deb $$log; \
 	done
+
+test-build: ## фаза build через virt-customize на образе Debian 12 (ручной, не в ci; TEST_BUILD_HOST=1 — хост; под замком)
+	$(HEAVY) $(MAKE) --no-print-directory test-build-unlocked ARCH=amd64
+
+# Лог — .scratchpad/test-runs/build-<время>.log (пишет run.sh).
+test-build-unlocked: deb-unlocked
+	TEST_BUILD_IMAGE_URL=$(TEST_BUILD_IMAGE_URL) TEST_BUILD_IMAGE_SHA512=$(TEST_BUILD_IMAGE_SHA512) \
+		bash test/build/run.sh $(RELEASE_DIR)/cream_$(DEB_VERSION)_amd64.deb \
+		.scratchpad/test-runs/build-$$(date +%Y%m%d-%H%M%S).log
 
 envfile-refs: ## переснять эталоны EnvironmentFile systemd 249/252/255/257 (internal/envfile/testdata; под замком)
 	$(HEAVY) bash test/integration/capture-envfile.sh
