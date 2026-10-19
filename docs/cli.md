@@ -96,7 +96,7 @@
 | `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
 | `manifest.early_timeout` | с 1.1.1: `hooks.configure.timeout` стадии `early` больше 2 мин — зажат до 2 мин (загрузка ждёт `early` до `sysinit.target`) |
 | `manifest.early_network` | с 1.1.1: `hooks.configure.after` стадии `early` на `network.target` или `network-online.target` — цикл порядка (early стоит до `sysinit.target`) |
-| `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0) считается удовлетворяющей `cream:` манифеста |
+| `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0; после предрелизного тега — `1.1.0-rc.1-2-g<хеш>` — с 1.1.1) считается удовлетворяющей `cream:` манифеста |
 | `platform.os_unknown` | нет os-release: `platform.os` не проверена |
 | `deps.dependents_forced` | `remove --force` убрал расширение, от которого зависят установленные |
 | `state.corrupt` | битая запись реестра пропущена в списке или снята `remove --forget` (Р20, Р25) |
@@ -218,7 +218,11 @@ JSON-массив, элемент — `{"name", "version", "provides"?}` или 
 игнорируются, повтор имени — побеждает последний (lineage накопительный, база первой). Эти расширения входят в граф
 как установленные: закрывают `depends` (с проверкой диапазона версий — иначе 67 `deps.version`) и `requires` (по
 `provides`) слоя и попадают в его `deps`, но слоями не становятся. Без флага вывод прежний: установленного в build
-нет. Нет файла — 66 `not_found.installed`, неверный формат — 65 `installed.invalid`.
+нет. Нет файла — 66 `not_found.installed`, неверный формат — 65 `installed.invalid`; предел размера — 1 МиБ, `token`,
+расходящийся с `name` или `version`, — тоже 65.
+`FILE` — путь на хосте сборки (как его дал bisquite), **не** под `--root`. Элемент несёт только имя, версию и
+`provides`: `conflicts` и `files` расширений базы в граф не входят — конфликт слоя с базой и владение файлами
+`resolve` не проверяет, их проверяет `install --phase build` по реестру образа.
 
 `result`: `{"phase", "layers": [{name, version, source, source_resolved, catalog_version, ext_digest,
 params_digest, deps, mode, token, pinned, secret_params, dir}]}` в порядке установки. Значения секретных

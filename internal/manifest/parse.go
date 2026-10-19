@@ -370,11 +370,13 @@ func ParseCreamBuild(raw string) CreamBuild {
 	return CreamBuild{Version: v}
 }
 
-// reDescribe — хвост git describe не с тега: <число коммитов>-g<хеш>[-dirty].
-var reDescribe = regexp.MustCompile(`^[0-9]+-g[0-9a-f]{4,}(-dirty)?$`)
+// reDescribe — хвост git describe не с тега: <число коммитов>-g<хеш>[-dirty],
+// в том числе после предрелизного тега («rc.1-2-gabc»).
+var reDescribe = regexp.MustCompile(`(^|[.-])[0-9]+-g[0-9a-f]{4,}(-dirty)?$`)
 
 // describeBuild — версия собрана не с тега (git describe: «1.0.0-3-gabc»,
-// «1.0.0-dirty»): это не релиз и не предрелиз 1.0.0, а сборка разработчика.
+// «1.1.0-rc.1-2-gabc», «1.0.0-dirty»): это не релиз и не предрелиз, а сборка
+// разработчика.
 func describeBuild(pre []string) bool {
 	s := strings.Join(pre, ".")
 	return reDescribe.MatchString(s) || s == "dirty" || strings.HasSuffix(s, "-dirty")

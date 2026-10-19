@@ -632,6 +632,10 @@ func TestParseCreamBuild(t *testing.T) {
 		{name: "describe грязный — dev", build: "v1.0.0-3-g0d002ad-dirty", cream: ">=1.1.0", wantWarn: true},
 		{name: "тег грязный — dev", build: "v1.0.0-dirty", cream: ">=1.1.0", wantWarn: true},
 		{name: "rc с номером — не describe", build: "1.1.0-rc-3", cream: ">=1.2.0", wantExit: 68},
+		// cream 1.1.1: describe после rc-тега — тоже dev, а не предрелиз.
+		{name: "describe после rc — dev", build: "v1.1.0-rc.1-2-gabc1234", cream: ">=1.2.0", wantWarn: true},
+		{name: "describe после rc грязный — dev", build: "1.1.0-rc.1-2-gabc1234-dirty", cream: ">=1.2.0", wantWarn: true},
+		{name: "rc с хешеподобным словом — не describe", build: "1.1.0-rc.gabc1234", cream: ">=1.2.0", wantExit: 68},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
