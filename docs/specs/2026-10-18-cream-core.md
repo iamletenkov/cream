@@ -1018,6 +1018,12 @@ cobra отвергнута (§18): она тянет `pflag`, генерацию
 на имя не из каталога — предупреждения; синхронизацию не
 меняет); `cream system init` обновляет `configure.target` реестра (docs/cli.md).
 
+**Исправлено в `v1.1.1`** (патч по ревью 1.1.0, контракт ADR-0001 не меняется): стадия `cloud-user` через
+вспомогательный `cream-configure-cloud-user.service` — configure запускается и при выключенном cloud-init (§6.4);
+`cream system init` берёт `lock/global` только для смены `configure.target` и без ожидания (`system.registry_busy`);
+`depends` на имя не из каталога в `validate --catalog` — предупреждение `catalog.depends_external`; пределы `early`
+(`shutdown.target`, таймаут ≤ 2 мин, предупреждение об `after` на сеть); `git describe` после rc-тега — dev.
+
 **Откладывается** (поле или команда резервируется, позже — минорная версия с подъёмом `cream:`):
 
 | Что | Почему можно позже |
