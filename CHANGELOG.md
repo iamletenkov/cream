@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/iamletenkov/cream/compare/v1.0.0...v1.1.0) (2026-10-19)
+
+
+### Добавлено
+
+* cream 1.1 — стадии configure, resolve --installed, граф каталога ([#5](https://github.com/iamletenkov/cream/issues/5)) ([876952c](https://github.com/iamletenkov/cream/commit/876952c4ba26c747092dd9f05e9328b8a0decc3e))
+
 ## 1.0.0 (2026-10-19)
 
 
