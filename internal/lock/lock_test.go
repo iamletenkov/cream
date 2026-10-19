@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -99,6 +100,11 @@ func TestDomainsAreIndependent(t *testing.T) {
 	}
 	if st.Mode().Perm() != 0o600 {
 		t.Errorf("lock file mode = %o, want 600", st.Mode().Perm())
+	}
+	for dir, want := range map[string]os.FileMode{l.LockDir(): 0o700, filepath.Dir(l.LockDir()): 0o755} {
+		if st, err := os.Stat(dir); err != nil || st.Mode().Perm() != want {
+			t.Errorf("%s: mode %v (%v), want %o", dir, st.Mode().Perm(), err, want)
+		}
 	}
 }
 

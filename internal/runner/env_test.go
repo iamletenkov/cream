@@ -99,12 +99,19 @@ func TestBuildEnvRejectsReservedAndInvalidKeys(t *testing.T) {
 		"":            "1",
 		"NUL":         "a\x00b",
 		"GOOD":        "ok",
+		// Тот же список, что у валидатора манифеста (manifest.ValidKey).
+		"LD_PRELOAD":      "/tmp/evil.so",
+		"LD_LIBRARY_PATH": "/tmp",
+		"BASH_ENV":        "/tmp/rc",
+		"ENV":             "/tmp/rc",
+		"IFS":             "x",
 	}}
 	got := BuildEnv(in)
 	for _, kv := range got {
 		name, _, _ := strings.Cut(kv, "=")
 		if name == "" || name == "lower" || name == "A" || name == "HOME" || name == "PWD" || name == "NUL" ||
-			name == "CREAM_X" {
+			name == "CREAM_X" || name == "LD_PRELOAD" || name == "LD_LIBRARY_PATH" || name == "BASH_ENV" ||
+			name == "ENV" || name == "IFS" {
 			t.Errorf("лишняя переменная %q", kv)
 		}
 	}

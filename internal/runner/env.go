@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/iamletenkov/cream/internal/manifest"
 )
 
 // fixedPath and fixedLang are the only inherited-looking variables a hook
@@ -88,19 +90,9 @@ func BuildEnv(in EnvInput) []string {
 	return env
 }
 
-// passableKey reports whether a domain key may enter the environment.
+// passableKey reports whether a domain key may enter the environment: the
+// same rule as the manifest validator's (manifest.ValidKey), so a key the
+// manifest refuses can never reach a hook through a hand-edited config.
 func passableKey(k string) bool {
-	switch {
-	case k == "" || k[0] < 'A' || k[0] > 'Z':
-		return false
-	case k == "PATH" || k == "LANG" || k == "HOME" || k == "PWD" || strings.HasPrefix(k, "CREAM_"):
-		return false
-	}
-	for i := 1; i < len(k); i++ {
-		c := k[i]
-		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' {
-			return false
-		}
-	}
-	return true
+	return manifest.ValidKey(k)
 }

@@ -25,7 +25,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -220,8 +222,17 @@ func (l *Locker) inherit(name, path string, m Mode) (*Handle, error) {
 }
 
 func (l *Locker) acquire(ctx context.Context, name, path string, m Mode) (*Handle, error) {
-	if err := os.MkdirAll(l.layout.LockDir(), 0o755); err != nil {
-		return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_dir", "каталог блокировок %s", l.layout.LockDir())
+	// lock/ — 0700: файлы блокировок нужны только root; родитель — 0755, как
+	// его создают остальные операции.
+	dir := l.layout.LockDir()
+	err := os.MkdirAll(filepath.Dir(dir), 0o755)
+	if err == nil {
+		if err = os.Mkdir(dir, 0o700); errors.Is(err, fs.ErrExist) {
+			err = nil
+		}
+	}
+	if err != nil {
+		return nil, cerr.Wrap(err, cerr.ExitState, "state.lock_dir", "каталог блокировок %s", dir)
 	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
