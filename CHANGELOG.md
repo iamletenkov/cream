@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/iamletenkov/cream/compare/v1.1.3...v1.1.4) (2026-10-20)
+
+
+### Исправлено
+
+* **catalog:** unit_lock: неполный анализ по расширению, «возможен тупик», service только как команда ([#13](https://github.com/iamletenkov/cream/issues/13)) ([435c68d](https://github.com/iamletenkov/cream/commit/435c68d928f4f1c78ee0dbc12f4db9d18c2406b1))
+
 ## [1.1.3](https://github.com/iamletenkov/cream/compare/v1.1.2...v1.1.3) (2026-10-20)
 
 
