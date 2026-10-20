@@ -466,3 +466,54 @@ func TestUnitLockForeignUnits(t *testing.T) {
 		t.Fatalf("предупреждения %+v, ждали unit_lock про hooks/install:2", r.Warnings)
 	}
 }
+
+// TestUnitLockScanScope: only what runs on the machine is analysed — hooks,
+// actions, the rest of the tree they may call (files/, libraries) and the
+// sources of files; tests/, docs/ and READMEs are not (§7.3).
+func TestUnitLockScanScope(t *testing.T) {
+	t.Parallel()
+	restart := "#!/bin/sh\nsystemctl restart join.service\n"
+	tests := []struct {
+		name    string
+		extra   map[string]string
+		tail    string
+		mention string // "" — предупреждения нет
+	}{
+		{name: "tests only", extra: map[string]string{"tests/test-join.sh": restart}},
+		{name: "nested test dir", extra: map[string]string{"test/unit/run.sh": restart}},
+		{name: "docs and readme", extra: map[string]string{
+			"docs/howto.txt": restart, "README": restart, "README.txt": restart}},
+		{name: "same call in a hook", extra: map[string]string{"hooks/install": restart},
+			mention: "hooks/install:2"},
+		{name: "library at the root", extra: map[string]string{"backend.sh": restart},
+			mention: "backend.sh:2"},
+		{name: "files source under tests", tail: "  - {src: tests/helper.sh, dst: /usr/lib/unit-ext/helper.sh}\n",
+			extra: map[string]string{"tests/helper.sh": restart}, mention: "tests/helper.sh:2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			files := unitExt("", tc.extra)
+			files["extension.yaml"] += tc.tail
+			r, err := ValidateDir(writeExt(t, files), cream100(t))
+			if err != nil {
+				t.Fatalf("ValidateDir: %v (%+v)", err, r.Errors)
+			}
+			var got []string
+			for _, w := range r.Warnings {
+				if w.Code == warnUnitLock {
+					got = append(got, w.Message)
+				}
+			}
+			if tc.mention == "" {
+				if len(got) != 0 {
+					t.Fatalf("ложное предупреждение: %q", got)
+				}
+				return
+			}
+			if len(got) != 1 || !strings.Contains(got[0], tc.mention) {
+				t.Fatalf("ждали одно предупреждение про %q, получили %q", tc.mention, got)
+			}
+		})
+	}
+}

@@ -19,7 +19,9 @@ import (
 // а Exec* этого юнита ждёт ту же блокировку: юнит не потомок держателя и
 // CREAM_LOCK_FD не наследует. Поэтому предупреждение — не на любой вызов
 // действия под блокировкой из Exec*, а только при признаке такого ожидания:
-//   - в тексте дерева расширения действия синхронный вызов (systemctl или
+//   - в исполняемой на машине части дерева расширения действия (без tests/,
+//     test/, docs/, doc/, *.md, README/LICENSE/NOTICE/CHANGELOG, если файл
+//     не раскладывается files) синхронный вызов (systemctl или
 //     deb-systemd-invoke без --no-block: start/stop/restart/reload/… или
 //     enable/disable/reenable/mask --now; service и invoke-rc.d) на этот
 //     юнит либо на юнит, упорядоченный после него: After= у того, Before= у
@@ -136,7 +138,7 @@ func (a *unitLockAnalysis) scan(x loaded) *lockScan {
 		s.conf = &h
 	}
 	s.addUnits(x)
-	s.scanTree(x.dir)
+	s.scanTree(x)
 	a.scans[x.m.Name] = s
 	return s
 }
@@ -239,15 +241,46 @@ func (s *lockScan) read(p, rel string) ([]byte, bool) {
 	return data, true
 }
 
-// scanTree reads every file of the tree (scripts, libraries, units; not
-// extension.yaml and markdown), resolves simple assignments across the tree
-// and collects the synchronous jobs. Text is taken as bytes, whatever its
-// encoding; a binary file mentioning systemctl makes the analysis incomplete.
-func (s *lockScan) scanTree(dir string) {
+// notRun are the top directories of a tree that never run on the machine:
+// the extension's tests and documentation (§7.3). A file of them laid out by
+// files is analysed all the same.
+var notRun = []string{"tests", "test", "docs", "doc"}
+
+// runsOnMachine tells whether the file rel of a tree may run on the machine:
+// hooks, actions, files sources and whatever else they may call (libraries
+// anywhere in the tree; what a script sources is not traced, so the rest of
+// the tree is kept), but not extension.yaml, markdown, README/LICENSE/NOTICE/
+// CHANGELOG and the directories notRun.
+func runsOnMachine(rel string, sources map[string]bool) bool {
+	if sources[rel] {
+		return true
+	}
+	if rel == manifest.ManifestFile || strings.HasSuffix(rel, ".md") {
+		return false
+	}
+	top, _, nested := strings.Cut(rel, "/")
+	if nested {
+		return !slices.Contains(notRun, top)
+	}
+	upper := strings.ToUpper(top)
+	return !slices.ContainsFunc([]string{"README", "LICENSE", "NOTICE", "CHANGELOG"},
+		func(p string) bool { return upper == p || strings.HasPrefix(upper, p+".") })
+}
+
+// scanTree reads every file of the tree of x that may run on the machine
+// (runsOnMachine), resolves simple assignments across them and collects the
+// synchronous jobs. Text is taken as bytes, whatever its encoding; a binary
+// file mentioning systemctl makes the analysis incomplete.
+func (s *lockScan) scanTree(x loaded) {
 	type logical struct {
 		where, text string
 	}
 	var lines []logical
+	dir := x.dir
+	sources := map[string]bool{}
+	for _, f := range x.m.Files {
+		sources[path.Clean(f.Src)] = true
+	}
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if s.a.incomplete != "" {
 			return fs.SkipAll
@@ -257,7 +290,7 @@ func (s *lockScan) scanTree(dir string) {
 		}
 		rel, _ := filepath.Rel(dir, p)
 		rel = filepath.ToSlash(rel)
-		if rel == manifest.ManifestFile || strings.HasSuffix(rel, ".md") {
+		if !runsOnMachine(rel, sources) {
 			return nil
 		}
 		data, ok := s.read(p, rel)
