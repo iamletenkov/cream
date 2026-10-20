@@ -1,6 +1,6 @@
-# CLI cream 1.0
+# CLI cream 1.1
 
-Справочник команд `cream` версии 1.0 (контракт `cream/v1`). Нормативный источник — [спека](specs/2026-10-18-cream-core.md)
+Справочник команд `cream` версии 1.1 (актуален для 1.1.3; контракт `cream/v1`). Нормативный источник — [спека](specs/2026-10-18-cream-core.md)
 §11; источник правды по поведению — код `internal/cli/cmd_*.go` и golden-файлы
 [`internal/cli/testdata/golden/`](../internal/cli/testdata/golden/), которые закрепляют форму `result` каждой команды.
 Решения, стоящие за контрактом, — [ADR-0001](adr/0001-contract-cream-v1.md) и [ADR-0002](adr/0002-single-dependency-stdlib-cli.md).
@@ -93,7 +93,7 @@
 | `catalog.cream_newer` | расширению каталога нужен cream новее текущего — пропущено, синхронизация не падает (Р22) |
 | `catalog.requires`, `catalog.conflicts` | с 1.1.0, `cream validate --catalog`: `requires` без поставщика в каталоге; `conflicts.extensions` на имя не из каталога |
 | `catalog.depends_external` | с 1.1.1, `cream validate --catalog`: `depends` на имя не из каталога (зависимость из другого источника раскладки) |
-| `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4) |
+| `validate.lock_none_set`, `validate.unit_lock`, `validate.apply_blocking` | `cream validate`: подозрительные вызовы в скриптах (§6.3, §7.3, §8.4). `validate.unit_lock` — только при признаке реального тупика §7.3 (с 1.1.2), по исполняемому на машине (с 1.1.3); если дерево расширения не разобрано целиком — «анализ неполон: … — возможен тупик», и только для этого расширения (с 1.1.4) |
 | `manifest.early_timeout` | с 1.1.1: `hooks.configure.timeout` стадии `early` больше 2 мин — зажат до 2 мин (загрузка ждёт `early` до `sysinit.target`) |
 | `manifest.early_network` | с 1.1.1: `hooks.configure.after` стадии `early` на `network.target` или `network-online.target` — цикл порядка (early стоит до `sysinit.target`) |
 | `platform.dev_build` | сборка cream без версии или не с тега (`git describe`: `1.0.0-3-g<хеш>`, `…-dirty`; с 1.1.0; после предрелизного тега — `1.1.0-rc.1-2-g<хеш>` — с 1.1.1) считается удовлетворяющей `cream:` манифеста |

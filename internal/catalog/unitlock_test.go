@@ -347,6 +347,18 @@ func TestUnitLockCoverage(t *testing.T) {
 		{name: "service", extra: map[string]string{"files/lib.sh": "#!/bin/sh\nservice join force-reload\n"},
 			mention: "files/lib.sh:2"},
 		{name: "service status is fine", extra: map[string]string{"files/lib.sh": "#!/bin/sh\nservice join status\n"}},
+		// service и invoke-rc.d — только в позиции команды (не аргумент echo, logger)
+		{name: "service quoted in echo", extra: map[string]string{
+			"files/lib.sh": "#!/bin/sh\necho \"service join restart\"\n"}},
+		{name: "service as an argument", extra: map[string]string{
+			"files/lib.sh": "#!/bin/sh\nlogger -t x service join restart\nprintf '%s' invoke-rc.d join restart\n"}},
+		{name: "service after sudo", extra: map[string]string{"files/lib.sh": "#!/bin/sh\nsudo -u root service join restart\n"},
+			mention: "files/lib.sh:2"},
+		{name: "service after if and assignment", extra: map[string]string{
+			"files/lib.sh": "#!/bin/sh\nif LC_ALL=C service join restart; then :; fi\n"}, mention: "files/lib.sh:2"},
+		{name: "invoke-rc.d after timeout", extra: map[string]string{
+			"files/lib.sh": "#!/bin/sh\ntimeout -k 5 30 /usr/sbin/invoke-rc.d join restart || true\n"},
+			mention: "files/lib.sh:2"},
 		{name: "invoke-rc.d", extra: map[string]string{"files/lib.sh": "#!/bin/sh\ninvoke-rc.d join restart\n"},
 			mention: "files/lib.sh:2"},
 		{name: "deb-systemd-invoke", extra: map[string]string{
@@ -515,5 +527,57 @@ func TestUnitLockScanScope(t *testing.T) {
 				t.Fatalf("ждали одно предупреждение про %q, получили %q", tc.mention, got)
 			}
 		})
+	}
+}
+
+// TestUnitLockIncompletePerExtension: «анализ неполон» belongs to the tree
+// that could not be analysed: a binary in one extension does not warn about
+// the units of another, and the warning says «возможен тупик», not «тупик».
+func TestUnitLockIncompletePerExtension(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	write := func(p, text string, mode os.FileMode) {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(text), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("cream-catalog.yaml", "schema: cream/v1\nname: fx\nversion: 1.0.0\nroots: [extensions]\n", 0o644)
+	for _, name := range []string{"aaa-bad", "mmm-real", "zzz-good"} {
+		write("extensions/"+name+"/extension.yaml", "name: "+name+"\nschema: cream/v1\nversion: 1.0.0\n"+
+			"summary: фикстура\ncream: \">=1.0.0\"\nplatform: {family: deb, arch: [amd64, arm64]}\n"+
+			"hooks:\n  install: {}\nactions:\n  retry: {summary: \"повтор\", lock: exclusive}\n"+
+			"files:\n  - {src: files/"+name+".service, dst: /etc/systemd/system/"+name+".service}\n", 0o644)
+		write("extensions/"+name+"/hooks/install", "#!/bin/sh\nexit 0\n", 0o755)
+		write("extensions/"+name+"/actions/retry", "#!/bin/sh\nexit 0\n", 0o755)
+		write("extensions/"+name+"/files/"+name+".service",
+			"[Service]\nType=oneshot\nExecStart=/usr/bin/cream run "+name+" retry\n", 0o644)
+	}
+	write("extensions/aaa-bad/files/helper.bin", "\x7fELF\x00\x00/bin/systemctl\x00restart\x00", 0o644)
+	write("extensions/mmm-real/hooks/install", "#!/bin/sh\nsystemctl restart mmm-real.service\n", 0o755)
+	r, err := Validate(root, cream100(t))
+	if err != nil {
+		t.Fatalf("Validate: %v (%+v)", err, r.Errors)
+	}
+	var got []string
+	for _, w := range r.Warnings {
+		if w.Code == warnUnitLock {
+			got = append(got, w.Message)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("ждали два предупреждения (aaa-bad и mmm-real), получили %q", got)
+	}
+	slices.Sort(got)
+	if bad := got[0]; !strings.HasPrefix(bad, "aaa-bad:") || !strings.Contains(bad, "анализ неполон") ||
+		!strings.Contains(bad, "— возможен тупик (§7.3)") {
+		t.Fatalf("неполный анализ aaa-bad: %q", bad)
+	}
+	if found := got[1]; !strings.HasPrefix(found, "mmm-real:") || strings.Contains(found, "анализ неполон") ||
+		!strings.Contains(found, "— тупик (§7.3)") || strings.Contains(found, "возможен") {
+		t.Fatalf("реальный тупик mmm-real: %q", found)
 	}
 }

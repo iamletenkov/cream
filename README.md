@@ -25,8 +25,11 @@ cream:
 `cream_<версия>_linux_<arch>.tar.gz` и `SHA256SUMS`.
 
 ```bash
+V=1.1.3; ARCH=$(dpkg --print-architecture)   # amd64 | arm64
+curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_${ARCH}.deb"
+curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS
-sudo apt install ./cream_1.0.0_amd64.deb
+sudo apt install "./cream_${V}_${ARCH}.deb"
 cream version
 ```
 
@@ -39,31 +42,44 @@ cream version
 ## Быстрый старт
 
 ```bash
-# источник — архив каталога по URL и sha256, сразу синхронизировать
+# 1. источник — архив каталога по URL и sha256, сразу синхронизировать
 sudo cream source add core \
-  --archive https://example.org/cream-extensions-4.0.0.tar.gz \
+  --archive https://example.org/cream-extensions-5.1.0.tar.gz \
   --sha256 <sha256 архива> --sync
 
-# установить расширение с параметрами; секрет — только со stdin (KEY=-)
+# 2. установить расширение с параметрами; секрет — только со stdin (KEY=-)
 sudo cream install core/teleport TELEPORT_PROXY=proxy.example:443
 
+# 3. поменять настройку: проверка всех ключей, запись, применение по apply расширения
+sudo cream set teleport TELEPORT_PROXY=proxy2.example:443
+
+# 4. действие расширения; флаги cream — до имени расширения
+cream actions teleport
+sudo cream run --json teleport status
+
+# 5. что установлено и в каком состоянии
 cream list
 cream show teleport
-sudo cream set teleport TELEPORT_PROXY=proxy2.example:443
-cream actions teleport --json
 ```
 
-Все команды, флаги, коды выхода и формы `--json` — в [docs/cli.md](docs/cli.md).
+Все команды и флаги — [docs/cli.md](docs/cli.md); коды выхода и `error.code` —
+[docs/cli.md «Коды выхода»](docs/cli.md#коды-выхода-спека-113): 0 — успех, 64 — неверный
+вызов, 65 — неверные данные, 66 — не найдено, 75 — блокировка занята, 79 — упал хук или
+действие; у `cream run` — код самого действия (0–63).
 
 ## Документация
 
-- [docs/cli.md](docs/cli.md) — справочник CLI, контракт для stvor-agent, фаза
-  build для bisquite;
-- [спека cream/v1](docs/specs/2026-10-18-cream-core.md) — формат расширения,
-  жизненный цикл, настройки, источники;
+- [docs/cli.md](docs/cli.md) — справочник CLI 1.1: команды, флаги, коды выхода и
+  предупреждений, формы `--json`, контракт для stvor-agent, фаза build для bisquite;
+- [спека cream/v1](docs/specs/2026-10-18-cream-core.md) — формат манифеста
+  `extension.yaml` (§4), жизненный цикл, блокировки, настройки, источники;
+- runbooks: [01 выпуск](docs/runbooks/01_release.md),
+  [02 диагностика на машине](docs/runbooks/02_diagnostics.md),
+  [03 обновление cream на роботе](docs/runbooks/03_upgrade-cream.md);
 - [ADR](docs/adr/README.md) — решения, которые трудно откатить;
-- [docs/README.md](docs/README.md) — индекс, [docs/STATUS.md](docs/STATUS.md) —
-  текущее состояние.
+- [docs/README.md](docs/README.md) — полный индекс, [docs/STATUS.md](docs/STATUS.md) —
+  текущее состояние;
+- [CHANGELOG.md](CHANGELOG.md) — изменения по версиям.
 
 ## Сборка
 

@@ -23,7 +23,8 @@ import (
 //     test/, docs/, doc/, *.md, README/LICENSE/NOTICE/CHANGELOG, если файл
 //     не раскладывается files) синхронный вызов (systemctl или
 //     deb-systemd-invoke без --no-block: start/stop/restart/reload/… или
-//     enable/disable/reenable/mask --now; service и invoke-rc.d) на этот
+//     enable/disable/reenable/mask --now; service и invoke-rc.d в позиции
+//     команды — после NAME=…, if/then/!, sudo/env/timeout…) на этот
 //     юнит либо на юнит, упорядоченный после него: After= у того, Before= у
 //     этого, неявный After= цели на юнит из WantedBy=/RequiredBy= и из
 //     Wants=/Requires= файла цели; с drop-in'ами из files, транзитивно;
@@ -47,7 +48,10 @@ import (
 //
 // Работа ограничена пределами unitLockLimits — общими на весь анализ
 // каталога, потому что каталог может быть чужим (cream source add). Что не
-// уложилось в предел, даёт предупреждение «анализ неполон», а не молчание.
+// уложилось в предел, даёт предупреждение «анализ неполон … — возможен
+// тупик», а не молчание. Неполнота принадлежит разбору того расширения, где
+// она случилась (двоичный файл, предел), а не всему прогону: соседние
+// расширения проверяются как обычно, пока общий бюджет не исчерпан.
 
 // systemctlValueFlags — флаги systemctl со значением отдельным словом.
 var systemctlValueFlags = []string{"-p", "--property", "-t", "--type", "-s", "--signal", "--state",
@@ -99,32 +103,37 @@ var defaultUnitLockLimits = unitLockLimits{treeBytes: 64 << 20, treeLines: 1 << 
 	wordLen: 1024, orderNodes: 4096, work: 1 << 22, names: 16 << 20}
 
 // unitLockAnalysis — состояние правила на один прогон валидатора: разборы
-// деревьев по расширению и общий счёт пределов.
+// деревьев по расширению и общий счёт пределов. Счётчик растёт только на
+// то, что уложилось в предел, — превысивший разбор не съедает остаток.
 type unitLockAnalysis struct {
 	lim                       unitLockLimits
 	scans                     map[string]*lockScan
 	bytes, lines, work, names int
-	incomplete                string // первый превышенный предел
 }
 
 func newUnitLockAnalysis(lim unitLockLimits) *unitLockAnalysis {
 	return &unitLockAnalysis{lim: lim, scans: map[string]*lockScan{}}
 }
 
-// fail records the first exceeded limit; the analysis is incomplete since.
-func (a *unitLockAnalysis) fail(why string) {
-	if a.incomplete == "" {
-		a.incomplete = why
+// fail records the first reason the analysis of this tree is incomplete.
+func (s *lockScan) fail(why string) {
+	if s.incomplete == "" {
+		s.incomplete = why
 	}
 }
 
-// charge spends n steps of the work budget; false once the analysis is
-// incomplete.
-func (a *unitLockAnalysis) charge(n int) bool {
-	if a.work += n; a.work > a.lim.work {
-		a.fail("больше " + strconv.Itoa(a.lim.work) + " шагов анализа")
+// charge spends n steps of the shared work budget; false once the analysis
+// of this tree is incomplete.
+func (s *lockScan) charge(n int) bool {
+	if s.incomplete != "" {
+		return false
 	}
-	return a.incomplete == ""
+	if s.a.work+n > s.a.lim.work {
+		s.fail("больше " + strconv.Itoa(s.a.lim.work) + " шагов анализа")
+		return false
+	}
+	s.a.work += n
+	return true
 }
 
 // scan returns the analysis of the tree of x, made once per run.
@@ -161,6 +170,8 @@ type lockScan struct {
 	conf   *manifest.Hook      // hooks.configure, если есть
 	ext    string
 	added  map[string]bool // чьи юниты уже в графе
+	// incomplete — первая причина, по которой разбор этого дерева неполон.
+	incomplete string
 	// globOrder — первый glob в зависимостях юнита: systemd их не
 	// разворачивает, порядок с ним не анализируется.
 	globOrder string
@@ -229,12 +240,12 @@ func (s *lockScan) read(p, rel string) ([]byte, bool) {
 		return nil, false
 	}
 	if s.a.bytes+int(st.Size()) > s.a.lim.treeBytes {
-		s.a.fail("деревья больше " + strconv.Itoa(s.a.lim.treeBytes) + " байт")
+		s.fail("деревья больше " + strconv.Itoa(s.a.lim.treeBytes) + " байт")
 		return nil, false
 	}
 	data, err := os.ReadFile(p)
 	if err != nil {
-		s.a.fail(rel + ": " + err.Error())
+		s.fail(rel + ": " + err.Error())
 		return nil, false
 	}
 	s.a.bytes += len(data)
@@ -282,7 +293,7 @@ func (s *lockScan) scanTree(x loaded) {
 		sources[path.Clean(f.Src)] = true
 	}
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if s.a.incomplete != "" {
+		if s.incomplete != "" {
 			return fs.SkipAll
 		}
 		if err != nil || !d.Type().IsRegular() {
@@ -299,15 +310,16 @@ func (s *lockScan) scanTree(x loaded) {
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
 			if slices.ContainsFunc(binaryMarkers, func(m []byte) bool { return bytes.Contains(data, m) }) {
-				s.a.fail(s.ext + ": " + rel + ": двоичный файл упоминает systemctl")
+				s.fail(rel + ": двоичный файл упоминает systemctl")
 			}
 			return nil
 		}
 		raw := strings.Split(string(data), "\n")
-		if s.a.lines += len(raw); s.a.lines > s.a.lim.treeLines {
-			s.a.fail("в деревьях больше " + strconv.Itoa(s.a.lim.treeLines) + " строк")
+		if s.a.lines+len(raw) > s.a.lim.treeLines {
+			s.fail("в деревьях больше " + strconv.Itoa(s.a.lim.treeLines) + " строк")
 			return fs.SkipAll
 		}
+		s.a.lines += len(raw)
 		for i := 0; i < len(raw); i++ {
 			start, text := i, raw[i]
 			for strings.HasSuffix(text, `\`) && i+1 < len(raw) {
@@ -356,10 +368,11 @@ func (s *lockScan) scanTree(x loaded) {
 			var names []string
 			for _, w := range units {
 				for _, n := range s.expand(w, vars, dynamic) {
-					if s.a.names += len(n) + 1; s.a.names > s.a.lim.names {
-						s.a.fail("имён юнитов в вызовах больше " + strconv.Itoa(s.a.lim.names) + " байт")
+					if s.a.names+len(n)+1 > s.a.lim.names {
+						s.fail("имён юнитов в вызовах больше " + strconv.Itoa(s.a.lim.names) + " байт")
 						return
 					}
+					s.a.names += len(n) + 1
 					names = append(names, n)
 				}
 			}
@@ -375,11 +388,16 @@ func (s *lockScan) scanTree(x loaded) {
 func syncCall(words []string) (cmd string, units []string, ok bool) {
 	i := slices.IndexFunc(words, func(w string) bool {
 		switch path.Base(w) {
-		case "systemctl", "deb-systemd-invoke", "service", "invoke-rc.d":
+		case "systemctl", "deb-systemd-invoke":
 			return true
 		}
 		return false
 	})
+	if c := commandIndex(words); c >= 0 && (i < 0 || c < i) {
+		if b := path.Base(words[c]); b == "service" || b == "invoke-rc.d" {
+			i = c
+		}
+	}
 	if i < 0 {
 		return "", nil, false
 	}
@@ -425,6 +443,49 @@ func syncCall(words []string) (cmd string, units []string, ok bool) {
 		units = append(units, unresolved) // "$@" обёртки, xargs: юниты неизвестны
 	}
 	return cmd, units, true
+}
+
+// wrappers run the command after them (shell keywords are here too):
+// valueFlags take a value as a separate word, positional is the number of
+// words the wrapper takes before the command (timeout DURATION).
+var wrappers = map[string]struct {
+	valueFlags []string
+	positional int
+}{
+	"sudo":    {valueFlags: []string{"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U", "-T", "-R"}},
+	"env":     {valueFlags: []string{"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}},
+	"nice":    {valueFlags: []string{"-n", "--adjustment"}},
+	"ionice":  {valueFlags: []string{"-c", "-n", "-p", "-P", "-u", "--class", "--classdata"}},
+	"timeout": {valueFlags: []string{"-k", "-s", "--kill-after", "--signal"}, positional: 1},
+	"nohup":   {}, "exec": {}, "command": {}, "time": {}, "xargs": {}, "setsid": {}, "stdbuf": {},
+	"chronic": {}, "then": {}, "do": {}, "else": {}, "if": {}, "elif": {}, "while": {}, "until": {},
+	"!": {}, "{": {},
+}
+
+// commandIndex returns the index of the word in command position of a
+// simple command: after assignments NAME=…, shell keywords and wrappers
+// (sudo, env, timeout … with their flags); -1 when there is none. service
+// and invoke-rc.d count only there, so `echo "service x restart"` is not a
+// call.
+func commandIndex(words []string) int {
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		if reAssign.MatchString(w) {
+			continue
+		}
+		wr, ok := wrappers[path.Base(w)]
+		if !ok {
+			return i
+		}
+		for i+1 < len(words) && strings.HasPrefix(words[i+1], "-") {
+			i++
+			if slices.Contains(wr.valueFlags, words[i]) {
+				i++
+			}
+		}
+		i += wr.positional
+	}
+	return -1
 }
 
 // assignedValues splits the right side of an assignment into values: an
@@ -511,7 +572,7 @@ func (s *lockScan) waitersOf(unit string) map[string]bool {
 	if s.before == nil {
 		s.before = map[string][]string{}
 		for u, deps := range s.after {
-			if !s.a.charge(len(deps) + 1) {
+			if !s.charge(len(deps) + 1) {
 				return nil
 			}
 			for _, d := range deps {
@@ -525,14 +586,14 @@ func (s *lockScan) waitersOf(unit string) map[string]bool {
 		u := queue[0]
 		queue = queue[1:]
 		for _, next := range s.before[u] {
-			if !s.a.charge(1) {
+			if !s.charge(1) {
 				return nil
 			}
 			if w[next] {
 				continue
 			}
 			if len(w) >= s.a.lim.orderNodes {
-				s.a.fail("после " + unit + " упорядочено больше " + strconv.Itoa(s.a.lim.orderNodes) + " юнитов")
+				s.fail("после " + unit + " упорядочено больше " + strconv.Itoa(s.a.lim.orderNodes) + " юнитов")
 				s.waiters[unit] = nil
 				return nil
 			}
@@ -544,16 +605,20 @@ func (s *lockScan) waitersOf(unit string) map[string]bool {
 	return w
 }
 
+// incompletePrefix starts the evidence when the tree was not analysed in
+// full: the deadlock is possible, not found.
+const incompletePrefix = "анализ неполон: "
+
 // why explains why a holder of the lock can wait for a job of unit; "" when
-// nothing in the tree points to it. The answer is cached per unit; once a
-// limit is exceeded it is "анализ неполон: …".
+// nothing in the tree points to it. The answer is cached per unit; once the
+// analysis of this tree is incomplete it is incompletePrefix + the reason.
 func (s *lockScan) why(unit string) string {
 	if e, ok := s.evidence[unit]; ok {
 		return e
 	}
 	e := s.findWhy(unit)
-	if s.a.incomplete != "" {
-		e = "анализ неполон: " + s.a.incomplete
+	if s.incomplete != "" {
+		e = incompletePrefix + s.incomplete
 	}
 	if s.evidence == nil {
 		s.evidence = map[string]string{}
@@ -569,13 +634,13 @@ func (s *lockScan) findWhy(unit string) string {
 	}
 	for _, j := range s.jobs {
 		for _, u := range j.units {
-			if !s.a.charge(1) {
+			if !s.charge(1) {
 				return ""
 			}
 			wait := u == unresolved || w[unitName(u)]
 			if !wait && isGlob(u) {
 				for cand := range w {
-					if !s.a.charge(1) {
+					if !s.charge(1) {
 						return ""
 					}
 					if m, _ := path.Match(u, cand); m {
@@ -658,9 +723,14 @@ func (t *tree) warnUnitLock(x loaded, idx map[string]loaded, a *unitLockAnalysis
 			if why == "" {
 				continue
 			}
+			verdict := "тупик"
+			if strings.HasPrefix(why, incompletePrefix) {
+				verdict = "возможен тупик"
+			}
 			t.r.warn(warnUnitLock, "%s: %s:%d: %s вызывает cream run %s %s с lock: %s, а держатель lock/%s может "+
-				"ждать задание %s: %s — тупик (§7.3); действие из Exec* такого юнита объявляется lock: none",
-				t.ext, path.Join(t.rel, f.Src), n+1, strings.TrimSpace(key), ext, action, act.Lock, ext, unit, why)
+				"ждать задание %s: %s — %s (§7.3); действие из Exec* такого юнита объявляется lock: none",
+				t.ext, path.Join(t.rel, f.Src), n+1, strings.TrimSpace(key), ext, action, act.Lock, ext, unit, why,
+				verdict)
 		}
 	}
 }
