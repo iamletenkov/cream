@@ -5,6 +5,9 @@
 [`internal/cli/testdata/golden/`](../internal/cli/testdata/golden/), которые закрепляют форму `result` каждой команды.
 Решения, стоящие за контрактом, — [ADR-0001](adr/0001-contract-cream-v1.md) и [ADR-0002](adr/0002-single-dependency-stdlib-cli.md).
 
+Пакет `.deb` ставит `cream(1)` и `cream-extension.yaml(5)`: страницы рендерит `internal/cli/man.go` из той же
+таблицы команд и флагов, что `--help` (английский текст — рядом, тест сверяет списки), `make man` кладёт их в `dist/man/`.
+
 Добавления минорных версий помечены «с 1.1.0»: в минорной версии команды, флаги, поля `result` и коды ошибок только
 добавляются (ADR-0001).
 

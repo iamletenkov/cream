@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -61,11 +62,7 @@ func (a App) commands() []Command {
 // isReservedCommand reports commands deferred past cream 1.0 (ruling Р1):
 // they are known to the dispatcher and answer 64 usage.reserved.
 func isReservedCommand(name string) bool {
-	switch name {
-	case "search", "info", "verify", "assume", "lineage", "check", "status", "path", "stage":
-		return true
-	}
-	return false
+	return slices.Contains(reservedCommands, name)
 }
 
 func findCommand(cmds []Command, name string) (Command, bool) {

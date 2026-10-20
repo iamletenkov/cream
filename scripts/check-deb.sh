@@ -32,6 +32,8 @@ check_deb() {
 		-rw-r--r-- root/root /usr/lib/systemd/system/cream-configure@.service
 		-rw-r--r-- root/root /usr/share/doc/cream/changelog.gz
 		-rw-r--r-- root/root /usr/share/doc/cream/copyright
+		-rw-r--r-- root/root /usr/share/man/man1/cream.1.gz
+		-rw-r--r-- root/root /usr/share/man/man5/cream-extension.yaml.5.gz
 		-rwxr-xr-x root/root /usr/bin/cream
 		-rwxr-xr-x root/root /usr/lib/cream/guest/linux-amd64/cream
 		-rwxr-xr-x root/root /usr/lib/cream/guest/linux-arm64/cream
@@ -76,6 +78,18 @@ check_deb() {
 	gzip -t "$work/root/usr/share/doc/cream/changelog.gz" || bad "$deb: changelog.gz битый"
 	zcat "$work/root/usr/share/doc/cream/changelog.gz" | head -n1 | grep -q "^cream ($version)" ||
 		bad "$deb: заголовок changelog не про версию $version"
+	# man-страницы (как lintian): gzip -9n без имени и времени, заголовок .TH
+	# с разделом, разделы NAME/SYNOPSIS/DESCRIPTION, только ASCII.
+	for m in man1/cream.1 man5/cream-extension.yaml.5; do
+		f="$work/root/usr/share/man/$m.gz"
+		gzip -t "$f" || { bad "$deb: $m.gz битый"; continue; }
+		[ "$(od -An -tu1 -j4 -N4 "$f" | tr -s ' ')" = " 0 0 0 0" ] || bad "$deb: $m.gz с временем в заголовке gzip"
+		zcat "$f" | head -n1 | grep -q "^\.TH [A-Z.-]* ${m##*.} " || bad "$deb: $m без .TH раздела ${m##*.}"
+		for sec in NAME SYNOPSIS DESCRIPTION; do
+			zcat "$f" | grep -q "^\.SH $sec\$" || bad "$deb: в $m нет .SH $sec"
+		done
+		if zcat "$f" | LC_ALL=C grep -q '[^[:print:][:space:]]'; then bad "$deb: в $m не-ASCII символы"; fi
+	done
 	# Бинарь своей архитектуры запускается: статический, версия встроена.
 	if [ "$(uname -m)" = "$(case "$arch" in amd64) echo x86_64 ;; arm64) echo aarch64 ;; esac)" ]; then
 		"$work/root/usr/bin/cream" version >"$work/version" || bad "$deb: cream version упал"

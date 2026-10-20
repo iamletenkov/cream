@@ -1,7 +1,7 @@
 # nfpm: .deb cream (спека §5, §15). Собирается make deb / make dist-release в
 # контейнере goreleaser/nfpm (тег закреплён в Makefile) из корня репозитория.
 # Переменные окружения: ARCH (amd64|arm64), DEB_VERSION (без «v»), STAGE
-# (каталог changelog.gz от scripts/dist-release.sh stage); mtime всех записей —
+# (каталог changelog.gz от scripts/dist-release.sh stage и man/ от tools/genman); mtime всех записей —
 # SOURCE_DATE_EPOCH. Состав проверяет scripts/check-deb.sh.
 name: cream
 arch: ${ARCH}
@@ -52,6 +52,16 @@ contents:
       mode: 0755
   - src: packaging/copyright
     dst: /usr/share/doc/cream/copyright
+    file_info:
+      mode: 0644
+  - src: ${STAGE}/man/cream.1.gz
+    dst: /usr/share/man/man1/cream.1.gz
+    expand: true
+    file_info:
+      mode: 0644
+  - src: ${STAGE}/man/cream-extension.yaml.5.gz
+    dst: /usr/share/man/man5/cream-extension.yaml.5.gz
+    expand: true
     file_info:
       mode: 0644
   - src: ${STAGE}/changelog.gz

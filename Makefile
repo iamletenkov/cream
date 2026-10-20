@@ -50,7 +50,7 @@ GO = $(DOCKER_RUN) $(GO_IMAGE)
 GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -path ./.git \) -prune -o -name '*.go' -print
 
 .DEFAULT_GOAL := help
-.PHONY: help build build-all test test-golden lint fmt tidy ci ci-unlocked clean cache \
+.PHONY: help build build-all test test-golden lint fmt tidy man ci ci-unlocked clean cache \
 	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln \
 	test-integration test-integration-unlocked test-build test-build-unlocked envfile-refs
 
@@ -100,11 +100,12 @@ deb: ## $(RELEASE_DIR)/cream_<v>_$(ARCH).deb (nfpm; ARCH=amd64|arm64, под з�
 deb-unlocked: build-all
 	$(MAKE) --no-print-directory deb-pkg
 
-# Один .deb из готовых dist/cream-linux-*: changelog.gz → nfpm → проверка
+# Один .deb из готовых dist/cream-linux-*: changelog.gz и man-страницы → nfpm → проверка
 # состава в debian (scripts/check-deb.sh).
 deb-pkg:
 	@mkdir -p $(RELEASE_DIR)
 	$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/dist-release.sh stage $(DEB_VERSION) $(RELEASE_DIR)
+	$(GO) go run ./tools/genman -out $(RELEASE_DIR)/stage/man -version $(DEB_VERSION)
 	$(DOCKER_RUN) -e ARCH=$(ARCH) -e DEB_VERSION=$(DEB_VERSION) -e STAGE=$(RELEASE_DIR)/stage \
 		$(NFPM_IMAGE) package -f packaging/nfpm.yaml -p deb -t $(RELEASE_DIR)/cream_$(DEB_VERSION)_$(ARCH).deb
 	$(DOCKER_RUN) $(DEBIAN_IMAGE) sh scripts/check-deb.sh deb $(DEB_VERSION) $(ARCH) $(RELEASE_DIR)
@@ -149,6 +150,10 @@ envfile-refs: ## переснять эталоны EnvironmentFile systemd 249/2
 
 # go run …@версия собирает govulncheck вне модуля: go.mod/go.sum не меняются,
 # модули инструмента — в отдельном .cache/vuln-mod.
+# Страницы рендерит internal/cli из той же таблицы команд, что --help (tools/genman).
+man: cache ## man-страницы cream.1, cream-extension.yaml.5 (и .gz) в dist/man; смотреть: man -l dist/man/cream.1
+	$(GO) go run ./tools/genman -out dist/man -version $(DEB_VERSION) -plain
+
 vuln: cache ## govulncheck по модулю (версия закреплена в GOVULNCHECK)
 	$(DOCKER_RUN) -e GOMODCACHE=/cache/vuln-mod -e GOFLAGS="-buildvcs=false -mod=mod" \
 		$(GO_IMAGE) go run $(GOVULNCHECK) ./...
