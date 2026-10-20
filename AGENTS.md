@@ -2,7 +2,7 @@
 
 **cream** — исполнитель расширений: один статический Go-бинарь `cream` (linux/amd64, linux/arm64), ставится `.deb`. Читает `extension.yaml`, ведёт жизненный цикл install / upgrade / configure / remove на живой машине и фазу build внутри `virt-customize`, хранит состояние установленного, даёт `cream set` / `cream show` (бывший `bisquite-conf`) и работает с источниками каталогов. Лицензия Apache-2.0.
 
-**MVP 1.0 готов к выпуску** по [спеке](docs/specs/2026-10-18-cream-core.md) и [плану](docs/plans/2026-10-18-cream-core.md): формат `cream/v1`, источники, резолвер, install / upgrade / remove / set / run, фаза build, `.deb` и тарболы. Контракт — [ADR 0001](docs/adr/0001-contract-cream-v1.md), реализация CLI и сборки — [ADR 0002](docs/adr/0002-single-dependency-stdlib-cli.md), справочник CLI и форм `--json` — [docs/cli.md](docs/cli.md). Состояние — [docs/STATUS.md](docs/STATUS.md).
+**Выпущена 1.1.3.** MVP 1.0 и 1.1 сделаны по [спеке](docs/specs/2026-10-18-cream-core.md) и [плану](docs/plans/2026-10-18-cream-core.md): формат `cream/v1`, источники, резолвер, install / upgrade / remove / set / run, фаза build, `.deb` и тарболы. Контракт — [ADR 0001](docs/adr/0001-contract-cream-v1.md), реализация CLI и сборки — [ADR 0002](docs/adr/0002-single-dependency-stdlib-cli.md), справочник CLI и форм `--json` — [docs/cli.md](docs/cli.md). Состояние — [docs/STATUS.md](docs/STATUS.md).
 
 ## Место в экосистеме
 - **bisquite** — собирает образы ВМ; в слоях сборки вызывает `cream` (фаза build).
@@ -45,7 +45,7 @@ test/build/           — make test-build: фаза build настоящим vir
 packaging/            — nfpm.yaml, maintainer-скрипты, copyright (полные тексты сторонних лицензий)
 scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh
 LICENSE, NOTICE       — Apache-2.0 и уведомления о стороннем коде
-docs/                 — README.md (индекс), STATUS.md, cli.md, adr/, specs/, plans/, research/
+docs/                 — README.md (индекс), STATUS.md, cli.md, adr/, specs/, plans/, research/, runbooks/ (выпуск, диагностика, обновление на машине)
 .claude/              — агенты, skills, правила, хуки Claude Code
 .github/              — CI (ci, vuln, repro-check, интеграция amd64/arm64), release-please, ассеты релиза
 Makefile              — единственный способ что-либо запускать (`make help`)
