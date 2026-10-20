@@ -247,3 +247,74 @@ jobs:
             "cream_${v}_amd64.deb" "cream_${v}_arm64.deb" \
             "cream_${v}_linux_amd64.tar.gz" "cream_${v}_linux_arm64.tar.gz" \
             SHA256SUMS
+
+  # Выпуск поднимает пин cream у потребителей: в каждом целевом репозитории
+  # запускает свой workflow, который берёт SHA256SUMS выпуска, ставит версию
+  # и суммы .deb и открывает PR (идемпотентно: пин уже на версии или PR
+  # открыт — второго нет). Идёт после release-assets: до загрузки сумм нет.
+  #
+  #   cream-extensions  cream-bump.yml        tools/cream-pin.env
+  #   bisquite          cream-bump.yml        cream-pin.env и фикстуры контракта
+  #   stvor             robot-pins-bump.yml   CREAM_* в .env.example
+  #
+  # У каждой цели свой выключатель (переменная репозитория = true) и свой
+  # токен: fine-grained PAT только на целевой репозиторий с правом Actions:
+  # Read and write (ветку и PR там делает GITHUB_TOKEN того workflow). Нет
+  # секрета — предупреждение в журнале, job зелёный: выпуск cream от
+  # потребителей не зависит. GITHUB_TOKEN чужой workflow запустить не может.
+  dispatch:
+    name: Bump cream in ${{ matrix.repo }}
+    needs: [release-please, release-assets]
+    if: >-
+      !cancelled() && needs.release-assets.result == 'success' && (
+        needs.release-please.outputs.release_created == 'true' ||
+        (github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.upload)
+      )
+    runs-on: ubuntu-latest
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: cream-extensions
+            workflow: cream-bump.yml
+            switch: EXTENSIONS_BUMP_ENABLED
+            secret: EXTENSIONS_DISPATCH_TOKEN
+          - repo: bisquite
+            workflow: cream-bump.yml
+            switch: BISQUITE_BUMP_ENABLED
+            secret: BISQUITE_DISPATCH_TOKEN
+          - repo: stvor
+            workflow: robot-pins-bump.yml
+            switch: STVOR_BUMP_ENABLED
+            secret: STVOR_DISPATCH_TOKEN
+            args: -f component=cream
+    steps:
+      - name: Dispatch ${{ matrix.workflow }}
+        env:
+          GH_TOKEN: ${{ secrets[matrix.secret] }}
+          ENABLED: ${{ vars[matrix.switch] }}
+          SWITCH: ${{ matrix.switch }}
+          SECRET: ${{ matrix.secret }}
+          WORKFLOW: ${{ matrix.workflow }}
+          ARGS: ${{ matrix.args }}
+          TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          TARGET_REPO: iamletenkov/${{ matrix.repo }}
+        run: |
+          set -euo pipefail
+          if [ "$ENABLED" != true ]; then
+            echo "::notice::$SWITCH не true — подъём cream $TAG в $TARGET_REPO пропущен"
+            exit 0
+          fi
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Тег выпуска должен иметь вид vX.Y.Z, получено: '$TAG'"
+            exit 1
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Нет секрета $SECRET — подъём cream $TAG в $TARGET_REPO пропущен"
+            exit 0
+          fi
+          # ARGS — из матрицы выше, не из ввода; разбиение по словам намеренно.
+          # shellcheck disable=SC2086
+          gh workflow run "$WORKFLOW" -R "$TARGET_REPO" --ref main $ARGS -f tag="$TAG"
+          echo "Запущен $WORKFLOW в $TARGET_REPO для $TAG"
