@@ -11,6 +11,7 @@
 | [adr/0001-contract-cream-v1.md](adr/0001-contract-cream-v1.md) | ADR: что входит в контракт cream/v1 и как он меняется |
 | [adr/0002-single-dependency-stdlib-cli.md](adr/0002-single-dependency-stdlib-cli.md) | ADR: одна зависимость yaml, CLI на stdlib `flag`, nfpm без goreleaser |
 | [specs/2026-10-18-cream-core.md](specs/2026-10-18-cream-core.md) | спека cream/v1: формат расширения, жизненный цикл, действия, настройки, источники, CLI, фаза build, MVP |
+| [specs/2026-10-20-openwrt.md](specs/2026-10-20-openwrt.md) | черновик спеки: OpenWrt (x86-64, arm64, RPi 4/5) в cream, Teleport и Stvor — procd, состояние вне tmpfs, Teleport на musl, срезы и вопросы владельцу |
 | [runbooks/01_release.md](runbooks/01_release.md) | выпуск версии: release-please, ассеты, `SHA256SUMS`, воспроизводимая сборка, что тянет выпуск (подъём пина у потребителей) |
 | [runbooks/02_diagnostics.md](runbooks/02_diagnostics.md) | диагностика на машине: `cream list`/`show`, журналы `cream-configure@`, блокировки, коды выхода |
 | [runbooks/03_upgrade-cream.md](runbooks/03_upgrade-cream.md) | обновление cream на роботе: `.deb`, сверка `SHA256SUMS`, проверка и откат |
