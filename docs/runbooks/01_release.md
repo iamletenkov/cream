@@ -33,6 +33,22 @@ make repro-check                    # две сборки с разными ке
 ```
 (Каталог вывода — `RELEASE_DIR` в `Makefile`.)
 
+## Что тянет выпуск
+После ассетов job **Bump cream in …** (матрица `dispatch` в `.github/workflows/ci.yml`) запускает подъём пина у
+потребителей; каждый открывает PR в своём репозитории (повтор идемпотентен). Вся цепочка — runbook портала Stvor
+«цепочка выпусков cream».
+
+| Цель | Workflow там | Что меняет PR | Выключатель (переменная здесь) | Секрет здесь |
+|---|---|---|---|---|
+| cream-extensions | `cream-bump.yml` | `tools/cream-pin.env` | `EXTENSIONS_BUMP_ENABLED` | `EXTENSIONS_DISPATCH_TOKEN` |
+| bisquite | `cream-bump.yml` | `cream-pin.env`, фикстуры `tests/fixtures/cream/<v>/` | `BISQUITE_BUMP_ENABLED` | `BISQUITE_DISPATCH_TOKEN` |
+| stvor | `robot-pins-bump.yml` | `CREAM_*` в `.env.example` | `STVOR_BUMP_ENABLED` | `STVOR_DISPATCH_TOKEN` |
+
+Секрет — fine-grained PAT только на целевой репозиторий, право Actions: Read and write. Включить —
+`gh variable set EXTENSIONS_BUMP_ENABLED -R iamletenkov/cream --body true`, выключить — `gh variable delete …`.
+Без секрета job пишет предупреждение и остаётся зелёным. Повторить подъём руками — в целевом репозитории
+Actions → Run workflow с `tag=vX.Y.Z` (или ручной запуск CI здесь с `tag` и `upload=true`).
+
 ## Если ассетов нет или они битые
 Actions → CI → Run workflow с `tag=vX.Y.Z`: без `upload` — сухой прогон (сборка и сверка `SHA256SUMS`), с
 `upload=true` — загрузка в релиз с заменой файлов. Неверная запись в changelog чинится revert-коммитом, история
