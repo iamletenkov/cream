@@ -9,7 +9,8 @@
    ```bash
    gh pr list --label "autorelease: pending"
    ```
-3. PR `chore(main): release …`, открытый под `GITHUB_TOKEN`, проверок не запускает. Проверить, что `main` зелёный, и
+3. PR `chore(main): release …` открывается от секрета `RELEASE_PR_TOKEN` (PAT владельца) и запускает CI сам; без секрета —
+   под `GITHUB_TOKEN`, и тогда проверок на PR нет. Проверить, что CI PR (или `main`) зелёный, и
    прочитать `CHANGELOG.md` в диффе:
    ```bash
    gh run list -L 3 --branch main
