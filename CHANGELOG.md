@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/iamletenkov/cream/compare/v1.1.2...v1.1.3) (2026-10-20)
+
+
+### Исправлено
+
+* **catalog:** validate.unit_lock анализирует только исполняемое на машине ([#11](https://github.com/iamletenkov/cream/issues/11)) ([98acf6b](https://github.com/iamletenkov/cream/commit/98acf6bb4fbddd14ae2c440a9fcec767ccf8eeee))
+
 ## [1.1.2](https://github.com/iamletenkov/cream/compare/v1.1.1...v1.1.2) (2026-10-19)
 
 
