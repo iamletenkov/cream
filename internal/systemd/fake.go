@@ -16,6 +16,9 @@ type Fake struct {
 	ReloadErr  error
 	RestartErr error
 	StopErr    error
+	// OnRestart, when set, runs on Restart (after it is recorded) and its
+	// error replaces RestartErr: a test plays the unit's ExecStart there.
+	OnRestart func(unit string, noBlock bool) error
 
 	mu    sync.Mutex
 	calls []string
@@ -48,12 +51,15 @@ func (f *Fake) DaemonReload(context.Context) error {
 	return f.ReloadErr
 }
 
-// Restart returns RestartErr.
+// Restart returns RestartErr, or the error of OnRestart when it is set.
 func (f *Fake) Restart(_ context.Context, unit string, noBlock bool) error {
 	if noBlock {
 		f.record("restart --no-block " + unit)
 	} else {
 		f.record("restart " + unit)
+	}
+	if f.OnRestart != nil {
+		return f.OnRestart(unit, noBlock)
 	}
 	return f.RestartErr
 }

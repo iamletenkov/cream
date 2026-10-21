@@ -240,6 +240,11 @@ func (l Layout) RunDir() string { return l.sys("run/cream") }
 // RunReason is the CREAM_REASON marker for configure, /run/cream/<ext>.reason.
 func (l Layout) RunReason(ext string) string { return l.sys("run/cream", ext+".reason") }
 
+// RunResult is the outcome of the last configure run of the unit,
+// /run/cream/configure/<ext>.result: what `cream configure --wait` reports
+// after a restart of cream-configure@<ext>.
+func (l Layout) RunResult(ext string) string { return l.sys("run/cream", "configure", ext+".result") }
+
 // RebootRequired is /run/reboot-required.
 func (l Layout) RebootRequired() string { return l.sys("run/reboot-required") }
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/state"
 )
 
@@ -76,36 +75,29 @@ func TestConfigureSkippedOnBoot(t *testing.T) {
 	}
 }
 
-// Прежняя отметка при коде 20 не удаляется и не обновляется: изменение,
-// из-за которого хук пошёл, остаётся видимым, и хук повторится.
-func TestConfigureSkippedKeepsOldMark(t *testing.T) {
+// Прежняя отметка при коде 20 снимается (решение владельца: «при коде 20 —
+// повтор на следующей загрузке»): хук гарантированно пойдёт снова, даже если
+// отметка от прошлой успешной загрузки совпала бы с реестром.
+func TestConfigureSkippedDropsOldMark(t *testing.T) {
 	t.Parallel()
 	te := newConfiguredEngine(t, fixtureDir(t, cfgExt))
 	bootConfigure(t, te)
-	old := getMark(t, te)
-	if old == nil {
+	if getMark(t, te) == nil {
 		t.Fatal("отметка не записана после успеха")
 	}
-	if _, err := te.Set(context.Background(), cfgExt, []config.Change{{Key: "MESSAGE", Value: "changed"}},
-		SetOptions{}); err != nil {
-		t.Fatal(err)
-	}
 	writeHook(t, te, cfgExt, "configure", skipHook)
-
-	if res := bootConfigure(t, te); res.Mode != ApplyHook || res.Status != ConfigureSkipped {
-		t.Fatalf("загрузка после set: %+v", res)
+	// Ручной прогон (причина apply) идёт мимо отметки и выходит с кодом 20.
+	res, err := te.ConfigureReport(context.Background(), cfgExt, ReasonApply, ConfigureOptions{})
+	if err != nil || res.Mode != ApplyHook || res.Status != ConfigureSkipped {
+		t.Fatalf("ручной прогон: %+v %v", res, err)
 	}
-	mark := getMark(t, te)
-	if mark == nil {
-		t.Fatal("код 20 удалил прежнюю отметку")
-	}
-	if !mark.Same(*old) || !mark.At.Equal(old.At) {
-		t.Errorf("код 20 обновил отметку: было %+v, стало %+v", old, mark)
+	if getMark(t, te) != nil {
+		t.Fatal("код 20 оставил прежнюю отметку: на загрузке хук был бы пропущен")
 	}
 	if res := bootConfigure(t, te); res.Mode != ApplyHook {
 		t.Errorf("повтор на следующей загрузке не пошёл: %+v", res)
 	}
-	// Счётчик общий с хуком фикстуры: успех + две загрузки с кодом 20.
+	// Счётчик общий с хуком фикстуры: успех + ручной прогон + загрузка.
 	if n := hookCount(t, te, cfgExt, "configure"); n != 3 {
 		t.Errorf("хук вызван %d раз, ждали 3", n)
 	}
@@ -135,8 +127,8 @@ func TestConfigureSkippedManual(t *testing.T) {
 	}
 }
 
-// Успешный прогон не несёт status: поле только у пропуска.
-func TestConfigureSuccessHasNoStatus(t *testing.T) {
+// Успешный прогон хука несёт status ok (как и пропуск, и сбой — исход хука).
+func TestConfigureSuccessStatusOK(t *testing.T) {
 	t.Parallel()
 	te := newConfiguredEngine(t, fixtureDir(t, cfgExt))
 	res := bootConfigure(t, te)
@@ -144,8 +136,8 @@ func TestConfigureSuccessHasNoStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Status != "" || strings.Contains(string(data), `"status"`) {
-		t.Errorf("успех со status: %s", data)
+	if res.Status != ConfigureOK || !strings.Contains(string(data), `"status":"ok"`) {
+		t.Errorf("успех без status ok: %s", data)
 	}
 }
 

@@ -2,16 +2,19 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/fsx"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/runner"
@@ -43,15 +46,22 @@ const ReasonFollowup = "followup"
 // the configure mark matches the registry (§10.7).
 const ConfigureUpToDate = "up-to-date"
 
-// ConfigureSkipped is ConfigureResult.Status when the hook ran here and
-// exited with code 20 (§10.8): not an error, the configure mark is neither
-// written nor removed, and the hook runs again at the next boot.
-const ConfigureSkipped = "skipped"
+// Statuses of a configure run (ConfigureResult.Status, the unit's result
+// file, details.status of a failure). ConfigureSkipped is hook code 20
+// (§10.8): not an error, the configure mark is removed, and the hook runs
+// again at the next boot.
+const (
+	ConfigureOK      = "ok"
+	ConfigureSkipped = "skipped"
+	ConfigureFailed  = "failed"
+)
 
 // ConfigureResult is the result of `cream configure` (golden: configure*.json).
-// Mode is ApplyHook (the hook ran here), ApplyRestart, ApplyQueued or
-// ApplyNone (the extension has no configure hook). Status is
-// ConfigureSkipped after hook code 20 and empty otherwise.
+// Mode is ApplyHook (the hook ran here), ApplyRestart, ApplyQueued,
+// ConfigureUpToDate or ApplyNone (the extension has no configure hook).
+// Status is the outcome of the hook (ok, skipped, failed) when it is known: with
+// ApplyHook, and with ApplyRestart from the result file the unit wrote;
+// empty for a queued restart, a skip by the mark and no hook.
 type ConfigureResult struct {
 	Ext            string `json:"ext"`
 	Reason         string `json:"reason"`
@@ -84,9 +94,11 @@ func (e *Engine) Configure(ctx context.Context, ext, reason string, o ConfigureO
 // direct run and the unit take it. A successful run in the live phase writes
 // the configure mark; a failed hook is 79, removes the mark and appends a
 // configure entry with status failed to history.jsonl; hook code 20 is not
-// an error but status skipped (§10.8): the mark is left as it is, a
-// configure entry with status skipped goes to history.jsonl, and at boot the
-// hook runs again unless an older mark still matches. The registry is not changed (§6.4).
+// an error but status skipped (§10.8): the mark is removed, a configure
+// entry with status skipped goes to history.jsonl, and the hook runs again
+// at the next boot. The unit's run records its outcome in the result file
+// (RunResult), which a synchronous restart reads back. The registry is not
+// changed (§6.4).
 func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o ConfigureOptions) (ConfigureResult, error) {
 	res := ConfigureResult{Ext: ext, Reason: reason, Mode: ApplyNone}
 	if err := checkConfigureFlags(o); err != nil {
@@ -122,8 +134,7 @@ func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o Conf
 	}
 	if !o.FromUnit {
 		if st, up := e.Systemctl.Running(ctx); up {
-			res.Mode, err = e.restartConfigure(ctx, ext, reason, o.Wait, st)
-			return res, err
+			return e.restartWithResult(ctx, res, o.Wait, st)
 		}
 	}
 
@@ -149,6 +160,9 @@ func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o Conf
 	live := e.Phase() == PhaseLive
 	if live && res.Reason == ReasonBoot && !in.Manifest.Hooks[manifest.HookConfigure].EveryBoot && e.markMatches(in) {
 		res.Mode = ConfigureUpToDate
+		if o.FromUnit {
+			e.dropResult(ext)
+		}
 		_, _ = fmt.Fprintf(e.stderr(), "configure %s: пропуск, отметка совпала\n", ext)
 		return res, nil
 	}
@@ -162,15 +176,119 @@ func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o Conf
 	switch {
 	case out == runner.NotApplicable:
 		// Code 20 of configure is "not yet" (no device, no driver), not a
-		// failure: the unit succeeds, no mark is written, so the next boot
-		// tries again unless an older mark still matches (§10.8).
+		// failure: the unit succeeds, the mark is removed, so the next boot
+		// runs the hook again (§10.8).
 		res.Status, err = ConfigureSkipped, nil
-		_, _ = fmt.Fprintf(e.stderr(), "configure %s: пропущено (код 20), отметка не записана\n", ext)
+		_, _ = fmt.Fprintf(e.stderr(), "configure %s: пропущено (код 20), отметка снята — повтор на следующей загрузке\n", ext)
 		e.configureHistory(ext, in.Record.Version, state.StatusSkipped)
-	case err != nil && out == runner.Failed:
-		e.configureHistory(ext, in.Record.Version, state.StatusFailed)
+	case err != nil:
+		// Any error of the run is status failed (details.status), not only a
+		// hook's own non-zero code; history.jsonl records the latter.
+		res.Status = ConfigureFailed
+		if out == runner.Failed {
+			e.configureHistory(ext, in.Record.Version, state.StatusFailed)
+		}
+		err = withStatus(err, ConfigureFailed)
+	default:
+		res.Status = ConfigureOK
+	}
+	if o.FromUnit {
+		e.writeResult(ext, res)
 	}
 	return res, err
+}
+
+// configureOutcome is the result file of the unit's configure run
+// (RunResult): the status of the hook and whether it asked for a reboot.
+type configureOutcome struct {
+	Status         string `json:"status"`
+	RebootRequired bool   `json:"reboot_required"`
+}
+
+// maxResult bounds what is read from a result file.
+const maxResult = 256
+
+// writeResult records the outcome of the unit's run for a synchronous
+// restart to read; an error is a configure.result warning.
+func (e *Engine) writeResult(ext string, res ConfigureResult) {
+	p := e.L.RunResult(ext)
+	data, _ := json.Marshal(configureOutcome{Status: res.Status, RebootRequired: res.RebootRequired})
+	err := os.MkdirAll(filepath.Dir(p), 0o755)
+	if err == nil {
+		err = fsx.WriteAtomic(p, append(data, '\n'), 0o644)
+	}
+	if err != nil {
+		e.warn("configure.result", "%s: исход configure: %v", ext, err)
+	}
+}
+
+// dropResult removes the result file of ext: the outcome of an earlier run
+// must not pass for the next one.
+func (e *Engine) dropResult(ext string) {
+	if err := os.Remove(e.L.RunResult(ext)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		e.warn("configure.result", "%s: исход configure: %v", ext, err)
+	}
+}
+
+// readResult reads the outcome the unit wrote; ok is false when there is
+// none or it cannot be read (an older unit, a run killed before the end).
+func (e *Engine) readResult(ext string) (configureOutcome, bool) {
+	f, err := os.OpenFile(e.L.RunResult(ext), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return configureOutcome{}, false
+	}
+	defer func() { _ = f.Close() }()
+	var out configureOutcome
+	if err := json.NewDecoder(io.LimitReader(f, maxResult)).Decode(&out); err != nil {
+		return configureOutcome{}, false
+	}
+	switch out.Status {
+	case ConfigureOK, ConfigureSkipped, ConfigureFailed:
+		return out, true
+	}
+	return configureOutcome{}, false
+}
+
+// restartWithResult restarts cream-configure@<ext> (restartConfigure) and,
+// when the restart was synchronous, reports the outcome the unit wrote:
+// status ok or skipped and reboot_required, details.status failed on a
+// failure. A stale result file is removed before the restart.
+func (e *Engine) restartWithResult(ctx context.Context, res ConfigureResult, wait bool, st string) (ConfigureResult, error) {
+	if wait {
+		e.dropResult(res.Ext)
+	}
+	var err error
+	res.Mode, err = e.restartConfigure(ctx, res.Ext, res.Reason, wait, st)
+	if res.Mode != ApplyRestart && err == nil {
+		return res, nil
+	}
+	if !wait {
+		return res, err
+	}
+	out, ok := e.readResult(res.Ext)
+	switch {
+	case err != nil:
+		if ok && out.Status == ConfigureFailed {
+			err = withStatus(err, ConfigureFailed)
+		}
+	case ok && out.Status != ConfigureFailed:
+		res.Status, res.RebootRequired = out.Status, out.RebootRequired
+	}
+	return res, err
+}
+
+// withStatus adds details.status to a cream error (the failure of a
+// configure run); any other error is returned as it is.
+func withStatus(err error, status string) error {
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		return err
+	}
+	if ce.Details == nil {
+		ce.Details = map[string]any{}
+	}
+	ce.Details["status"] = status
+	return err
 }
 
 // configureHistory appends a configure entry of ext at version with status
@@ -320,12 +438,12 @@ func (e *Engine) markMatches(in Installed) bool {
 
 // updateMark follows a configure run of ext with outcome out: success
 // writes the mark from the registry and settings as they are after the hook
-// (a nested cream set of the hook is included), failure removes it, code 20
-// leaves it. Neither fails the operation: an error is a configure.mark
+// (a nested cream set of the hook is included), failure and code 20 remove
+// it (code 20 — so the next boot runs the hook again, §10.8). Neither fails the operation: an error is a configure.mark
 // warning, and at worst the hook runs once more at boot.
 func (e *Engine) updateMark(ext string, out runner.Outcome, runErr error) {
 	switch {
-	case out == runner.Failed:
+	case out == runner.Failed || out == runner.NotApplicable:
 		if err := e.Store.DeleteConfigured(ext); err != nil {
 			e.warn("configure.mark", "%s: отметка configure: %v", ext, err)
 		}

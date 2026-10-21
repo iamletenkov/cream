@@ -134,6 +134,7 @@ func TestLayoutMethodsUnderRoot(t *testing.T) {
 		{"WantsDir", l.WantsDir("multi-user.target"), "/tmp/x/etc/systemd/system/multi-user.target.wants"},
 		{"RunDir", l.RunDir(), "/tmp/x/run/cream"},
 		{"RunReason", l.RunReason("teleport"), "/tmp/x/run/cream/teleport.reason"},
+		{"RunResult", l.RunResult("teleport"), "/tmp/x/run/cream/configure/teleport.result"},
 		{"RebootRequired", l.RebootRequired(), "/tmp/x/run/reboot-required"},
 		{"PolicyRcD", l.PolicyRcD(), "/tmp/x/usr/sbin/policy-rc.d"},
 		{"OSRelease", l.OSRelease(), "/tmp/x/etc/os-release"},

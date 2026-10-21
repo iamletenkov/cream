@@ -204,7 +204,7 @@ func TestConfigureMarkCLI(t *testing.T) {
 	out := runCLI(t, in, "show", "--json", "configure-system")
 	golden(t, "show-configured", normRoot(out.Stdout, root))
 	out = runCLI(t, in, "configure", "--force", "configure-system")
-	if out.Code != 0 || out.Stdout != "configure-system: configure (apply): hook\n" {
+	if out.Code != 0 || out.Stdout != "configure-system: configure (apply): hook, ok\n" {
 		t.Errorf("--force: %+v", out)
 	}
 	if strings.TrimSpace(readRoot(t, root, "var/lib/cream/ext/configure-system/configure.count")) != "2" {

@@ -275,7 +275,7 @@ cream = выпуск 1.2.0 через release-please (Task 17).
 ## Task 13: [cream] Код `20` хука configure — «пропущено»
 - **Файлы:** `internal/engine/configure.go`, `internal/engine/hook.go`, тесты, `docs/reference/exit-codes.md`.
 - **Тесты сначала:** таблица спеки §10.8: `20` в configure → cream 0, `status: skipped`, отметка не пишется, прежняя
-  не удаляется, запись `skipped` в `history.jsonl`; `20` в `install` без `--allow-skip` → 68 по-прежнему.
+  ~~не удаляется~~ снимается (пересмотрено в Task 17 решением владельца, спека §10.8), запись `skipped` в `history.jsonl`; `20` в `install` без `--allow-skip` → 68 по-прежнему.
 - **Приёмка:** тесты `engine` зелёные.
 
 ## Task 14: [bisquite] Сбор `/etc/image-labels.d/*.json` в метки OCI

@@ -49,7 +49,7 @@ eq "$(reg cfg-failing .status)" installed "cfg-failing в реестре install
 absent $MARKS/cfg-failing.json "сбой — отметки нет"
 eq "$(hist '[.[] | select(.op == "configure" and .ext == "cfg-failing")] | .[-1].status')" failed \
 	"history.jsonl: configure cfg-failing failed"
-# Код 20 configure (§10.8): «пропущено» — не сбой, отметка не пишется,
+# Код 20 configure (§10.8): «пропущено» — не сбой, отметка снимается,
 # запись skipped в history.jsonl.
 c install v12/cfg-skip
 want_rc 0 "install cfg-skip: configure 20 — не сбой"
@@ -59,6 +59,13 @@ eq "$(hist '[.[] | select(.op == "configure" and .ext == "cfg-skip")] | map(.sta
 	"history.jsonl: configure cfg-skip skipped"
 eq "$(counter $STATE/cfg-skip/configure.count)" 1 "cfg-skip: configure вызван"
 absent $MARKS/cfg-skip.json "код 20 — отметки нет"
+# cream configure --wait при работающем systemd: исход юнита из
+# /run/cream/configure/<ext>.result — status skipped, код 0.
+c configure --wait cfg-skip
+want_rc 0 "configure --wait cfg-skip: код 20 — не сбой"
+eq "$(j '.result | "\(.mode) \(.status)"')" "restart skipped" "configure --wait: mode restart, status skipped"
+eq "$(jq -r .status /run/cream/configure/cfg-skip.result)" skipped "исход юнита записан"
+eq "$(counter $STATE/cfg-skip/configure.count)" 2 "cfg-skip: configure вызван ещё раз"
 for e in cfg-failing cfg-skip; do systemctl reset-failed "cream-configure@$e.service" 2>/dev/null || true; done
 
 step "повтор из хука: cream configure --again → второй прогон"

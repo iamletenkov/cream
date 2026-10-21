@@ -20,7 +20,7 @@ func (App) systemCommands() []Command {
 				"если отметка выполнения /var/lib/cream/configured/<ext>.json не совпала с реестром или её нет.\n" +
 				"журнал: journalctl -u cream-configure@<ext>.service -b",
 			Flags: func(fs *flag.FlagSet) {
-				fs.BoolVar(&wait, "wait", false, "ждать результата хука (код 79 — хук упал); без флага перезапуск ставится в очередь")
+				fs.BoolVar(&wait, "wait", false, "ждать исхода хука: status ok или skipped (хук вернул 20), 79 — хук упал; без флага перезапуск ставится в очередь")
 				fs.BoolVar(&force, "force", false, "сбросить отметку выполнения и запустить хук сейчас")
 				fs.BoolVar(&all, "all", false, "с --force: все расширения с хуком configure")
 				fs.BoolVar(&again, "again", false, "повторить configure (причина followup), перезапуск юнита без ожидания; из хука — отложенно (systemd-run --on-active)")
@@ -41,7 +41,11 @@ func (App) systemCommands() []Command {
 type configureResult struct{ engine.ConfigureResult }
 
 func (r configureResult) WriteText(w io.Writer) error {
-	_, err := fmt.Fprintf(w, "%s: configure (%s): %s\n", r.Ext, r.Reason, r.Mode)
+	if r.Status == "" {
+		_, err := fmt.Fprintf(w, "%s: configure (%s): %s\n", r.Ext, r.Reason, r.Mode)
+		return err
+	}
+	_, err := fmt.Fprintf(w, "%s: configure (%s): %s, %s\n", r.Ext, r.Reason, r.Mode, r.Status)
 	return err
 }
 

@@ -4,7 +4,7 @@ version: 1.0.0
 summary: configure пропускает
 cream: ">=1.2.0"
 platform: {family: deb, arch: [amd64, arm64]}
-# configure отвечает 20 («устройства нет»): отметка не пишется, повтор на загрузке (§10.8).
+# configure отвечает 20 («устройства нет»): отметка снимается, повтор на загрузке (§10.8).
 hooks:
   install: {}
   configure: {stage: system}
