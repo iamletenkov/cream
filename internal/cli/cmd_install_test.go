@@ -31,10 +31,11 @@ func installCLICatalog(t *testing.T, root, name, version string, exts map[string
 	return dir
 }
 
-// installCLISources пишет sources.yaml под root (источник name — path dir)
-// и синхронизирует его, как cream source sync.
-func installCLISources(t *testing.T, root, name, dir string) {
+// installCLISources пишет sources.yaml под root (источник fixtures — path
+// dir) и синхронизирует его, как cream source sync.
+func installCLISources(t *testing.T, root, dir string) {
 	t.Helper()
+	const name = "fixtures"
 	l := paths.Layout{Root: root}
 	f := &source.File{Sources: []source.Source{{Name: name, Type: source.TypePath, Path: dir}}}
 	if err := os.MkdirAll(filepath.Dir(l.Sources()), 0o755); err != nil {
@@ -62,7 +63,7 @@ func installCLIRoot(t *testing.T) string {
 	dir := installCLICatalog(t, root, "catalog", "1.0.0", map[string]string{
 		"noop": fixtureDir(t, "noop"), "lib-fixture": fixtureDir(t, "lib-fixture"),
 		"depends-lib": fixtureDir(t, "depends-lib"), "upgrade-fixture": fixtureDir(t, "upgrade-fixture")})
-	installCLISources(t, root, "fixtures", dir)
+	installCLISources(t, root, dir)
 	return root
 }
 
@@ -100,7 +101,7 @@ func TestGoldenInstall(t *testing.T) {
 				dir := installCLICatalog(t, root, "next", "1.1.0", map[string]string{
 					"noop":            fixtureDir(t, "noop"),
 					"upgrade-fixture": cliTestdataDir(t, "catalog-next", "extensions", "upgrade-fixture")})
-				installCLISources(t, root, "fixtures", dir)
+				installCLISources(t, root, dir)
 			}
 			out := runCLI(t, cliIn{Root: root}, tc.args...)
 			if out.Code != tc.wantExit {

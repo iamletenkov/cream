@@ -101,6 +101,8 @@ type ListEntry struct {
 	Secret         bool     `json:"secret"`
 	Actions        []string `json:"actions"`
 	RebootRequired bool     `json:"reboot_required"`
+	// Held is cream hold: upgrade --all skips it.
+	Held bool `json:"held"`
 }
 
 // List is `cream list`: the installed extensions with what their domain offers.
@@ -113,7 +115,7 @@ func (e *Engine) List() ([]ListEntry, error) {
 	for _, in := range all {
 		le := ListEntry{Name: in.Record.Name, Version: in.Record.Version, Kind: in.Record.Kind,
 			Status: in.Record.Status, Apply: ApplyNone, Actions: []string{},
-			RebootRequired: in.Record.RebootRequired}
+			RebootRequired: in.Record.RebootRequired, Held: in.Record.Held}
 		if m := in.Manifest; m != nil {
 			le.Domain = len(m.Config) > 0
 			le.Apply = applyMode(m)

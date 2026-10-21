@@ -1,7 +1,7 @@
 # cream — публичный API репозитория. Go на хосте не нужен: всё в контейнере.
 # Кэш модулей, сборки и линтера — в .cache/ (gitignored), бинари — в dist/.
 
-GO_IMAGE       ?= golang:1.26.9
+GO_IMAGE       ?= golang:1.26.10
 GOLANGCI_IMAGE ?= golangci/golangci-lint:v2.14.0
 NFPM_IMAGE     ?= goreleaser/nfpm:v2.47.0
 DEBIAN_IMAGE   ?= debian:13

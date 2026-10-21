@@ -72,7 +72,7 @@ func upgradeTreeVersion(t *testing.T, te *testEngine, dir string) string {
 func TestUpgrade(t *testing.T) {
 	t.Parallel()
 	te := upgradeInstalled(t, testdataDir(t, "catalog-next"))
-	res, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+	res, err := upgradeRun(te, []string{"upgrade-fixture"}, false)
 	if err != nil {
 		t.Fatalf("%v (stderr %s)", err, te.Err.String())
 	}
@@ -103,7 +103,7 @@ func TestUpgrade(t *testing.T) {
 		t.Errorf("history: %s", h)
 	}
 	// Повтор — та же версия, ничего не делается.
-	res, err = te.Upgrade(context.Background(), nil, true)
+	res, err = upgradeRun(te, nil, true)
 	if err != nil || len(res) != 1 || res[0].Changed {
 		t.Errorf("повтор upgrade --all: %+v %v", res, err)
 	}
@@ -112,7 +112,7 @@ func TestUpgrade(t *testing.T) {
 func TestUpgradeFailedKeepsPrev(t *testing.T) {
 	t.Parallel()
 	te := upgradeInstalled(t, upgradeCatalog(t, "exit 1"))
-	_, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+	_, err := upgradeRun(te, []string{"upgrade-fixture"}, false)
 	wantCode(t, err, cerr.ExitHook, "hook.failed")
 	rec := installRecord(t, te, "upgrade-fixture")
 	if rec.Status != state.StatusFailedUpgrade || rec.Version != "1.0.0" || rec.PrevVersion != "1.0.0" {
@@ -144,7 +144,7 @@ func TestUpgradeFailedKeepsPrev(t *testing.T) {
 func TestUpgradeWithoutHookRunsInstall(t *testing.T) {
 	t.Parallel()
 	te := upgradeInstalled(t, upgradeCatalog(t, ""))
-	if _, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false); err != nil {
+	if _, err := upgradeRun(te, []string{"upgrade-fixture"}, false); err != nil {
 		t.Fatal(err)
 	}
 	log := readState(t, te, "upgrade-fixture", "install.log")
@@ -185,7 +185,7 @@ func TestUpgradeErrors(t *testing.T) {
 			if tc.prep != nil {
 				tc.prep(t, te)
 			}
-			_, err := te.Upgrade(context.Background(), tc.names, tc.all)
+			_, err := upgradeRun(te, tc.names, tc.all)
 			wantCode(t, err, tc.wantExit, tc.wantCode)
 		})
 	}
@@ -249,7 +249,7 @@ func TestUpgradeFailedTwiceKeepsPrev(t *testing.T) {
 	t.Parallel()
 	te := upgradeInstalled(t, upgradeCatalog(t, "exit 1"))
 	for i := range 2 {
-		_, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+		_, err := upgradeRun(te, []string{"upgrade-fixture"}, false)
 		wantCode(t, err, cerr.ExitHook, "hook.failed")
 		if v := upgradeTreeVersion(t, te, te.L.ExtPrev("upgrade-fixture")); v != "1.0.0" {
 			t.Fatalf("попытка %d: .prev = %s, ждали 1.0.0", i+1, v)
@@ -272,7 +272,7 @@ func TestUpgradeRemovesStaleFiles(t *testing.T) {
 	if !installExists(filepath.Join(te.Root, "/etc/upg/stale.conf")) {
 		t.Fatal("1.0.0 не разложила stale.conf")
 	}
-	if _, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false); err != nil {
+	if _, err := upgradeRun(te, []string{"upgrade-fixture"}, false); err != nil {
 		t.Fatal(err)
 	}
 	if installExists(filepath.Join(te.Root, "/etc/upg/stale.conf")) {
@@ -290,7 +290,7 @@ func TestUpgradeFailedRecordsNewFiles(t *testing.T) {
 	t.Parallel()
 	next := upgradeFilesCatalog(t, testdataDir(t, "catalog-next", "extensions", "upgrade-fixture"), true, "/etc/upg/new.conf")
 	te := upgradeFrom(t, testdataDir(t, "catalog"), next, "upgrade-fixture")
-	_, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false)
+	_, err := upgradeRun(te, []string{"upgrade-fixture"}, false)
 	wantCode(t, err, cerr.ExitHook, "hook.failed")
 	rec := installRecord(t, te, "upgrade-fixture")
 	if rec.Status != state.StatusFailedUpgrade {
@@ -307,7 +307,7 @@ func TestUpgradeConfigureReason(t *testing.T) {
 	next := installPatched(t, fixtureDir(t, "configure-system"), "configure-system",
 		func(s string) string { return strings.Replace(s, "version: 1.0.0", "version: 2.0.0", 1) })
 	te := upgradeFrom(t, testdataDir(t, "catalog"), next, "configure-system")
-	if _, err := te.Upgrade(context.Background(), []string{"configure-system"}, false); err != nil {
+	if _, err := upgradeRun(te, []string{"configure-system"}, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(readState(t, te, "configure-system", "configure.log")), "\n")
@@ -330,7 +330,7 @@ func TestUpgradeDropsConfigure(t *testing.T) {
 	if !installExists(link) {
 		t.Fatal("1.0.0 не включила configure")
 	}
-	res, err := te.Upgrade(context.Background(), []string{"configure-system"}, false)
+	res, err := upgradeRun(te, []string{"configure-system"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestUpgradeKeepsInstalledAtAndPhase(t *testing.T) {
 		r.Phase = PhaseBuild
 	})
 	clock.Add(time.Hour)
-	if _, err := te.Upgrade(context.Background(), []string{"upgrade-fixture"}, false); err != nil {
+	if _, err := upgradeRun(te, []string{"upgrade-fixture"}, false); err != nil {
 		t.Fatal(err)
 	}
 	rec := installRecord(t, te, "upgrade-fixture")
@@ -387,7 +387,7 @@ func TestUpgradeAllSkipsWithoutSource(t *testing.T) {
 	te := installEngine(t)
 	installMust(t, te, "noop")
 	seedInstalled(t, te, fixtureDir(t, "lib-fixture"), func(r *state.Record) { r.Source = state.SourceRef{} })
-	res, err := te.Upgrade(context.Background(), nil, true)
+	res, err := upgradeRun(te, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,6 +398,16 @@ func TestUpgradeAllSkipsWithoutSource(t *testing.T) {
 		t.Errorf("предупреждения %v", warningCodes(te))
 	}
 	// Поимённо — не пропуск, а 69.
-	_, err = te.Upgrade(context.Background(), []string{"lib-fixture"}, false)
+	_, err = upgradeRun(te, []string{"lib-fixture"}, false)
 	wantCode(t, err, cerr.ExitSource, "source.missing")
+}
+
+// upgradeRun — upgrade в прежней форме: результаты расширений и ошибка
+// (фатальная или худшего исхода плана, Err).
+func upgradeRun(te *testEngine, names []string, all bool) ([]InstallResult, error) {
+	rep, err := te.Upgrade(context.Background(), UpgradeRequest{Names: names, All: all})
+	if err != nil {
+		return nil, err
+	}
+	return rep.Extensions, rep.Err()
 }

@@ -115,3 +115,25 @@ func TestSignalContextSecondInterruptKills(t *testing.T) {
 		t.Fatal("второй SIGINT не убил процесс")
 	}
 }
+
+// /dev/null — символьное устройство, но не терминал: cream upgrade из cron и
+// юнитов systemd не задаёт вопрос y/N. Канал — тоже не терминал.
+func TestIsTerminal(t *testing.T) {
+	t.Parallel()
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = null.Close() }()
+	if isTerminal(null) {
+		t.Error("/dev/null — терминал")
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close(); _ = w.Close() }()
+	if isTerminal(r) || isTerminal(w) {
+		t.Error("канал — терминал")
+	}
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Фаза build cream на настоящем virt-customize (спека §12.2, §14 «Build-фаза»;
-# план T22). Делает то, что будет делать bisquite (docs/cli.md «Для bisquite:
-# фаза build»), и проверяет образ без загрузки.
+# план T22). Делает то, что будет делать bisquite (docs/guides/build-phase.md),
+# и проверяет образ без загрузки.
 #
 #   bash test/build/scenario.sh <cream.deb> <базовый.qcow2> <каталог работы> <корень репозитория>
 #
@@ -99,7 +99,7 @@ stage() {
 }
 
 # customize <id> <name> [--run-command …] — virt-customize слоя в
-# последовательности docs/cli.md «Для bisquite» (Р30, совместима с
+# последовательности docs/guides/build-phase.md (Р30, совместима с
 # virt-customize 1.48 Debian 12 — без --tar-in): --mkdir incoming/<id>,
 # --copy-in архива в incoming/, распаковка tar --numeric-owner в госте и
 # удаление архива. На время вызова фоном снимается `ps -eo args` в $pslog.

@@ -43,5 +43,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	return cli.Run(args, cli.App{
 		Stdin: stdin, Stdout: stdout, Stderr: stderr,
 		Env: env, Euid: os.Geteuid, Now: time.Now, Context: ctx,
+		Interactive: interactive,
 	})
 }

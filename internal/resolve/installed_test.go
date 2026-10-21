@@ -95,7 +95,7 @@ func TestReadInstalledSizeLimit(t *testing.T) {
 		t.Errorf("больше предела: %v", err)
 	}
 	if maxInstalledSize != 1<<20 {
-		t.Errorf("предел %d, по docs/cli.md — 1 МиБ", maxInstalledSize)
+		t.Errorf("предел %d, по docs/guides/build-phase.md — 1 МиБ", maxInstalledSize)
 	}
 }
 
