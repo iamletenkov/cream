@@ -39,11 +39,12 @@ internal/cerr/        — типизированные ошибки, коды в
 internal/version/     — версия (ставится -ldflags -X при сборке)
 testdata/catalog/     — фикстурный каталог §14; testdata/catalog-next/ — следующие версии noop и upgrade-fixture для upgrade
 testdata/invalid/     — заведомо неверные расширения для cream validate
+testdata/contract/    — контрактные фикстуры: поля новее выпущенного cream, старый выпуск отказывает по cream: (make contract-old)
 testdata/pilot/       — пилотные расширения (cloud-user, fixture-{agent,docker,teleport}-like) для интеграции и build
 test/integration/     — make test-integration: .deb в контейнере с systemd PID 1, сценарии scenario/NN-*.sh
 test/build/           — make test-build: фаза build настоящим virt-customize на образе Debian 12
 packaging/            — nfpm.yaml, maintainer-скрипты, copyright (полные тексты сторонних лицензий)
-scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh
+scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh, contract-old.sh (фикстуры testdata/contract на релизном cream)
 LICENSE, NOTICE       — Apache-2.0 и уведомления о стороннем коде
 docs/                 — README.md (индекс), getting-started.md, guides/ (по задачам), reference/ (CLI, манифест, коды, --json, пути), architecture.md, development.md, runbooks/ (выпуск), adr/, specs/, plans/, research/, STATUS.md
 .claude/              — агенты, skills, правила, хуки Claude Code

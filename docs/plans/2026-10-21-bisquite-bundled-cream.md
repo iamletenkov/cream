@@ -14,7 +14,7 @@
 
 - [ ] Task 1: [bisquite] Секрет-монтирование и тест «секрет не в qcow2» (риск №1, день 1)
 
-- [ ] Task 2: [cream] ADR-0004 и манифест 1.2.0: `every_boot`, `scope: build`, обобщённый `checkSince` (день 1, гейт контракта)
+- [x] Task 2: [cream] ADR-0004 и манифест 1.2.0: `every_boot`, `scope: build`, обобщённый `checkSince` (день 1, гейт контракта)
 
 - [ ] Task 3: [cream-extensions] Аудит 14 хуков configure по А1–А6 и гейт `lint-hooks` в режиме warn (день 1)
 

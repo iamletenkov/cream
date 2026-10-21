@@ -5,7 +5,8 @@
 // любом уровне отображений (они вырезаются до декодирования, поэтому имена
 // действий и хуков вида "x-…" тоже невидимы); скаляр вместо списка — ошибка;
 // отложенное (§17) — ошибка 65 manifest.reserved, а не «неизвестное поле»;
-// поле минорной версии новее 1.0 (стадии configure 1.1.0) при cream: ниже её —
+// поле минорной версии новее 1.0 (таблица sinceFields: стадии configure 1.1.0,
+// every_boot и scope: build 1.2.0) при cream: ниже её —
 // 65 manifest.invalid «нужен cream: ">=X"». Проверки дерева расширения (имя каталога, биты исполнения, ссылки,
 // соответствие хуков файлам) — дело пакета catalog.
 //
@@ -129,11 +130,14 @@ const (
 )
 
 // Hook — объявление хука. Timeout == 0 — без таймаута; значения по умолчанию
-// уже подставлены. Stage, After, Before, Wants — только у configure.
+// уже подставлены. Stage, After, Before, Wants, EveryBoot — только у configure.
+// EveryBoot (cream 1.2.0, ADR-0004) — configure идёт на каждой загрузке, мимо
+// отметки выполнения.
 type Hook struct {
 	Timeout              time.Duration
 	Stage                Stage
 	After, Before, Wants []string
+	EveryBoot            bool
 }
 
 // ArgsMode — как разбираются аргументы действия (§7.1).

@@ -1,0 +1,13 @@
+schema: cream/v1
+name: scope-build
+version: 1.0.0
+summary: ключ только для сборки (cream 1.2.0)
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Контрактная фикстура ADR-0004: cream 1.2.0 принимает, cream 1.1.x отказывает
+# по cream: (68 platform.cream_version), а не по scope: build (make contract-old).
+hooks:
+  install: {}
+config:
+  keys:
+    MIRROR_TOKEN: {type: str, default: "", empty: true, secret: file, scope: build, description: токен зеркала}

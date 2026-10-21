@@ -15,13 +15,17 @@ const (
 	SecretHook SecretMode = "hook"
 )
 
-// Scope — область ключа: настройка или параметр установки.
+// Scope — область ключа: настройка, параметр установки или значение только
+// для сборки.
 type Scope string
 
-// Области ключа §8.2.
+// Области ключа §8.2. ScopeBuild — с cream 1.2.0 (ADR-0004): значение живёт
+// только в окружении хуков текущей операции install/upgrade и нигде на машине
+// не хранится.
 const (
 	ScopeConfig  Scope = "config"
 	ScopeInstall Scope = "install"
+	ScopeBuild   Scope = "build"
 )
 
 // Spec — описание ключа config.keys.
