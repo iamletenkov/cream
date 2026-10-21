@@ -15,6 +15,7 @@
 | подключить каталог расширений, поднять его версию, работать без сети | [guides/add-catalog.md](guides/add-catalog.md) |
 | поставить расширение, передать секрет, поменять настройки, вызвать действие, удалить | [guides/install-extension.md](guides/install-extension.md) |
 | написать своё расширение и каталог, проверить без root | [guides/write-extension.md](guides/write-extension.md) |
+| выбрать стадию `configure` (`early`, `system`, `cloud-user`, `graphical`), написать и отладить хук настройки на загрузке | [guides/configure-stages.md](guides/configure-stages.md) |
 | понять, что сломалось: статусы, журналы, блокировки, коды | [guides/diagnostics.md](guides/diagnostics.md) |
 | обновить расширения: план, `--dry-run`, закрепление (`hold`), риск, частичный исход | [guides/upgrade-extensions.md](guides/upgrade-extensions.md) |
 | обновить или откатить cream на машине | [guides/upgrade-cream.md](guides/upgrade-cream.md) |

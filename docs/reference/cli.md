@@ -189,9 +189,14 @@ cream configure --from-unit <ext>
 cream system init
 ```
 
-- `configure` запускает хук `configure` расширения (через юнит
-  `cream-configure@<ext>`, если systemd работает); `--from-unit` — только для
-  вызова из самого юнита.
+- `configure` запускает хук `configure` расширения сейчас, с
+  `CREAM_REASON=apply`: перезапускает юнит `cream-configure@<ext>`, если systemd
+  работает, иначе выполняет хук сам. `--wait` — ждать результата (79 — хук
+  упал), без него перезапуск ставится в очередь; пока systemd загружается,
+  перезапуск ставится в очередь и с `--wait` (`configure.no_block`).
+  `--from-unit` — только для вызова из самого юнита. На загрузке юнит
+  выполняется сам на стадии расширения —
+  [стадии configure](../guides/configure-stages.md).
 - `system init` создаёт каталоги cream с нужными правами, ставит шаблон
   `cream-configure@.service` и `cream-configure-cloud-user.service`, пересчитывает
   цели configure и при работающем systemd делает `daemon-reload`. Повтор

@@ -85,12 +85,17 @@ hooks:
 
 ### Стадии `configure`
 
+`hooks.configure.stage` обязательно у `configure` и решает, когда на загрузке
+systemd запускает `cream-configure@<ext>.service`. Как выбрать стадию, что
+доступно на каждой, коды возврата, повтор и отладка —
+[руководство по стадиям](../guides/configure-stages.md).
+
 | `stage` | Когда на загрузке | Пример |
 |---|---|---|
 | `early` | до сети, в `sysinit.target`; таймаут не больше 2 мин | файрвол |
 | `system` | в `multi-user.target`, после `network.target` | службы, Docker |
-| `cloud-user` | после `cloud-final.service`, если cloud-init работает | настройки пользователя cloud-init |
-| `graphical` | в `graphical.target`, после менеджера входа | киоск, VNC |
+| `cloud-user` | после `cloud-final.service`; без cloud-init — сразу с `multi-user.target` (с 1.1.1) | настройки пользователя cloud-init |
+| `graphical` | в `graphical.target`, после менеджера входа; только если машина грузится в `graphical.target` | киоск, VNC |
 
 `early`, `cloud-user` и `graphical` требуют `cream: ">=1.1.0"`. `after`,
 `before`, `wants` — дополнительные юниты порядка, например

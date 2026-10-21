@@ -83,6 +83,7 @@ sudo cream remove btop
 - Руководства: [подключить каталог](docs/guides/add-catalog.md) ·
   [поставить и настроить расширение](docs/guides/install-extension.md) ·
   [написать расширение](docs/guides/write-extension.md) ·
+  [стадии configure](docs/guides/configure-stages.md) ·
   [диагностика](docs/guides/diagnostics.md) ·
   [обновить cream](docs/guides/upgrade-cream.md) ·
   [фаза build для сборщика образов](docs/guides/build-phase.md)

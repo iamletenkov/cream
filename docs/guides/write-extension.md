@@ -154,7 +154,7 @@ cream --root "$R" remove --purge hello
 
 | Задача | Поле |
 |---|---|
-| запускать настройку на каждой загрузке | `hooks.configure` со `stage: early \| system \| cloud-user \| graphical` |
+| запускать настройку на каждой загрузке | `hooks.configure` со `stage: early \| system \| cloud-user \| graphical` — [как выбрать стадию](configure-stages.md) |
 | разложить юниты и конфиги, которыми владеет cream | `files: [{src, dst, mode}]` |
 | потребовать другое расширение или способность | `depends`, `requires`; дать свою — `provides` |
 | запретить соседство | `conflicts.extensions`, `conflicts.capabilities` |

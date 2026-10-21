@@ -12,10 +12,13 @@ import (
 func (App) systemCommands() []Command {
 	var wait, fromUnit bool
 	return []Command{
-		{Name: "configure", Usage: "configure [--wait] <ext> | configure --from-unit <ext>  — запустить configure",
+		{Name: "configure", Usage: "configure [--wait] <ext> | configure --from-unit <ext>  — запустить configure\n" +
+			"повторить хук configure сейчас (CREAM_REASON=apply): перезапуск cream-configure@<ext>.service,\n" +
+			"без systemd — хук напрямую; на загрузке хук идёт сам на своей стадии (early, system, cloud-user, graphical).\n" +
+			"журнал: journalctl -u cream-configure@<ext>.service -b",
 			Flags: func(fs *flag.FlagSet) {
-				fs.BoolVar(&wait, "wait", false, "ждать завершения перезапуска configure")
-				fs.BoolVar(&fromUnit, "from-unit", false, "вызов из юнита cream-configure@ (только юнит)")
+				fs.BoolVar(&wait, "wait", false, "ждать результата хука (код 79 — хук упал); без флага перезапуск ставится в очередь")
+				fs.BoolVar(&fromUnit, "from-unit", false, "вызов из самого юнита cream-configure@<ext>.service; руками не вызывать")
 			},
 			Run: func(ctx *Context, args []string) (any, error) {
 				return runConfigure(ctx, args, engine.ConfigureOptions{Wait: wait, FromUnit: fromUnit})

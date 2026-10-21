@@ -79,7 +79,7 @@ tar --owner=0 --group=0 --numeric-owner -C "$STAGING" -cf "$STAGING/$ID.tar" .
    снимает после, в том числе при сбое — пакеты не запускают службы в образе;
 4. выполняет хук `install` с `CREAM_PHASE=build`;
 5. включает `configure` ссылкой в `*.wants`, не запуская его — он выполнится на
-   первой загрузке;
+   первой загрузке на своей [стадии](configure-stages.md);
 6. пишет реестр с `phase: build` и удаляет `incoming/<id>`; при сбое каталог
    остаётся для разбора. `params.env` с `--remove-params-file` удаляется в любом
    исходе.
