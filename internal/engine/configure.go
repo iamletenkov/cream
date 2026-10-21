@@ -133,6 +133,10 @@ func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o Conf
 	if in, err = e.Find(ext); err != nil {
 		return res, err
 	}
+	if !hasHook(in.Manifest, manifest.HookConfigure) {
+		res.Mode = ApplyNone
+		return res, nil
+	}
 	live := e.Phase() == PhaseLive
 	if live && res.Reason == ReasonBoot && !in.Manifest.Hooks[manifest.HookConfigure].EveryBoot && e.markMatches(in) {
 		res.Mode = ConfigureUpToDate
