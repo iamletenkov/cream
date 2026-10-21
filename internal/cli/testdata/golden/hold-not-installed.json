@@ -1,0 +1,14 @@
+{
+  "cream": "dev",
+  "command": "hold",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "not_found.extension",
+    "message": "расширение missing не установлено",
+    "details": {
+      "ext": "missing"
+    }
+  }
+}

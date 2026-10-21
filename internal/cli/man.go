@@ -50,7 +50,23 @@ var manCommands = map[string]manCommand{
 			"\\fB\\-\\-phase build\\fR installs one layer inside an image build (virt\\-customize) from \\fB\\-\\-from\\-dir\\fR."},
 	"upgrade": {"upgrade extensions to the version in the source cache",
 		"Upgrades the named extensions (or all installed ones with \\fB\\-\\-all\\fR) to the version " +
-			"found in the source cache and runs the upgrade hook."},
+			"found in the source cache of the source each was installed from. " +
+			"cream first builds a plan, one line per extension: \\fBupgrade\\fR from \\(-> to, " +
+			"\\fBup\\-to\\-date\\fR (nothing newer: no hook, no platform or risk check), \\fBheld\\fR " +
+			"(see \\fBhold\\fR) or \\fBblocked\\fR with a reason: \\fBrisk\\fR (targets.live: confirm without " +
+			"\\fB\\-\\-accept\\-risk\\fR), \\fBplatform\\fR, \\fBdependency\\fR, \\fBsource\\fR, \\fBversion\\fR. " +
+			"Upgrades then run in dependency order (providers first) and run the upgrade hook. " +
+			"A blocked or failed extension does not stop the others, except those that depend on it; " +
+			"the summary counts upgraded, unchanged, skipped and failed extensions, and the exit status is the code " +
+			"of the worst outcome (a failure before a blocked one). " +
+			"On a terminal (stdin and stderr) without \\fB\\-y\\fR, \\fB\\-\\-dry\\-run\\fR or \\fB\\-\\-json\\fR " +
+			"cream asks y/N about each targets.live: confirm extension and about the plan; a no to the plan exits 1 " +
+			"(upgrade.declined) with nothing changed. With one extension name the result and the error are those of that extension."},
+	"hold": {"hold extensions at their installed version",
+		"Marks installed extensions as held in their registry entry: \\fBupgrade \\-\\-all\\fR skips them (\\fBheld\\fR), " +
+			"\\fBupgrade\\fR <ext> and \\fBinstall\\fR of another version refuse with exit status 68 (hold.held). " +
+			"\\fBlist\\fR shows held extensions."},
+	"unhold": {"release held extensions", "Removes the hold set by \\fBhold\\fR; the next \\fBupgrade\\fR upgrades them again."},
 	"remove": {"remove an extension",
 		"Runs the remove hook, removes the extension tree, its files and its registry entry. " +
 			"Settings and state are kept unless \\fB\\-\\-purge\\fR is given."},
@@ -112,7 +128,14 @@ var manFlags = map[string]map[string]string{
 		"record":             "build: record.json \\fIF\\fR, a layer of \\fBcream resolve \\-\\-json\\fR.",
 		"remove-params-file": "build: delete \\fB\\-\\-params\\-file\\fR after reading it.",
 	},
-	"upgrade": {"all": "Upgrade every installed extension."},
+	"upgrade": {
+		"all":         "Upgrade every installed extension that is not held.",
+		"dry-run":     "Print the plan and change nothing; the exit status is that of the plan (blocked extensions).",
+		"y":           "Do not ask for confirmation on a terminal; targets.live: confirm still needs \\fB\\-\\-accept\\-risk\\fR.",
+		"yes":         "Same as \\fB\\-y\\fR.",
+		"fail-fast":   "Stop at the first blocked extension of the plan (nothing is upgraded) or at the first failed upgrade (the rest are not run).",
+		"accept-risk": "Upgrade the extension \\fIext\\fR although it has targets.live: confirm; repeat it or separate names with commas, \\fBall\\fR accepts every one.",
+	},
 	"remove": {
 		"purge":  "Also delete /etc/cream/<ext> and /var/lib/cream/ext/<ext>.",
 		"forget": "Skip the remove hook: drop only the registry entry, the tree and cream artifacts.",
@@ -143,13 +166,13 @@ var manExitCodes = []struct {
 	Text string
 }{
 	{"0", "Success."},
-	{"1", "A check did not pass (check.failed)."},
+	{"1", "A check did not pass (check.failed); \\fBupgrade\\fR: the plan was declined on a terminal (upgrade.declined)."},
 	{"0\\(en63", "\\fBcream run\\fR: the exit code of the action itself."},
 	{"64", "Usage error: flags, arguments, a secret in argv, a reserved command or flag (usage.*)."},
 	{"65", "Invalid data: manifest, catalog, setting value, readonly key, record.json (manifest.*, config.*)."},
 	{"66", "Not found: extension, source, key, action, manifest; @version mismatch (not_found.*)."},
-	{"67", "Dependency graph: missing dependency, version, capability, cycle, conflict, file ownership, dependents (deps.*, conflict.*)."},
-	{"68", "Not applicable: architecture, family, OS, commands, targets, cream version, hook returned 20 (platform.*, target.*)."},
+	{"67", "Dependency graph: missing dependency, version, capability, cycle, conflict, file ownership, dependents, a provider whose upgrade failed (deps.*, conflict.*)."},
+	{"68", "Not applicable: architecture, family, OS, commands, targets, cream version, hook returned 20, a held extension (platform.*, target.*, hold.held)."},
 	{"69", "Source error: not synchronised, sha256 mismatch, network, archive (source.*)."},
 	{"70", "Internal error of cream."},
 	{"74", "Input/output or registry error (io.*, state.*)."},
@@ -282,6 +305,17 @@ Change a setting and list installed extensions as JSON:
 .RS
 cream set hello GREETING=hello
 cream list \-\-json
+.RE
+.fi
+.PP
+Review the upgrade plan, hold one extension and upgrade the rest, accepting the risk of one
+targets.live: confirm extension:
+.PP
+.nf
+.RS
+cream upgrade \-\-all \-\-dry\-run
+cream hold teleport
+cream upgrade \-\-all \-y \-\-accept\-risk firewall
 .RE
 .fi
 .SH SEE ALSO

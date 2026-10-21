@@ -43,6 +43,22 @@ type Layer struct {
 	SecretParams   []string `json:"secret_params"`
 }
 
+// CheckPlatform runs steps 2–3 of §9.4 for one extension against the host:
+// family, arch, OS, commands and targets (68 platform.*, target.*), the same
+// check Resolve makes for every requested extension. upgrade uses it per
+// extension to block one (blocked:platform, blocked:risk) without failing
+// the others.
+func CheckPlatform(m *manifest.Manifest, h Host, w *cerr.Warnings) error {
+	if w == nil {
+		w = &cerr.Warnings{}
+	}
+	if err := checkPhase(h.Phase); err != nil {
+		return err
+	}
+	_, err := checkPlatform(m, h, w)
+	return err
+}
+
 // checkPlatform runs steps 2–3 of §9.4 for m and returns the layer mode.
 func checkPlatform(m *manifest.Manifest, h Host, w *cerr.Warnings) (string, error) {
 	na := func(code string, details map[string]any, format string, a ...any) (string, error) {

@@ -33,6 +33,9 @@ type App struct {
 	// lock waits stop, hooks and actions get their process group killed.
 	// nil — context.Background().
 	Context context.Context
+	// Interactive reports that stdin and stderr are a terminal (isatty):
+	// upgrade then asks y/N. nil — never interactive.
+	Interactive func() bool
 }
 
 // Run executes one cream invocation and returns the process exit code.
