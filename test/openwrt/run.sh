@@ -38,6 +38,7 @@ fi
 
 # Поставка — как в релизе: tar.gz с бинарём cream и лицензиями.
 work=$(mktemp -d "$dir/run.XXXXXX")
+work=$(cd "$work" && pwd) # docker -v принимает только абсолютный путь
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/tar"
 cp "$bin" "$work/tar/cream"
