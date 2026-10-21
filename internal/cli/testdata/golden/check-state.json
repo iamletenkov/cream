@@ -1,0 +1,283 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": true,
+  "result": {
+    "phase": "build",
+    "steps": [
+      {
+        "step": 1,
+        "command": "install app MODE=slow TOKEN=-",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "app",
+            "version": "1.1.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": [
+              "base-lib@1.0.0"
+            ]
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "source.shadowed",
+            "message": "app из источника core затеняет app из local"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "command": "install needs-cap",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "needs-cap",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": [
+              "cap-provider@1.0.0"
+            ]
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": []
+      },
+      {
+        "step": 3,
+        "command": "upgrade base-lib",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "base-lib",
+            "version": "1.2.0",
+            "source": "core",
+            "op": "upgrade",
+            "mode": "exec",
+            "deps": []
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": []
+      },
+      {
+        "step": 4,
+        "command": "install --with-deps top",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "mid",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": [
+              "base-lib@1.2.0"
+            ]
+          },
+          {
+            "name": "top",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": [
+              "mid@1.0.0"
+            ]
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": []
+      },
+      {
+        "step": 5,
+        "command": "remove top",
+        "status": "ok",
+        "layers": [],
+        "removed": [
+          "top"
+        ],
+        "error": null,
+        "warnings": []
+      },
+      {
+        "step": 6,
+        "command": "install with-commands",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "with-commands",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": []
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "check.commands",
+            "message": "with-commands: нужны команды nginx, curl — их наличие проверит гость",
+            "details": {
+              "commands": [
+                "nginx",
+                "curl"
+              ],
+              "ext": "with-commands"
+            }
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "command": "install build-none",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "build-none",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "none",
+            "deps": []
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "install.build_none",
+            "message": "build-none: targets.build: none — в фазе build не ставится",
+            "details": {
+              "ext": "build-none"
+            }
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "command": "source add ext --archive https://example.org/ext.tar.gz --sha256 abababababababababababababababababababababababababababababababab",
+        "status": "ok",
+        "layers": [],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "check.external",
+            "message": "внешний каталог ext на хост не скачивается — его расширения проверит гость",
+            "details": {
+              "source": "ext"
+            }
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "command": "install --source ext ghost",
+        "status": "skipped",
+        "layers": [],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "check.external",
+            "message": "ghost: внешний каталог ext — проверит гость",
+            "details": {
+              "ext": "ghost",
+              "source": "ext"
+            }
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "command": "install needs-ghost",
+        "status": "ok",
+        "layers": [
+          {
+            "name": "needs-ghost",
+            "version": "1.0.0",
+            "source": "core",
+            "op": "install",
+            "mode": "exec",
+            "deps": []
+          }
+        ],
+        "removed": [],
+        "error": null,
+        "warnings": [
+          {
+            "code": "check.maybe_installed",
+            "message": "needs-ghost: зависимость ghost, возможно, поставлено шагом 9 — проверит гость",
+            "details": {
+              "dep": "ghost",
+              "ext": "needs-ghost",
+              "step": 9
+            }
+          }
+        ]
+      }
+    ],
+    "installed": [
+      {
+        "name": "app",
+        "version": "1.1.0",
+        "source": "core",
+        "provides": []
+      },
+      {
+        "name": "base-lib",
+        "version": "1.2.0",
+        "source": "core",
+        "provides": [
+          "base"
+        ]
+      },
+      {
+        "name": "cap-provider",
+        "version": "1.0.0",
+        "source": "core",
+        "provides": [
+          "cap-x"
+        ]
+      },
+      {
+        "name": "mid",
+        "version": "1.0.0",
+        "source": "core",
+        "provides": []
+      },
+      {
+        "name": "needs-cap",
+        "version": "1.0.0",
+        "source": "core",
+        "provides": []
+      },
+      {
+        "name": "needs-ghost",
+        "version": "1.0.0",
+        "source": "core",
+        "provides": []
+      },
+      {
+        "name": "with-commands",
+        "version": "1.0.0",
+        "source": "core",
+        "provides": []
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

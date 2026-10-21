@@ -39,6 +39,7 @@ internal/cerr/        — типизированные ошибки, коды в
 internal/version/     — версия (ставится -ldflags -X при сборке)
 testdata/catalog/     — фикстурный каталог §14; testdata/catalog-next/ — следующие версии noop и upgrade-fixture для upgrade
 testdata/invalid/     — заведомо неверные расширения для cream validate
+testdata/check/       — каталоги core и local для cream check (unit и golden)
 testdata/contract/    — контрактные фикстуры: поля новее выпущенного cream, старый выпуск отказывает по cream: (make contract-old)
 testdata/pilot/       — пилотные расширения (cloud-user, fixture-{agent,docker,teleport}-like) для интеграции и build
 test/integration/     — make test-integration: .deb в контейнере с systemd PID 1, сценарии scenario/NN-*.sh

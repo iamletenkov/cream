@@ -38,10 +38,22 @@ var manCommands = map[string]manCommand{
 	"catalog": {"pack a catalog into a deterministic archive",
 		"\\fBcatalog pack\\fR writes a reproducible tar.gz of a catalog directory: sorted entries, " +
 			"owner 0/0, mtime from \\fBSOURCE_DATE_EPOCH\\fR (required)."},
-	"resolve": {"resolve layers offline",
+	"check": {"check the cream lines of an image before the build",
+		"Checks the cream command lines of an image (\\fB\\-\\-step\\fR, top to bottom) against catalogs read in place " +
+			"(\\fB\\-\\-catalog\\fR NAME=ARCHIVE|DIR: an archive is read without unpacking it to disk) and the " +
+			"extensions of the base image (\\fB\\-\\-installed\\fR, the cream.extensions label), carrying the state " +
+			"from step to step: existence and version, platform (os, arch; platform.commands only warns), targets.build, " +
+			"depends, requires and conflicts, install parameters (a secret only as KEY=\\-). " +
+			"\\fBinstall \\-\\-with\\-deps\\fR adds missing depends from the source of the extension that needs them, " +
+			"never requires. Steps from a source added by \\fBsource add \\-\\-archive\\fR are skipped (the guest checks " +
+			"them). No root, no network, no hooks, nothing written. Exit status: that of the first failed step; " +
+			"every step is reported."},
+	"resolve": {"resolve layers offline (deprecated)",
 		"Resolves extension references with their parameters into an ordered list of layers " +
 			"for the given phase and architectures, without touching the machine. " +
-			"With \\fB\\-\\-json\\fR the result is the record.json consumed by \\fBinstall \\-\\-phase build\\fR."},
+			"With \\fB\\-\\-json\\fR the result is the record.json consumed by \\fBinstall \\-\\-phase build\\fR. " +
+			"Deprecated with that layer of bisquite 2.x (removed in cream 2.0): an image build checks its lines " +
+			"with \\fBcheck\\fR."},
 	"install": {"install extensions",
 		"Installs extensions from synchronised sources: resolves dependencies, checks platform, targets and conflicts, " +
 			"places the tree under /opt/cream/ext, writes settings from KEY=VALUE arguments or \\fB\\-\\-params\\-file\\fR " +
@@ -120,6 +132,13 @@ var manFlags = map[string]map[string]string{
 	},
 	"validate": {"catalog": "Catalog directory containing cream-catalog.yaml."},
 	"catalog":  {"out": "pack: output archive file."},
+	"check": {
+		"catalog":   "Catalog source \\fINAME=PATH\\fR: a tar.gz archive or a directory; repeat it, the order is the priority.",
+		"step":      "One cream command line without \\fBcream\\fR (install, upgrade, remove, source add); repeat it.",
+		"os":        "OS of the image, \\fIID:VERSION\\fR (debian:12); without it the OS and family are not checked.",
+		"arch":      "Architecture of the image (default: this machine).",
+		"installed": "The cream.extensions label of the base image: [{name, version, source?, provides?}].",
+	},
 	"resolve": {
 		"phase":       "Phase: \\fBbuild\\fR or \\fBlive\\fR.",
 		"target-arch": "Target architecture (default: this machine).",
@@ -341,7 +360,7 @@ https://github.com/iamletenkov/cream
 
 // reservedCommands are the commands isReservedCommand answers 64 for, in
 // man order; man_test.go checks both lists agree.
-var reservedCommands = []string{"search", "info", "verify", "assume", "lineage", "check", "status", "path", "stage"}
+var reservedCommands = []string{"search", "info", "verify", "assume", "lineage", "status", "path", "stage"}
 
 // synopses returns the synopsis forms of c from its Usage: the part before
 // "  — " of every line that starts with the command name.

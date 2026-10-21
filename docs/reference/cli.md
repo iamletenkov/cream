@@ -209,7 +209,59 @@ cream system init
   цели configure и при работающем systemd делает `daemon-reload`. Повтор
   безвреден; его выполняет `postinst` пакета.
 
-## Офлайн-разрешение для сборщиков образов
+## Предсборочная проверка образа
+
+```
+cream check --catalog NAME=ARCHIVE|DIR… [--os ID:VERSION] [--arch A] [--installed FILE] --step '<команда>'…
+```
+
+Проверяет строки cream будущего образа сверху вниз **до сборки** — как hadolint для
+Dockerfile: без root, без сети, без хуков, ничего не пишет. Состояние переносится
+от шага к шагу: что поставил шаг 1, видят следующие. Ответ — по каждому шагу
+(`ok`, `error` с кодом и `error.code` той же команды в госте, `skipped`), итоговые
+версии и порядок установки; код выхода — первого упавшего шага.
+
+| Флаг | Смысл |
+|---|---|
+| `--catalog NAME=PATH` | источник: архив `tar.gz` (читается без распаковки на диск) или каталог; можно повторять, порядок — приоритет поиска |
+| `--step 'CMD'` | одна строка cream без слова `cream`: `install`, `upgrade`, `remove`, `source add`; можно повторять |
+| `--os ID:VERSION` | ОС образа (`debian:12`, `ubuntu:24.04`); без флага `platform.os` и семейство не проверяются |
+| `--arch A` | архитектура образа (по умолчанию — этой машины) |
+| `--installed FILE` | расширения базового образа — значение метки `cream.extensions` (`[{name, version, source?, provides?}]`); пустая база — `[]`. Без флага база **неизвестна**: незакрытые `depends`/`requires` — предупреждение `check.maybe_installed` («возможно, есть в базе»), `upgrade`/`remove` неизвестного имени и ссылки в источник не из `--catalog` — `skipped` |
+
+Что проверяется: есть ли расширение и версия (`@версия`), платформа (`platform.os`,
+архитектура; `platform.commands` — только предупреждение `check.commands`),
+`targets.build: none` (предупреждение `install.build_none`, в установленное не
+попадает), `depends`/`requires`/`conflicts` против базы и предыдущих шагов,
+параметры `KEY=VALUE` (ключ известен, значение по типу; секрет — только `KEY=-`).
+`install --with-deps` добирает недостающие `depends` по имени из источника того
+расширения, которому они нужны, транзитивно; `requires` не добирает (67
+`deps.requires`) — так же, как `install` в госте.
+
+Строка с `;`, `&&`, `|`, `$…`, перенаправлением — `skipped` с заметкой
+`check.nonstandard` (нестандартная форма — проверит только гость); стандартный
+хвост `< /run/secrets/<id>` для значения `KEY=-` допустим. Источники расширений
+базы (поле `source` в `--installed`), которых нет среди `--catalog`, считаются
+внешними: в госте они есть в `sources.yaml` базы. Диапазон `cream:` манифестов
+сверяется с версией cream, который проверяет, — в бандле bisquite это та же
+версия, что ставится в образ. `source add <имя> --archive URL --sha256 H` объявляет внешний каталог: на
+хост он не скачивается, шаги из него — `skipped` с заметкой `check.external`, а
+зависимости на их имена у следующих шагов — предупреждение
+`check.maybe_installed`. Так же «неизвестны» имена упавшего шага: одна ошибка не
+тянет за собой каскад. `source add --path` и прочие подкоманды — `skipped`.
+
+```
+$ cream check --catalog core=cream-extensions-5.2.0.tar.gz --os ubuntu:24.04 --arch amd64 \
+    --step 'install --with-deps desktop' --step 'install docker'
+1	ok	install --with-deps desktop — cloud-user 1.0.1 (install), desktop 1.0.1 (install)
+2	error	install docker
+	ошибка: docker: нет зависимостей apt-guard >=1.0.0 <2 — поставьте их раньше (deps.missing, код 67)
+```
+
+## Офлайн-разрешение для сборщиков образов (устарело)
+
+`resolve` обслуживает слой bisquite 2.x (`install --from-dir --record`) и уходит
+в cream 2.0; сборка образа проверяет свои строки командой `check`.
 
 ```
 cream resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…] [<ref> [K=V…]]…

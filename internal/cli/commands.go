@@ -46,6 +46,7 @@ func (a App) commands() []Command {
 		a.metaCommands(),
 		a.sourceCommands(),
 		a.catalogCommands(),
+		a.checkCommands(),
 		a.installCommands(),
 		a.removeCommands(),
 		a.configCommands(),

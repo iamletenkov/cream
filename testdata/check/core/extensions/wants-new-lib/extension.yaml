@@ -1,0 +1,11 @@
+schema: cream/v1
+name: wants-new-lib
+version: 1.0.0
+summary: фикстура cream check wants-new-lib
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Намеренно: в каталоге base-lib 1.2.0 — validate --catalog отказывает, check даёт 67 deps.version.
+depends: [{name: base-lib, version: ">=2.0.0"}]
+hooks:
+  install: {}
+  remove: {}

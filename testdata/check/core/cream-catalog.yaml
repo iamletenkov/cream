@@ -1,0 +1,4 @@
+schema: cream/v1
+name: cream-check-fixtures
+version: 2.0.0
+roots: [extensions]

@@ -1,0 +1,12 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "usage.args",
+    "message": "check: нужен хотя бы один --catalog NAME=PATH",
+    "details": null
+  }
+}
