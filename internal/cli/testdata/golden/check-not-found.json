@@ -1,0 +1,58 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "not_found.extension",
+    "message": "шаг 1: расширения nope нет в источниках (и ещё ошибок: 1)",
+    "details": {
+      "installed": [],
+      "phase": "build",
+      "step": 1,
+      "steps": [
+        {
+          "step": 1,
+          "command": "install nope",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 66,
+            "code": "not_found.extension",
+            "message": "расширения nope нет в источниках",
+            "details": {
+              "ext": "nope"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "step": 2,
+          "command": "install app@1.0.0",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 66,
+            "code": "version.mismatch",
+            "message": "app: в источнике core версия 1.1.0, а не 1.0.0",
+            "details": {
+              "ext": "app",
+              "found": "1.1.0",
+              "source": "core",
+              "want": "1.0.0"
+            }
+          },
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

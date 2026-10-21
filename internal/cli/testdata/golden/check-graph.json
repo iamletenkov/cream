@@ -1,0 +1,149 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "deps.missing",
+    "message": "шаг 1: local-app: нет зависимостей base-lib — поставьте их раньше (и ещё ошибок: 3)",
+    "details": {
+      "installed": [
+        {
+          "name": "app",
+          "version": "1.1.0",
+          "source": "core",
+          "provides": []
+        },
+        {
+          "name": "base-lib",
+          "version": "1.2.0",
+          "source": "core",
+          "provides": [
+            "base"
+          ]
+        }
+      ],
+      "phase": "build",
+      "step": 1,
+      "steps": [
+        {
+          "step": 1,
+          "command": "install --with-deps local/local-app",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 67,
+            "code": "deps.missing",
+            "message": "local-app: нет зависимостей base-lib — поставьте их раньше",
+            "details": {
+              "ext": "local-app",
+              "missing": [
+                {
+                  "name": "base-lib",
+                  "version": ""
+                }
+              ]
+            }
+          },
+          "warnings": []
+        },
+        {
+          "step": 2,
+          "command": "install app",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 67,
+            "code": "deps.missing",
+            "message": "app: нет зависимостей base-lib >=1.0.0 <2 — поставьте их раньше",
+            "details": {
+              "ext": "app",
+              "missing": [
+                {
+                  "name": "base-lib",
+                  "version": ">=1.0.0 <2"
+                }
+              ]
+            }
+          },
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        },
+        {
+          "step": 3,
+          "command": "install --with-deps app",
+          "status": "ok",
+          "layers": [
+            {
+              "name": "base-lib",
+              "version": "1.2.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": []
+            },
+            {
+              "name": "app",
+              "version": "1.1.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": [
+                "base-lib@1.2.0"
+              ]
+            }
+          ],
+          "removed": [],
+          "error": null,
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        },
+        {
+          "step": 4,
+          "command": "install conflict-app",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 67,
+            "code": "conflict.extension",
+            "message": "conflict-app несовместимо с app",
+            "details": {
+              "ext": "conflict-app",
+              "with": "app"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "step": 5,
+          "command": "install --with-deps needs-cap",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 67,
+            "code": "deps.requires",
+            "message": "needs-cap требует способность cap-x, а её никто не даёт",
+            "details": {
+              "capability": "cap-x",
+              "ext": "needs-cap"
+            }
+          },
+          "warnings": []
+        }
+      ]
+    }
+  }
+}

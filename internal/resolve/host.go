@@ -99,7 +99,7 @@ func (p Probe) Detect(phase string) (Host, error) {
 
 // familyLike maps an os-release ID (or an ID_LIKE word) to its package family.
 var familyLike = map[string]string{
-	"debian": FamilyDeb,
+	"debian": FamilyDeb, "ubuntu": FamilyDeb,
 	"fedora": "rpm", "rhel": "rpm", "centos": "rpm", "suse": "rpm", "opensuse": "rpm",
 	"alpine": "apk", "openwrt": "openwrt",
 }

@@ -24,7 +24,7 @@
 
 - [ ] Task 6: [bisquite] Пакет `bisquite-cream-bundle`, `make bundle-deb`, self-check
 
-- [ ] Task 7: [cream] `cream check` (обобщение `resolve`)
+- [x] Task 7: [cream] `cream check` (обобщение `resolve`)
 
 - [ ] Task 8: [cream] `/etc/image-labels.d/cream.json`
 
@@ -211,6 +211,15 @@ cream = выпуск 1.2.0 через release-please (Task 17).
   `platform.commands` — только предупреждение; архивы `--catalog` читаются без распаковки на диск; ничего не пишет
   (каталог `Root` пуст после прогона).
 - **Приёмка:** golden зелёные; замер на каталоге 5.2.0 и 10 шагах < 1 с (тест-бенчмарк с порогом).
+- **Рулинги исполнения (2026-10-21):** `resolve` не переписан поверх `check` — у него иная семантика параметров
+  (голый `KEY`, Р28) и выход record.json с дайджестами деревьев; общий код — граф `resolve.Resolve`, `resolve`
+  помечен устаревшим (cream 2.0 уберёт), `cmd_meta.go` не тронут. В cream/v1 у каждого ключа валидный `default`,
+  «обязательных» параметров нет: проверяются известность ключа, тип значения, секрет только `KEY=-` (64
+  `secret.in_argv`), один stdin. `targets.build: none` — предупреждение `install.build_none`, как у `install` в
+  фазе build. Без `--installed` база неизвестна (§7.3): незакрытое — `check.maybe_installed`, не ошибка; пустая
+  база — `--installed` с `[]`. Нестандартная строка — `skipped` + `check.nonstandard`, хвост
+  `< /run/secrets/<id>` — стандартный. Ошибка шага не каскадирует: имена упавшего шага «неизвестны».
+  Замер на настоящем каталоге 5.2.0 и 10 шагах — 0,06 с.
 
 ## Task 8: [cream] `/etc/image-labels.d/cream.json`
 - **Файлы:** `internal/state/labels.go` (новый), `internal/state/labels_test.go`, `internal/state/store.go` (вызов

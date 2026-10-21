@@ -12,7 +12,7 @@
 | 0 | успех; изменилось ли что-то — `changed` в `result` | |
 | 1 | `upgrade`: в терминале ответили «нет» на план — ничего не изменено | `upgrade.declined` |
 | 0–63 | `cream run`: код самого действия | |
-| 64 | неверный вызов: флаги, аргументы, секрет в argv, зарезервированная команда | `usage.*` (`args`, `assignment`, `duplicate`, `duplicate_key`, `ext_name`, `flag`, `format`, `no_command`, `param_required`, `phase`, `ref`, `reserved`, `root`, `secret`, `source`, `source_date_epoch`, `stdin_empty`, `stdin_param`, `stdin_too_large`, `stdin_twice`, `unknown_command`, `unknown_param`), `secret.in_argv`, `phase.undetermined` (фаза не определена: `/proc/1/comm` не читается — задайте `--phase`) |
+| 64 | неверный вызов: флаги, аргументы, секрет в argv, зарезервированная команда | `usage.*` (`args`, `assignment`, `duplicate`, `duplicate_key`, `ext_name`, `flag`, `format`, `no_command`, `param_required`, `phase`, `ref`, `reserved`, `root`, `secret`, `source`, `source_date_epoch`, `step`, `stdin_empty`, `stdin_param`, `stdin_too_large`, `stdin_twice`, `unknown_command`, `unknown_param`), `secret.in_argv`, `phase.undetermined` (фаза не определена: `/proc/1/comm` не читается — задайте `--phase`) |
 | 65 | неверные данные: манифест, каталог, значение ключа, `readonly`, запись слоя, юнит | `manifest.*`, `catalog.*` (`schema`, `invalid`, `duplicate_name`, `depends`, `depends_cycle`), `config.*` (`invalid`, `unknown_key`, `readonly`, `reserved`, `install_scope`, `params_file`), `installed.invalid`, `record.invalid`, `record.mismatch`, `source.invalid`, `source.conflict`, `source.reserved`, `source.catalog`, `version.downgrade`, `version.same_digest`, `hook.missing_remove`, `stage.unsupported`, `unit.invalid` |
 | 66 | не найдено: расширение, источник, ключ, действие, манифест, файл; `@версия` не совпала | `not_found.*`, `version.mismatch`, `record.not_found` |
 | 67 | граф: нет зависимости, не та версия, нет способности, цикл, конфликт, чужой файл, есть зависимые | `deps.*` (`missing`, `version`, `requires`, `cycle`, `dependents`, `failed` — поставщик не обновился в этом `upgrade`), `conflict.*` (`extension`, `capability`, `file`, `file_owner`, `file_unowned`) |
@@ -77,3 +77,8 @@
 | `install.staging`, `install.prev`, `install.unplace` | не удалось убрать временное или прежнее дерево, откатить `files` |
 | `upgrade.no_source` | `upgrade --all`: расширение поставлено не из источника — пропущено (`skipped`, `no_source`) |
 | `build.params_file`, `build.incoming`, `build.policy_rc_d` | фаза build: не удалены `params.env` или `incoming/<id>`; `policy-rc.d` заменён хуком или не снят |
+| `check.external` | `check`: внешний каталог (`source add --archive`) на хост не скачивается — шаг из него `skipped`, проверит гость |
+| `check.nonstandard`, `check.unsupported` | `check`: нестандартная строка (`;`, `|`, `$…`, перенаправление), `source add --path` или подкоманда, которую проверка не разбирает, — шаг `skipped` |
+| `check.maybe_installed` | `check`: зависимость, способность или имя, которых проверка не видит, — возможно, поставлены пропущенным или упавшим шагом либо есть в неизвестной базе (без `--installed`, `details.step: 0`) |
+| `check.commands` | `check`: `platform.commands` расширения видны только в госте — не проверены |
+| `check.params_file` | `check`: параметры из `--params-file` на хосте не видны — проверит гость |

@@ -1,0 +1,10 @@
+schema: cream/v1
+name: cap-provider
+version: 1.0.0
+summary: фикстура cream check cap-provider
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+provides: [cap-x]
+hooks:
+  install: {}
+  remove: {}

@@ -1,0 +1,111 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "platform.arch",
+    "message": "шаг 1: arm-only: архитектуры arm64, а цель amd64 (и ещё ошибок: 1)",
+    "details": {
+      "installed": [
+        {
+          "name": "app",
+          "version": "1.1.0",
+          "source": "core",
+          "provides": []
+        },
+        {
+          "name": "base-lib",
+          "version": "1.2.0",
+          "source": "core",
+          "provides": [
+            "base"
+          ]
+        }
+      ],
+      "phase": "build",
+      "step": 1,
+      "steps": [
+        {
+          "step": 1,
+          "command": "install arm-only",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 68,
+            "code": "platform.arch",
+            "message": "arm-only: архитектуры arm64, а цель amd64",
+            "details": {
+              "ext": "arm-only",
+              "found": "amd64",
+              "want": [
+                "arm64"
+              ]
+            }
+          },
+          "warnings": []
+        },
+        {
+          "step": 2,
+          "command": "install debian-only",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 68,
+            "code": "platform.os",
+            "message": "debian-only: ОС debian >=12, а здесь ubuntu 24.04",
+            "details": {
+              "ext": "debian-only",
+              "found": "ubuntu 24.04",
+              "want": [
+                "debian >=12"
+              ]
+            }
+          },
+          "warnings": []
+        },
+        {
+          "step": 3,
+          "command": "install base-lib",
+          "status": "ok",
+          "layers": [
+            {
+              "name": "base-lib",
+              "version": "1.2.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": []
+            }
+          ],
+          "removed": [],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "step": 4,
+          "command": "install app",
+          "status": "ok",
+          "layers": [
+            {
+              "name": "app",
+              "version": "1.1.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": [
+                "base-lib@1.2.0"
+              ]
+            }
+          ],
+          "removed": [],
+          "error": null,
+          "warnings": []
+        }
+      ]
+    }
+  }
+}

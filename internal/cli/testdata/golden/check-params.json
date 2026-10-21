@@ -1,0 +1,110 @@
+{
+  "cream": "dev",
+  "command": "check",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "secret.in_argv",
+    "message": "шаг 1: app: TOKEN — секрет: значение в аргументах запрещено, передайте TOKEN=- со stdin или --params-file (и ещё ошибок: 1)",
+    "details": {
+      "installed": [
+        {
+          "name": "app",
+          "version": "1.1.0",
+          "source": "core",
+          "provides": []
+        },
+        {
+          "name": "base-lib",
+          "version": "1.2.0",
+          "source": "core",
+          "provides": [
+            "base"
+          ]
+        }
+      ],
+      "phase": "build",
+      "step": 1,
+      "steps": [
+        {
+          "step": 1,
+          "command": "install --with-deps app TOKEN=s3cr3t",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 64,
+            "code": "secret.in_argv",
+            "message": "app: TOKEN — секрет: значение в аргументах запрещено, передайте TOKEN=- со stdin или --params-file",
+            "details": {
+              "ext": "app",
+              "key": "TOKEN"
+            }
+          },
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "command": "install --with-deps app MODE=bogus",
+          "status": "error",
+          "layers": [],
+          "removed": [],
+          "error": {
+            "exit": 65,
+            "code": "config.invalid",
+            "message": "app: MODE: значение не подходит под тип enum:fast,slow: ожидается одно из: fast, slow",
+            "details": {
+              "ext": "app",
+              "key": "MODE"
+            }
+          },
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        },
+        {
+          "step": 3,
+          "command": "install --with-deps app TOKEN=-",
+          "status": "ok",
+          "layers": [
+            {
+              "name": "base-lib",
+              "version": "1.2.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": []
+            },
+            {
+              "name": "app",
+              "version": "1.1.0",
+              "source": "core",
+              "op": "install",
+              "mode": "exec",
+              "deps": [
+                "base-lib@1.2.0"
+              ]
+            }
+          ],
+          "removed": [],
+          "error": null,
+          "warnings": [
+            {
+              "code": "source.shadowed",
+              "message": "app из источника core затеняет app из local"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -41,7 +41,7 @@ func catalogCommandsWith(d catalogDeps) []Command {
 			},
 			Run: func(ctx *Context, args []string) (any, error) { return runCatalog(ctx, d, packOut, args) }},
 		{Name: "resolve",
-			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…]…  — офлайн-разрешение слоёв (§12.4)",
+			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…]…  — устарело (cream 2.0 уберёт; сборка образа — check): офлайн-разрешение слоёв (§12.4)",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&h.phase, "phase", resolve.PhaseLive, "фаза `P`: build или live")
 				fs.StringVar(&h.targetArch, "target-arch", "", "архитектура цели `A` (по умолчанию — этой машины)")
