@@ -70,3 +70,11 @@ sed 's/^name: configure-early/name: low/; s/^cream: .*/cream: ">=1.0.0"/' \
 c validate /tmp/low
 want_rc 65 "early при cream: >=1.0.0"
 want_code manifest.invalid "early при cream: >=1.0.0"
+
+step "отметки configure стадий сняты — загрузка выполнит configure, как первая из образа"
+# Install при работающем systemd уже прогнал configure и записал отметки
+# (§10.7): без них 62-stages-boot проверяет порядок стадий на загрузке.
+for e in configure-early configure-cloud-user configure-graphical; do
+	rm -f "/var/lib/cream/configured/$e.json"
+	absent "/var/lib/cream/configured/$e.json" "$e: отметки нет"
+done
