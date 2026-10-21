@@ -48,7 +48,7 @@
 | Документ | Что это |
 |---|---|
 | [specs/2026-10-18-cream-core.md](specs/2026-10-18-cream-core.md) | исходная спека `cream/v1` с обоснованиями и отвергнутыми вариантами |
-| [specs/2026-10-21-cream-apply-bisquite-split.md](specs/2026-10-21-cream-apply-bisquite-split.md) | черновик на утверждение: `cream apply`, бутстрап и секреты в госте, bisquite 3.0 без cream |
+| [specs/2026-10-21-bisquite-bundled-cream.md](specs/2026-10-21-bisquite-bundled-cream.md) | черновик на утверждение: bisquite везёт cream и каталог бандлом, скрытый шаг cream, VMFILE с `RUN_COMMAND cream install`, проверка как hadolint, метки из `/etc/image-labels.d`, `bs image diff`, configure по отметке выполнения |
 | [plans/2026-10-18-cream-core.md](plans/2026-10-18-cream-core.md) | план MVP (закрыт) |
 | [research/2026-10-18-bisquite-extension-system-inventory.md](research/2026-10-18-bisquite-extension-system-inventory.md) | опись системы расширений bisquite до cream |
 | [STATUS.md](STATUS.md) | текущее состояние работ (handoff между сессиями) |
