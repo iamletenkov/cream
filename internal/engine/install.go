@@ -221,18 +221,17 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 	ops := make(map[string]string, len(entries))
 	req := make([]resolve.Node, 0, len(entries))
 	params := map[string]map[string]string{}
+	stored := make(map[string][]config.Change, len(changes))
 	build := map[string][]config.Change{}
 	for _, en := range entries {
 		name := en.Manifest.Name
 		// scope: build values leave the stored parameters here: they reach only
 		// the hook environment, never the domain or params_digest (§10.9).
-		stored, b, err := config.SplitBuild(changes[name], en.Manifest.Config)
+		st, b, err := config.SplitBuild(changes[name], en.Manifest.Config)
 		if err != nil {
 			return nil, err
 		}
-		if changes[name] != nil {
-			changes[name], build[name] = stored, b
-		}
+		stored[name], build[name] = st, b
 		op, err := installDecide(prev[name], en)
 		if err != nil {
 			return nil, err
@@ -242,7 +241,7 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 		}
 		byName[name], ops[name] = en, op
 		req = append(req, resolve.Node{Manifest: en.Manifest, Source: installSourceRef(en.Source), Digest: en.Digest})
-		if ch := changes[name]; len(ch) > 0 {
+		if ch := stored[name]; len(ch) > 0 {
 			p := make(map[string]string, len(ch))
 			for _, c := range ch {
 				p[c.Key] = c.Value
@@ -270,7 +269,7 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 			e.warn("install.build_none", "%s: targets.build: none — в фазе build не ставится", layer.Name)
 			continue
 		}
-		job := installJob{entry: byName[layer.Name], layer: layer, changes: changes[layer.Name],
+		job := installJob{entry: byName[layer.Name], layer: layer, changes: stored[layer.Name],
 			build: build[layer.Name], prev: prev[layer.Name], op: ops[layer.Name], phase: phase, registry: recs}
 		res, err := e.installOne(ctx, job, o)
 		if res != nil {

@@ -23,8 +23,8 @@ func errScopeBuild(ext, key string) error {
 		prefix = ext + ": "
 	}
 	return errDetails(cerr.New(cerr.ExitUsage, "config.scope_build",
-		"%s%s — ключ только для сборки: значение передаётся хуку install/upgrade (cream install %s=…) и нигде не хранится",
-		prefix, key, key), key)
+		"%s%s — ключ только для сборки: значение передаётся хуку install/upgrade через cream install (%s=…, %s=- со stdin или --params-file) и нигде не хранится",
+		prefix, key, key, key), key)
 }
 
 // SplitBuild separates the assignments of `scope: build` keys from those the

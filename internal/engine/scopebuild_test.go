@@ -40,7 +40,7 @@ sum "${MIRROR_TOKEN+x}" "${MIRROR_TOKEN-}" > "$d/$h.token"
 sum "${MIRROR_URL+x}" "${MIRROR_URL-}" > "$d/$h.url"
 sum "${REQ_TOKEN+x}" "${REQ_TOKEN-}" > "$d/$h.req"
 tr '\0' ' ' < /proc/$$/cmdline > "$d/$h.argv"
-echo "token=${MIRROR_TOKEN-} url=${MIRROR_URL-}"
+echo "token=${MIRROR_TOKEN-} url=${MIRROR_URL-} req=${REQ_TOKEN-}"
 `
 
 // sbExt пишет во временный каталог расширение build-token версии version с
@@ -233,8 +233,8 @@ func TestInstallScopeBuildLive(t *testing.T) {
 	if rec := installRecord(t, te, "build-token"); rec.Version != "1.1.0" {
 		t.Errorf("версия %s", rec.Version)
 	}
-	if strings.Contains(te.Err.String(), token2) {
-		t.Error("вывод upgrade не вымаран")
+	if out := te.Err.String(); strings.Contains(out, token2) || strings.Count(out, "token=***") < 2 {
+		t.Errorf("вывод upgrade не вымаран: %q", out)
 	}
 	sbNoMarkers(t, te, sbTokenMarker, sbURLMarker, token2)
 }
@@ -279,8 +279,7 @@ func TestInstallScopeBuildPhaseBuild(t *testing.T) {
 // install — 64 config.build_required до дерева; на upgrade не требуется.
 func TestInstallScopeBuildRequired(t *testing.T) {
 	t.Parallel()
-	const req = "    REQ_TOKEN: {type: str, secret: file, scope: build, description: обязательный токен}\n"
-	te := sbEngine(t, req)
+	te := sbEngine(t, sbReq)
 	_, err := installRun(t, te, "build-token")
 	wantCode(t, err, cerr.ExitUsage, "config.build_required")
 	for _, p := range []string{te.L.InstalledFile("build-token"), te.L.EtcDir("build-token"), te.L.ExtTree("build-token")} {
@@ -296,7 +295,7 @@ func TestInstallScopeBuildRequired(t *testing.T) {
 	if got := sbState(t, te, "install", "req"); got != sbSum(sbTokenMarker) {
 		t.Errorf("REQ_TOKEN — %s", got)
 	}
-	sbSync(t, te, "1.1.0", req)
+	sbSync(t, te, "1.1.0", sbReq)
 	if _, err := installRun(t, te, "build-token"); err != nil {
 		t.Fatalf("upgrade без обязательного ключа сборки: %v", err)
 	}
@@ -343,4 +342,119 @@ func TestInstallFromDirScopeBuild(t *testing.T) {
 		t.Error("вывод не вымаран")
 	}
 	sbNoMarkers(t, te, sbTokenMarker)
+}
+
+const sbReq = "    REQ_TOKEN: {type: str, secret: file, scope: build, description: обязательный токен}\n"
+
+// sbInstallReq ставит build-token с REQ_TOKEN со stdin (token == "" — без него).
+func sbInstallReq(t *testing.T, te *testEngine, token string, reinstall bool) error {
+	t.Helper()
+	var args []string
+	if token != "" {
+		args = []string{"REQ_TOKEN=-"}
+	}
+	r := installReq([]string{"build-token"}, args...)
+	r.Params.Stdin = strings.NewReader(token + "\n")
+	r.Reinstall = reinstall
+	_, err := te.Install(context.Background(), r)
+	return err
+}
+
+// TestInstallScopeBuildReinstall: --reinstall запускает хук install заново —
+// обязательный ключ сборки снова обязателен, новое значение в окружении.
+func TestInstallScopeBuildReinstall(t *testing.T) {
+	t.Parallel()
+	te := sbEngine(t, sbReq)
+	if err := sbInstallReq(t, te, sbTokenMarker, false); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, sbInstallReq(t, te, "", true), cerr.ExitUsage, "config.build_required")
+	const token2 = "build-secret-marker-re-77aa"
+	if err := sbInstallReq(t, te, token2, true); err != nil {
+		t.Fatalf("--reinstall: %v", err)
+	}
+	if n := hookCount(t, te, "build-token", "install"); n != 2 {
+		t.Errorf("install.count = %d", n)
+	}
+	if got := sbState(t, te, "install", "req"); got != sbSum(token2) {
+		t.Errorf("REQ_TOKEN после --reinstall — %s", got)
+	}
+	if !strings.Contains(te.Err.String(), "req=***") || strings.Contains(te.Err.String(), token2) {
+		t.Errorf("вывод не вымаран: %q", te.Err.String())
+	}
+	sbNoMarkers(t, te, sbTokenMarker, token2)
+}
+
+// sbFailed — build-token 1.0.0 в реестре со статусом failed (дерево — из
+// того же расширения, что в источнике).
+func sbFailed(t *testing.T) *testEngine {
+	t.Helper()
+	te := newTestEngine(t)
+	te.Cream = manifest.ParseCreamBuild("1.2.0")
+	writeFile(t, te, "/etc/os-release", "ID=debian\nVERSION_ID=12\n", 0o644)
+	src := sbExt(t, "1.0.0", sbReq)
+	installSync(t, te, installSrc{"fx", installCatalog(t, "1.0.0", map[string]string{"build-token": src})})
+	seedInstalled(t, te, src, func(r *state.Record) {
+		r.Status, r.Source = state.StatusFailed, state.SourceRef{Name: "fx", Type: "path"}
+	})
+	return te
+}
+
+// TestInstallScopeBuildFailedRetry: повтор install после неудачного хука —
+// хук запускается снова, обязательный ключ сборки нужен.
+func TestInstallScopeBuildFailedRetry(t *testing.T) {
+	t.Parallel()
+	te := sbFailed(t)
+	wantCode(t, sbInstallReq(t, te, "", false), cerr.ExitUsage, "config.build_required")
+	if err := sbInstallReq(t, te, sbTokenMarker, false); err != nil {
+		t.Fatalf("повтор: %v", err)
+	}
+	if rec := installRecord(t, te, "build-token"); rec.Status != state.StatusInstalled {
+		t.Errorf("статус %s", rec.Status)
+	}
+	if got := sbState(t, te, "install", "req"); got != sbSum(sbTokenMarker) {
+		t.Errorf("REQ_TOKEN — %s", got)
+	}
+	sbNoMarkers(t, te, sbTokenMarker)
+}
+
+// TestUpgradeScopeBuild: cream upgrade не принимает параметров — хук upgrade
+// видит только умолчания ключей сборки, на диске ничего; повтор failed
+// install через cream upgrade с обязательным ключом сборки — отказ элемента
+// 64 config.build_required (значение через upgrade не передать; повтор —
+// cream install с ключом).
+func TestUpgradeScopeBuild(t *testing.T) {
+	t.Parallel()
+	te := sbEngine(t, sbReq)
+	if err := sbInstallReq(t, te, sbTokenMarker, false); err != nil {
+		t.Fatal(err)
+	}
+	sbSync(t, te, "1.1.0", sbReq)
+	rep, err := te.Upgrade(context.Background(), UpgradeRequest{Names: []string{"build-token"}})
+	if err != nil {
+		t.Fatalf("upgrade: %v (stderr: %s)", err, te.Err.String())
+	}
+	if rec := installRecord(t, te, "build-token"); rec.Version != "1.1.0" || rec.Status != state.StatusInstalled {
+		t.Fatalf("запись: %+v (%+v)", rec, rep)
+	}
+	if got := sbState(t, te, "upgrade", "token"); got != sbSum("") {
+		t.Errorf("MIRROR_TOKEN — не пустое умолчание: %s", got)
+	}
+	if got := sbState(t, te, "upgrade", "url"); got != sbSum("http://default.invalid") {
+		t.Errorf("MIRROR_URL — не умолчание: %s", got)
+	}
+	if got := sbState(t, te, "upgrade", "req"); got != "unset" {
+		t.Errorf("REQ_TOKEN — %s", got)
+	}
+	sbNoMarkers(t, te, sbTokenMarker)
+
+	tf := sbFailed(t)
+	rep, err = tf.Upgrade(context.Background(), UpgradeRequest{Names: []string{"build-token"}})
+	if err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	if len(rep.Plan) != 1 || rep.Plan[0].Status != StatusFailed || rep.Plan[0].Error == nil ||
+		rep.Plan[0].Error.Code != "config.build_required" || rep.Summary.ExitCode != cerr.ExitUsage {
+		t.Errorf("план: %+v", rep)
+	}
 }

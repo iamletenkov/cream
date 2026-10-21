@@ -470,8 +470,8 @@ cream перезаписывает файл после каждой успешн
   и `install`, сообщение об ошибке — «допустимо config, install или build»). Отличие от `install`: ключ
   `scope: install` хранится в домене и меняется только `cream install KEY=…` с перезапуском хука `install`;
   ключ `scope: build` **не хранится нигде** (ни `config`, ни `secrets` домена, ни `params_digest`, ни `history.jsonl`)
-  — значение живёт только в окружении хуков текущей операции `install`/`upgrade`. `cream set`/`get`/`show` на такой
-  ключ — 64 `config.scope_build` («ключ только для сборки»); `configure` его не видит. Допустим в обеих фазах.
+  — значение живёт только в окружении хуков текущей операции `install`/`upgrade`. `cream set`/`get` на такой
+  ключ — 64 `config.scope_build` («ключ только для сборки»), `cream show` его не печатает; `configure` его не видит. Допустим в обеих фазах.
   Обязательный (`empty: false` без `default`) ключ `scope: build` в live — тоже обязателен на `install`.
 
 ## 11. Изменения в bisquite (3.0.0)
