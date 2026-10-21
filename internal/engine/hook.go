@@ -2,11 +2,15 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/fsx"
 	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/runner"
@@ -89,6 +93,9 @@ func (e *Engine) RunHook(ctx context.Context, in Installed, hook manifest.HookNa
 		env.LockFD = runner.FirstExtraFD
 		env.LockMode = hl.m.String()
 	}
+	if err := e.familyEnv(&env); err != nil {
+		return runner.Failed, err
+	}
 	spec.Env = runner.BuildEnv(env)
 
 	res, err := e.Run.Run(ctx, spec)
@@ -121,6 +128,78 @@ func (e *Engine) RunHook(ctx context.Context, in Installed, hook manifest.HookNa
 		ce.Details = map[string]any{"hook": string(hook), "hook_exit": res.ExitCode, "timed_out": false}
 		return out, ce
 	}
+}
+
+// familyEnv adds what the OpenWrt layout gives hooks and actions (ADR-0005):
+// TMPDIR on disk (/tmp is RAM there) and, in the build phase, IPKG_INSTROOT=/
+// with APK_CONFIG — package scripts enable services without starting them,
+// as policy-rc.d does on Debian. apk 3 runs package scripts with a clean
+// environment unless preserve-env is set, so cream hands apk a copy of the
+// image's /etc/apk/config with preserve-env added. TMPDIR is left out when
+// its directory cannot be prepared (cream run without root); system init
+// creates it. On the Debian layout it does nothing.
+func (e *Engine) familyEnv(env *runner.EnvInput) error {
+	if !e.L.OpenWrt() {
+		return nil
+	}
+	dir := e.L.HookTmp()
+	if prepareTmp(dir) {
+		env.TmpDir = dir
+	}
+	if env.Phase != PhaseBuild {
+		return nil
+	}
+	conf, err := e.apkBuildConfig()
+	if err != nil {
+		return err
+	}
+	env.InstRoot, env.ApkConfig = "/", conf
+	return nil
+}
+
+// prepareTmp makes dir a sticky 1777 directory, touching its mode only when
+// it differs; false — it cannot be used.
+func prepareTmp(dir string) bool {
+	const mode = os.ModeDir | os.ModeSticky | 0o777
+	if st, err := os.Stat(dir); err == nil && st.Mode() == mode {
+		return true
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false
+	}
+	return os.Chmod(dir, os.ModeSticky|0o777) == nil
+}
+
+// maxApkConfig bounds what is read from the image's /etc/apk/config.
+const maxApkConfig = 64 << 10
+
+// readInRoot reads rel under root through os.OpenInRoot: a symlink of a
+// foreign --root tree does not lead to a file of the host.
+func readInRoot(root, rel string, limit int64) ([]byte, error) {
+	f, err := os.OpenInRoot(root, rel)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(io.LimitReader(f, limit))
+}
+
+// apkBuildConfig writes the apk configuration of the build phase: the
+// image's own /etc/apk/config (if any) and preserve-env.
+func (e *Engine) apkBuildConfig() (string, error) {
+	p := e.L.ApkBuildConfig()
+	own, err := readInRoot(e.root(), "etc/apk/config", maxApkConfig)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIORead, "/etc/apk/config")
+	}
+	own = append(own, []byte("\n# cream, build phase (ADR-0005): package scripts see IPKG_INSTROOT\npreserve-env\n")...)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", p)
+	}
+	if err := fsx.WriteAtomic(p, own, 0o644); err != nil {
+		return "", cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s", p)
+	}
+	return p, nil
 }
 
 // root is CREAM_ROOT of hooks: the layout root, "/" for the real one.

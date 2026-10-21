@@ -335,3 +335,26 @@ func TestLoadErrors(t *testing.T) {
 		t.Errorf("нет cream-catalog.yaml: %v", err)
 	}
 }
+
+// TestFixturesContract13: контрактная фикстура ADR-0005 (testdata/contract/cream-1.3)
+// валидна в cream 1.3.0, а cream 1.2.0 отказывает ей по cream: — 68
+// platform.cream_version, а не по platform.family.
+func TestFixturesContract13(t *testing.T) {
+	t.Parallel()
+	exts := catalogExts(t, filepath.Join(fixturesRoot, "contract", "cream-1.3"))
+	if got := sortedKeys(exts); !slices.Equal(got, []string{"openwrt-family"}) {
+		t.Fatalf("расширения %v", got)
+	}
+	for name, dir := range exts {
+		m, err := Load(dir, ParseCreamBuild("1.3.0"), nil)
+		if err != nil {
+			t.Errorf("Load(%s) на 1.3.0: %v", name, err)
+			continue
+		}
+		checkTree(t, dir, m)
+		_, err = Load(dir, ParseCreamBuild("1.2.0"), nil)
+		if cerr.ExitCode(err) != cerr.ExitNotApplicable || cerr.CodeOf(err) != "platform.cream_version" {
+			t.Errorf("Load(%s) на 1.2.0 = %v, ждали 68 platform.cream_version", name, err)
+		}
+	}
+}

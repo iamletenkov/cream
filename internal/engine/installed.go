@@ -120,7 +120,7 @@ func (e *Engine) List() ([]ListEntry, error) {
 			RebootRequired: in.Record.RebootRequired, Held: in.Record.Held}
 		if m := in.Manifest; m != nil {
 			le.Domain = len(m.Config) > 0
-			le.Apply = applyMode(m)
+			le.Apply = applyMode(m, e.L.OpenWrt())
 			for _, sp := range m.Config {
 				if sp.Secret != keytype.SecretNone {
 					le.Secret = true
@@ -138,12 +138,16 @@ func (e *Engine) List() ([]ListEntry, error) {
 }
 
 // applyMode is how cream set applies changes of m (§8.4): its apply hook,
-// a restart of configure, or nothing.
-func applyMode(m *manifest.Manifest) string {
+// a restart of configure, or nothing. On OpenWrt there is no unit to
+// restart: the configure hook runs directly (ADR-0005).
+func applyMode(m *manifest.Manifest, openwrt bool) string {
 	if _, ok := m.Hooks[manifest.HookApply]; ok {
 		return ApplyHook
 	}
 	if _, ok := m.Hooks[manifest.HookConfigure]; ok {
+		if openwrt {
+			return ApplyHook
+		}
 		return ApplyRestart
 	}
 	return ApplyNone

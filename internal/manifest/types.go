@@ -40,6 +40,13 @@ const (
 	KindLibrary   Kind = "library"
 )
 
+// Семейства платформы (platform.family): deb — с cream 1.0, openwrt — с
+// cream 1.3 (ADR-0005: OpenWrt 25.12+, procd, состояние в /opt/cream/var).
+const (
+	FamilyDeb     = "deb"
+	FamilyOpenWrt = "openwrt"
+)
+
 // Platform — требования к машине (§4.2). Arch канонизирован (amd64, arm64);
 // OS == nil — любая ОС.
 type Platform struct {

@@ -194,3 +194,27 @@ func TestBuildEnvBuildValues(t *testing.T) {
 		t.Errorf("ключи = %q, ждали %q", keys, want)
 	}
 }
+
+// OpenWrt (ADR-0005): TMPDIR на диске и IPKG_INSTROOT=/ в фазе build идут
+// после CREAM_*; ключ домена с тем же именем их не перекрывает.
+func TestBuildEnvOpenWrt(t *testing.T) {
+	t.Parallel()
+	in := EnvInput{Phase: "build", Ext: "demo", ExtVersion: "1.0.0", TmpDir: "/opt/cream/var/tmp", InstRoot: "/",
+		Values: map[string]string{"TMPDIR": "/tmp/evil", "IPKG_INSTROOT": "", "A": "1"}}
+	got := BuildEnv(in)
+	for _, want := range []string{"TMPDIR=/opt/cream/var/tmp", "IPKG_INSTROOT=/", "A=1"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("env lacks %q: %v", want, got)
+		}
+	}
+	for _, bad := range []string{"TMPDIR=/tmp/evil", "IPKG_INSTROOT="} {
+		if slices.Contains(got, bad) {
+			t.Errorf("domain key overrode cream: %q in %v", bad, got)
+		}
+	}
+	// Без TmpDir/InstRoot переменных нет (Debian), а ключ домена TMPDIR проходит как раньше.
+	got = BuildEnv(EnvInput{Phase: "live", Values: map[string]string{"TMPDIR": "/x"}})
+	if !slices.Contains(got, "TMPDIR=/x") || slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "IPKG_INSTROOT=") }) {
+		t.Errorf("deb env: %v", got)
+	}
+}

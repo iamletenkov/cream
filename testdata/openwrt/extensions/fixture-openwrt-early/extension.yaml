@@ -1,0 +1,15 @@
+schema: cream/v1
+name: fixture-openwrt-early
+version: 1.0.0
+summary: фикстура семейства openwrt — configure стадии early один раз до успеха
+cream: ">=1.3.0"
+platform:
+  family: openwrt
+  arch: [amd64, arm64]
+  os: [{id: openwrt, version: ">=25.12"}]
+# configure стадии early (S19, до сети) без every_boot: на загрузке после
+# успешного запуска пропускается по отметке выполнения.
+hooks:
+  install: {}
+  configure: {stage: early}
+  remove: {}

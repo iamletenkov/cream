@@ -18,7 +18,8 @@ func (App) systemCommands() []Command {
 				"повторить хук configure сейчас (CREAM_REASON=apply): перезапуск cream-configure@<ext>.service,\n" +
 				"без systemd — хук напрямую; на загрузке хук идёт сам на своей стадии (early, system, cloud-user, graphical),\n" +
 				"если отметка выполнения /var/lib/cream/configured/<ext>.json не совпала с реестром или её нет.\n" +
-				"журнал: journalctl -u cream-configure@<ext>.service -b",
+				"журнал: journalctl -u cream-configure@<ext>.service -b; на OpenWrt — init-скрипты procd\n" +
+				"/etc/init.d/cream-configure-early (S19) и /etc/init.d/cream-configure (S95), журнал — logread",
 			Flags: func(fs *flag.FlagSet) {
 				fs.BoolVar(&wait, "wait", false, "ждать исхода хука: status ok или skipped (хук вернул 20), 79 — хук упал; без флага перезапуск ставится в очередь")
 				fs.BoolVar(&force, "force", false, "сбросить отметку выполнения и запустить хук сейчас")
@@ -33,7 +34,7 @@ func (App) systemCommands() []Command {
 				}
 				return runConfigure(ctx, args, o)
 			}},
-		{Name: "system", Usage: "system init  — каталоги, шаблон юнита, цели configure", Run: runSystem},
+		{Name: "system", Usage: "system init  — каталоги, шаблон юнита, цели configure (OpenWrt: init-скрипты procd)", Run: runSystem},
 	}
 }
 

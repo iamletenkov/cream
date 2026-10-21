@@ -46,7 +46,7 @@ func catalogCommandsWith(d catalogDeps) []Command {
 				fs.StringVar(&h.phase, "phase", resolve.PhaseLive, "фаза `P`: build или live")
 				fs.StringVar(&h.targetArch, "target-arch", "", "архитектура цели `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.hostArch, "host-arch", "", "архитектура хоста сборки `A` (по умолчанию — этой машины)")
-				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb); без него не проверяется в build")
+				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb, openwrt); без него не проверяется в build")
 				fs.StringVar(&h.installed, "installed", "", "build: `FILE` — JSON-массив расширений базы FROM [{name, version, provides?}] (cream 1.1.0)")
 				reserveFlags(fs, "require-pinned")
 			},

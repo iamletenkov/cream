@@ -84,6 +84,13 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 	case hasHook(in.Manifest, manifest.HookConfigure):
 		h.Release()
 		st, up := e.Systemctl.Running(ctx)
+		if !up && e.L.OpenWrt() && e.Phase() == PhaseLive {
+			// OpenWrt has no unit to restart (ADR-0005): the hook runs
+			// here, as `cream configure` does there.
+			cr, err := e.ConfigureReport(ctx, ext, ReasonApply, ConfigureOptions{Wait: o.Wait})
+			res.Apply, res.RebootRequired = cr.Mode, cr.RebootRequired
+			return res, err
+		}
 		if !up {
 			return res, nil
 		}

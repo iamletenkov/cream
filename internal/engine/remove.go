@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/initsys"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/place"
@@ -225,7 +226,7 @@ func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) 
 			e.warn("systemd.stop_failed", "%s: systemctl stop %s: %v", ext, systemd.UnitName(ext), err)
 		}
 	}
-	if err := systemd.Disable(e.L, ext); err != nil {
+	if err := initsys.For(e.L).Disable(e.L, ext); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: снятие configure", ext)
 	}
 	if err := place.Unplace(e.L, in.Record.Files, e.Warn); err != nil {

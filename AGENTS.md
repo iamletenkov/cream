@@ -1,8 +1,8 @@
 # cream — регламент для агентов и людей
 
-**cream** — исполнитель расширений: один статический Go-бинарь `cream` (linux/amd64, linux/arm64), ставится `.deb`. Читает `extension.yaml`, ведёт жизненный цикл install / upgrade / configure / remove на живой машине и фазу build внутри `virt-customize`, хранит состояние установленного, даёт `cream set` / `cream show` (бывший `bisquite-conf`) и работает с источниками каталогов. Лицензия Apache-2.0.
+**cream** — исполнитель расширений: один статический Go-бинарь `cream` (linux/amd64, linux/arm64), ставится `.deb` (на OpenWrt — из `tar.gz`, ADR-0005). Читает `extension.yaml`, ведёт жизненный цикл install / upgrade / configure / remove на живой машине и фазу build внутри `virt-customize`, хранит состояние установленного, даёт `cream set` / `cream show` (бывший `bisquite-conf`) и работает с источниками каталогов. Лицензия Apache-2.0.
 
-**Выпущена 1.1.4.** MVP 1.0 и 1.1 сделаны по [спеке](docs/specs/2026-10-18-cream-core.md) и [плану](docs/plans/2026-10-18-cream-core.md): формат `cream/v1`, источники, резолвер, install / upgrade / remove / set / run, фаза build, `.deb` и тарболы. Контракт — [ADR 0001](docs/adr/0001-contract-cream-v1.md), реализация CLI и сборки — [ADR 0002](docs/adr/0002-single-dependency-stdlib-cli.md), справочник CLI — [docs/reference/cli.md](docs/reference/cli.md), пользовательская документация — [docs/README.md](docs/README.md). Состояние — [docs/STATUS.md](docs/STATUS.md).
+**Выпущена 1.2.0.** MVP 1.0 и 1.1 сделаны по [спеке](docs/specs/2026-10-18-cream-core.md) и [плану](docs/plans/2026-10-18-cream-core.md): формат `cream/v1`, источники, резолвер, install / upgrade / remove / set / run, фаза build, `.deb` и тарболы. Контракт — [ADR 0001](docs/adr/0001-contract-cream-v1.md), реализация CLI и сборки — [ADR 0002](docs/adr/0002-single-dependency-stdlib-cli.md), справочник CLI — [docs/reference/cli.md](docs/reference/cli.md), пользовательская документация — [docs/README.md](docs/README.md). Состояние — [docs/STATUS.md](docs/STATUS.md).
 
 ## Место в экосистеме
 - **bisquite** — собирает образы ВМ; в слоях сборки вызывает `cream` (фаза build).
@@ -29,8 +29,10 @@ internal/state/       — реестр установленного (cream-state
 internal/lock/        — flock-блокировки lock/{global,<ext>} и наследование через CREAM_LOCK_FD
 internal/runner/      — запуск хуков и действий: окружение, группа процессов, таймауты, фильтр секретов
 internal/systemd/     — юнит cream-configure@.service, drop-in стадии, systemctl
+internal/procd/       — OpenWrt: init-скрипты cream-configure{,-early} (S95/S19), отметки стадий /opt/cream/var/stages
+internal/initsys/     — выбор init по семейству раскладки (systemd | procd, ADR-0005)
 internal/place/       — раскладка files расширения и их снятие при remove (владение по реестру)
-internal/paths/       — раскладка путей на машине (§5), --root и режим пользователя (XDG)
+internal/paths/       — раскладка путей на машине (§5), --root, режим пользователя (XDG), семейство openwrt (/opt/cream/var)
 internal/envfile/     — грамматика EnvironmentFile= systemd: чтение и правка с сохранением комментариев
 internal/fsx/         — файловые примитивы: атомарная запись, копия дерева, дайджест дерева, проверка прав
 internal/keytype/     — типы значений ключей и параметров действий (§8.2)
@@ -41,9 +43,11 @@ testdata/catalog/     — фикстурный каталог §14; testdata/cat
 testdata/invalid/     — заведомо неверные расширения для cream validate
 testdata/check/       — каталоги core и local для cream check (unit и golden)
 testdata/contract/    — контрактные фикстуры: поля новее выпущенного cream, старый выпуск отказывает по cream: (make contract-old)
+testdata/openwrt/     — фикстуры семейства openwrt (fixture-openwrt, fixture-openwrt-early) для unit и make test-openwrt
 testdata/pilot/       — пилотные расширения (cloud-user, fixture-{agent,docker,teleport}-like) для интеграции и build
 test/integration/     — make test-integration: .deb в контейнере с systemd PID 1, сценарии scenario/NN-*.sh
 test/build/           — make test-build: фаза build настоящим virt-customize на образе Debian 12
+test/openwrt/         — make test-openwrt: корневая ФС OpenWrt 25.12 (openwrt-builder) в контейнере, сценарий под busybox sh
 packaging/            — nfpm.yaml, maintainer-скрипты, copyright (полные тексты сторонних лицензий)
 scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh, contract-old.sh (фикстуры testdata/contract на релизном cream)
 LICENSE, NOTICE       — Apache-2.0 и уведомления о стороннем коде

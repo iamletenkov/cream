@@ -35,7 +35,19 @@ type EnvInput struct {
 	// LockMode is the mode the lock behind LockFD is held in: "exclusive" or
 	// "shared"; anything else is passed as "shared" (ruling Р19).
 	LockMode string
-	Values   map[string]string
+	// TmpDir is TMPDIR of the hook ("" — not set): on OpenWrt a directory on
+	// disk, /tmp there is RAM (spec OpenWrt Р2).
+	TmpDir string
+	// InstRoot is IPKG_INSTROOT ("" — not set): "/" in the build phase on
+	// OpenWrt, so package scripts run by `apk add` enable services without
+	// starting them and leave uci-defaults to the first boot — OpenWrt's own
+	// offline-image mode, the counterpart of policy-rc.d (ADR-0005).
+	InstRoot string
+	// ApkConfig is APK_CONFIG ("" — not set): with InstRoot, an apk
+	// configuration with preserve-env, so apk 3 passes IPKG_INSTROOT on to
+	// package scripts (it clears their environment otherwise).
+	ApkConfig string
+	Values    map[string]string
 	// Build are the values of `scope: build` keys for this hook run only
 	// (ADR-0004, spec 2026-10-21 §10.9): config.BuildValues of the install or
 	// upgrade operation, never stored. They join Values in the environment; a
@@ -76,6 +88,9 @@ func BuildEnv(in EnvInput) []string {
 	optional("CREAM_CHANGED_KEYS", strings.Join(in.ChangedKeys, " "))
 	optional("CREAM_ACTION", in.Action)
 	optional("CREAM_OUTPUT", in.Output)
+	optional("TMPDIR", in.TmpDir)
+	optional("IPKG_INSTROOT", in.InstRoot)
+	optional("APK_CONFIG", in.ApkConfig)
 	if in.LockFD > 0 {
 		mode := "shared"
 		if in.LockMode == "exclusive" {
@@ -90,9 +105,15 @@ func BuildEnv(in EnvInput) []string {
 	for k, v := range in.Values {
 		vals[k] = v
 	}
+	// A domain key never overrides what cream set itself (TMPDIR, IPKG_INSTROOT).
+	taken := make(map[string]bool, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		taken[name] = true
+	}
 	keys := make([]string, 0, len(vals))
 	for k, v := range vals {
-		if passableKey(k) && !strings.ContainsRune(v, 0) {
+		if passableKey(k) && !taken[k] && !strings.ContainsRune(v, 0) {
 			keys = append(keys, k)
 		}
 	}
