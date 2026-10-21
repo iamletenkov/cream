@@ -44,4 +44,4 @@ cream работает от root на каждой машине и внутри 
 ## Связанные ADR / документы
 - [docs/specs/2026-10-18-cream-core.md](../specs/2026-10-18-cream-core.md) — §11.1, §15, §18
 - [ADR 0001](0001-contract-cream-v1.md) — контракт CLI, который этот разборщик реализует
-- [docs/cli.md](../cli.md) — справочник CLI
+- [docs/reference/cli.md](../reference/cli.md) — справочник CLI

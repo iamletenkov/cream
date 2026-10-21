@@ -407,7 +407,7 @@ List of {name, version?} dependencies by name with a version range.
 \fBextensions\fR (names) and \fBcapabilities\fR.
 .TP
 .B hooks
-install, upgrade, configure, apply, secret, remove, check: each {timeout?};
+install, upgrade, configure, apply, remove: each {timeout?};
 \fBconfigure\fR also has \fBstage\fR (early, system, cloud\-user, graphical)
 and \fBafter\fR, \fBbefore\fR, \fBwants\fR.
 .TP
@@ -420,9 +420,10 @@ Actions run by \fBcream run\fR.
 .TP
 .B files
 List of {src, dst, mode?} placed and owned by cream.
-.TP
-.B bin
-List of {name, target}: links /usr/local/sbin/<name> to the extension tree.
+.PP
+Reserved in cream/v1 and rejected (manifest.reserved): the field \fBbin\fR,
+the hooks \fBsecret\fR and \fBcheck\fR, \fBsecret: hook\fR of a key,
+\fBtargets.build: files\fR.
 .SH EXAMPLE
 .nf
 .RS
@@ -441,8 +442,7 @@ hooks:
 .SH SEE ALSO
 \fBcream\fR(1)
 .PP
-The full format, including key and action descriptions, is section 4 of
-docs/specs/2026\-10\-18\-cream\-core.md and docs/cli.md in
-https://github.com/iamletenkov/cream.
+The full format, including key and action descriptions, is
+docs/reference/manifest.md in https://github.com/iamletenkov/cream.
 `
 }
