@@ -1,0 +1,10 @@
+schema: cream/v1
+name: needs-build-key
+version: 1.0.0
+summary: фикстура cream check needs-build-key
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+depends: [{name: build-key}]
+hooks:
+  install: {}
+  remove: {}

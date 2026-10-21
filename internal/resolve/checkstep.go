@@ -8,6 +8,7 @@ import (
 
 	"github.com/iamletenkov/cream/internal/catalog"
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/semver"
 )
@@ -98,7 +99,78 @@ func (c *checker) install(s *CheckStep, args []string, w *cerr.Warnings) ([]stri
 		}
 		ops[en.m.Name] = op
 	}
-	return names, c.apply(s, entries, ops, byExt, w)
+	bo := buildOpts{reinstall: f["reinstall"] != ""}
+	if f["params-file"] != "" {
+		bo.paramsFile = entries[0].m.Name
+	}
+	return names, c.apply(s, entries, ops, byExt, bo, w)
+}
+
+// buildOpts tell apply how the guest's install would treat the required
+// `scope: build` keys: paramsFile — the extension whose values come from
+// --params-file (unseen here), reinstall — --reinstall runs the install hook
+// of the requested extensions again.
+type buildOpts struct {
+	paramsFile string
+	reinstall  bool
+}
+
+// checkBuildRequired runs buildRequired over the layers in install order,
+// as the guest's installOne does after the graph: an extension the hook
+// install will run for (op install, or --reinstall of a requested one),
+// not targets.build: none, not from --params-file. An extension that may
+// already be in the guest (unknown base, a skipped step) is a warning: the
+// guest skips the hook for the same version installed.
+func (c *checker) checkBuildRequired(layers []Layer, orig map[string]checkEntry, ops map[string]string,
+	params map[string]map[string]string, requested map[string]bool, bo buildOpts, w *cerr.Warnings) error {
+	for _, l := range layers {
+		en := orig[l.Name]
+		runs := ops[l.Name] == CheckOpInstall || (bo.reinstall && requested[l.Name])
+		if !runs || l.Mode == ModeNone || l.Name == bo.paramsFile {
+			continue
+		}
+		ce := buildRequired(en.m, params[l.Name])
+		if ce == nil {
+			continue
+		}
+		if _, have := c.nodes[l.Name]; !have {
+			if n, maybe := c.maybe(l.Name); maybe {
+				w.AddDetails("config.build_required", map[string]any{"ext": l.Name, "key": ce.Details["key"], "step": n},
+					"%s, если %s ещё не стоит (возможно, %s) — проверит гость", ce.Message, l.Name, maybeWhere(n))
+				continue
+			}
+		}
+		return ce
+	}
+	return nil
+}
+
+// buildRequired mirrors config.BuildValues of the guest's install hook: a
+// required `scope: build` key (empty: false, no default, not a pattern) the
+// step does not give (KEY=VALUE or KEY=-) is 64 config.build_required, the
+// smallest such key named. A --params-file step is not checked: its
+// contents are seen only by the guest (check.params_file).
+func buildRequired(m *manifest.Manifest, given map[string]string) *cerr.Error {
+	missing := ""
+	for k, sp := range m.Config {
+		if sp.Scope != keytype.ScopeBuild || sp.Pattern || sp.Empty || sp.Default != "" {
+			continue
+		}
+		if _, ok := given[k]; ok {
+			continue
+		}
+		if missing == "" || k < missing {
+			missing = k
+		}
+	}
+	if missing == "" {
+		return nil
+	}
+	ce := cerr.New(cerr.ExitUsage, "config.build_required",
+		"%s: %s — обязательный ключ только для сборки: передайте его в cream install (%s=…, %s=- со stdin или --params-file)",
+		m.Name, missing, missing, missing)
+	ce.Details = map[string]any{"ext": m.Name, "key": missing}
+	return ce
 }
 
 // withDeps adds the depends (by name, transitively) that neither the state
@@ -162,7 +234,7 @@ func (c *checker) decide(en checkEntry) (string, error) {
 // layers in s and the state. A depends on an unknown name (a skipped or
 // failed step) is dropped from the check with check.maybe_installed.
 func (c *checker) apply(s *CheckStep, entries []checkEntry, ops map[string]string,
-	params map[string]map[string]string, w *cerr.Warnings) error {
+	params map[string]map[string]string, bo buildOpts, w *cerr.Warnings) error {
 	requested := map[string]bool{}
 	for _, en := range entries {
 		requested[en.m.Name] = true
@@ -200,6 +272,9 @@ func (c *checker) apply(s *CheckStep, entries []checkEntry, ops map[string]strin
 	}
 	layers, err := Resolve(c.installedNodes(), req, params, c.req.Host, w)
 	if err != nil {
+		return err
+	}
+	if err := c.checkBuildRequired(layers, orig, ops, params, requested, bo, w); err != nil {
 		return err
 	}
 	for _, l := range layers {
@@ -296,11 +371,11 @@ func (c *checker) upgrade(s *CheckStep, args []string, w *cerr.Warnings) ([]stri
 	}
 	if f["dry-run"] != "" {
 		saved, savedUnknown := c.snapshot()
-		err := c.apply(s, entries, ops, nil, w)
+		err := c.apply(s, entries, ops, nil, buildOpts{}, w)
 		c.nodes, c.unknown = saved, savedUnknown
 		return names, err
 	}
-	return names, c.apply(s, entries, ops, nil, w)
+	return names, c.apply(s, entries, ops, nil, buildOpts{}, w)
 }
 
 func hasSrcIn(cats []*CheckCatalog, name string) bool {
