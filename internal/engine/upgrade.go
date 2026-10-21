@@ -474,8 +474,23 @@ func (e *Engine) upgradeGraph(installed []Installed, cands map[string]*upgradeCa
 		if err == nil {
 			return layers
 		}
+		blamed := upgradeBlame(err, names, cands)
+		if len(blamed) == len(names) && len(names) > 1 {
+			// Nothing in the error names a candidate: the ones whose removal
+			// alone lets the rest resolve are to blame.
+			var single []string
+			for i, n := range names {
+				rest := slices.Delete(slices.Clone(req), i, i+1)
+				if _, rerr := resolve.Resolve(nodes, rest, nil, host, &cerr.Warnings{}); rerr == nil {
+					single = append(single, n)
+				}
+			}
+			if len(single) > 0 {
+				blamed = single
+			}
+		}
 		err = e.installCandidates(err, dirs)
-		for _, n := range upgradeBlame(err, names) {
+		for _, n := range blamed {
 			byName[n].block(ReasonDependency, err)
 			delete(cands, n)
 		}
@@ -484,15 +499,17 @@ func (e *Engine) upgradeGraph(installed []Installed, cands map[string]*upgradeCa
 }
 
 // upgradeBlame are the candidates a graph error names: details.ext, else
-// any candidate among the other details (dep, with, owners, cycle), else all.
-func upgradeBlame(err error, cands []string) []string {
+// any candidate among the other details (dep, with, owners, cycle), else
+// those whose installed version provides details.capability and the new one
+// does not (an installed consumer lost its provider), else all of them.
+func upgradeBlame(err error, names []string, cands map[string]*upgradeCand) []string {
 	d := cerr.DetailsOf(err)
-	if ext, _ := d["ext"].(string); slices.Contains(cands, ext) {
+	if ext, _ := d["ext"].(string); slices.Contains(names, ext) {
 		return []string{ext}
 	}
 	var out []string
 	add := func(s string) {
-		if slices.Contains(cands, s) && !slices.Contains(out, s) {
+		if slices.Contains(names, s) && !slices.Contains(out, s) {
 			out = append(out, s)
 		}
 	}
@@ -506,8 +523,16 @@ func upgradeBlame(err error, cands []string) []string {
 			}
 		}
 	}
+	if c, _ := d["capability"].(string); c != "" && len(out) == 0 {
+		for _, n := range names {
+			old, cur := cands[n].prev.Manifest, cands[n].entry.Manifest
+			if old != nil && slices.Contains(old.Provides, c) && !slices.Contains(cur.Provides, c) {
+				add(n)
+			}
+		}
+	}
 	if len(out) == 0 {
-		return cands
+		return names
 	}
 	return out
 }
@@ -570,7 +595,9 @@ func (e *Engine) upgradeRun(ctx context.Context, r UpgradeRequest, layers []reso
 		}
 		if err != nil {
 			it.fail(StatusFailed, "", err)
-			bad[layer.Name] = true
+			// A failure after the new version is in place (configure) does
+			// not hold its dependents back.
+			bad[layer.Name] = res == nil || res.Status != state.StatusInstalled
 			stop = r.FailFast || ctx.Err() != nil
 			continue
 		}

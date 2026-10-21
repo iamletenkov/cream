@@ -462,3 +462,20 @@ func TestUpgradeAcceptRiskUsage(t *testing.T) {
 	_, err := te.Upgrade(context.Background(), UpgradeRequest{All: true, AcceptRisk: []string{"../x"}})
 	wantCode(t, err, cerr.ExitUsage, "usage.ext_name")
 }
+
+// Новая версия поставщика больше не даёт способность, нужную установленному
+// потребителю: блокируется только поставщик, а не все обновления.
+func TestUpgradeBlameCapability(t *testing.T) {
+	t.Parallel()
+	first := []planExt{{name: "prov", version: "1.0.0", extra: "provides: [cap-x]\n"},
+		{name: "cons", version: "1.0.0", extra: "requires: [cap-x]\n"}, {name: "zeta", version: "1.0.0"}}
+	next := []planExt{{name: "prov", version: "2.0.0"}, {name: "cons", version: "1.0.0", extra: "requires: [cap-x]\n"},
+		{name: "zeta", version: "2.0.0"}}
+	te := planSetup(t, first, next)
+	rep := upgradeAll(t, te, UpgradeRequest{})
+	it := wantItem(t, rep, "prov", ActionBlocked, ReasonDependency, StatusBlocked)
+	if it.Error == nil || it.Error.Code != "deps.requires" {
+		t.Errorf("prov: %+v", it.Error)
+	}
+	wantItem(t, rep, "zeta", ActionUpgrade, "", StatusUpgraded)
+}
