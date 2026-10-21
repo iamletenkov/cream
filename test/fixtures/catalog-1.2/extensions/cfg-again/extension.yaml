@@ -1,0 +1,12 @@
+schema: cream/v1
+name: cfg-again
+version: 1.0.0
+summary: configure с повтором
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Модель rustdesk (А4): хук сам просит повтор — cream configure --again отложенно
+# через systemd-run; повтор идёт мимо отметки с CREAM_REASON=followup (§10.7, Р1).
+hooks:
+  install: {}
+  configure: {stage: system, every_boot: true}
+  remove: {}

@@ -282,5 +282,199 @@ done
 grep -q '^virt-customize ' "$pslog" || fail "журнал ps не застал virt-customize"
 if grep -qF -e "$secret" -e "$secret2" -e "$envtag" "$pslog"; then fail "значение параметра в argv процесса"; fi
 ok "ps -eo args ($(wc -l <"$pslog") строк) без значений параметров"
-echo "$secret $secret2" >"$work/values"
+
+# ============================================================================
+# cream 1.2.0 (спека 2026-10-21 §10.1–§10.4, §10.7, §10.9; план Task 15): как
+# будет делать bisquite 3.0 — dpkg -i пакета в госте, source add --path,
+# cream install без --phase и без --from-dir/--record. База и потомок FROM —
+# два overlay; потомок закрывает depends реестром базы; cream check на хосте
+# видит базу через cream.json (--installed).
+# ============================================================================
+log "cream 1.2: фаза build из источника"
+token=cream-build-token-$(rnd)
+(umask 077 && printf 'TOKEN=%s\nLEVEL=high\n' "$token" >"$work/token.env")
+o=/var/tmp/cream-out
+pslog12=$work/ps12.log
+: >"$pslog12"
+
+# rc <тег> <аргументы cream…> — вызов cream в госте: конверт, stderr и код —
+# в файлы $o/<тег>.{json,err,rc} (отказ cream не валит virt-customize).
+rc() {
+	local tag=$1
+	shift
+	printf '/usr/bin/cream --json %s >%s/%s.json 2>%s/%s.err; echo $? >%s/%s.rc' "$*" "$o" "$tag" "$o" "$tag" "$o" "$tag"
+}
+
+# vc <образ> [аргументы virt-customize…] — один virt-customize, на время
+# вызова фоном снимается `ps -eo args` в $pslog12.
+vc() {
+	local im=$1 wp
+	shift
+	(while :; do
+		ps -eo args >>"$pslog12" 2>/dev/null || true
+		sleep 0.2
+	done) &
+	wp=$!
+	vc_rc=0
+	virt-customize -a "$im" --no-network "$@" || vc_rc=$?
+	kill "$wp" 2>/dev/null || true
+	wait "$wp" 2>/dev/null || true
+}
+
+# База: пакет, источники, слои; секрет TOKEN — в tmpfs /run/secrets (как
+# RUN_COMMAND --mount=type=secret bisquite 3.0), значение не в тексте команд.
+# --upload сохраняет владельца хоста (uid сборщика) и права 0644, а
+# --params-file принимает только root 0600 (77 perm.params_file) — отсюда
+# chown/chmod до вызова cream.
+img12=$work/image12.qcow2
+qemu-img create -q -f qcow2 -F qcow2 -b "$base" "$img12"
+vc "$img12" \
+	--mkdir "$o" \
+	--copy-in "$deb:/var/tmp" \
+	--run-command "dpkg -i /var/tmp/$(basename "$deb") >$o/dpkg.log 2>&1; echo \$? >$o/dpkg.rc; rm -f /var/tmp/$(basename "$deb")" \
+	--mkdir /var/tmp/src \
+	--copy-in "$src/testdata/catalog:/var/tmp/src" \
+	--copy-in "$src/test/fixtures/catalog-1.2:/var/tmp/src" \
+	--run-command "$(rc 01-source-fixtures source add fixtures --path /var/tmp/src/catalog --sync)" \
+	--run-command "$(rc 02-source-v12 source add v12 --path /var/tmp/src/catalog-1.2 --sync)" \
+	--run-command "$(rc 03-lib install fixtures/lib-fixture)" \
+	--run-command "$(rc 04-lib-again install fixtures/lib-fixture)" \
+	--run-command "$(rc 05-token-missing install v12/build-token)" \
+	--run-command 'mkdir -p /run/secrets && mount -t tmpfs -o mode=0700,size=1m cream-secrets /run/secrets' \
+	--upload "$work/token.env:/run/secrets/token" \
+	--run-command 'chown 0:0 /run/secrets/token && chmod 0600 /run/secrets/token' \
+	--run-command "$(rc 06-token install --params-file /run/secrets/token v12/build-token)" \
+	--run-command 'umount /run/secrets; rmdir /run/secrets 2>/dev/null || true' \
+	--run-command "$(rc 07-once install v12/cfg-once)"
+eq "$vc_rc" 0 "virt-customize базы (cream 1.2)"
+
+# Потомок FROM: overlay поверх базы, depends-lib закрывается lib-fixture базы.
+img12c=$work/image12-child.qcow2
+qemu-img create -q -f qcow2 -F qcow2 -b "$img12" "$img12c"
+vc "$img12c" \
+	--run-command "$(rc 11-child-dep install fixtures/depends-lib)" \
+	--run-command "$(rc 12-child-show show cfg-once)"
+eq "$vc_rc" 0 "virt-customize потомка (cream 1.2)"
+
+log "осмотр базы и потомка (guestfish --ro)"
+out12=$work/out12
+mkdir -p "$out12/base"
+guestfish --ro -a "$img12" -i <<EOF >"$out12/base/fish.txt"
+download /etc/image-labels.d/cream.json $out12/base/cream.json
+EOF
+guestfish --ro -a "$img12c" -i <<EOF >"$out12/fish.txt"
+tar-out $o $out12/o.tar numericowner:true
+tar-out /var/lib/cream $out12/varlib.tar numericowner:true
+tar-out /etc/cream $out12/etc.tar numericowner:true
+tar-out /etc/systemd/system $out12/systemd.tar numericowner:true
+download /etc/image-labels.d/cream.json $out12/cream.json
+echo configured:
+is-dir /var/lib/cream/configured
+echo run-secrets:
+exists /run/secrets
+echo policy-rc.d:
+exists /usr/sbin/policy-rc.d
+echo token-files:
+sh "grep -rlF --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude-dir=run -e $token / || true"
+echo end
+EOF
+for t in o varlib etc systemd; do
+	mkdir -p "$out12/$t"
+	tar -C "$out12/$t" --no-same-owner -xf "$out12/$t.tar"
+done
+section12() { awk -v s="$1:" '$0 == s {on = 1; next} /^[a-z0-9.-]+:$|^end$/ {on = 0} on && NF' "$out12/fish.txt"; }
+r() { jq -r "$2" "$out12/o/$1.json"; }
+code() { tr -d '\n' <"$out12/o/$1.rc"; }
+# Ненулевые коды вызовов cream в госте — с текстом ошибки, для разбора.
+for f in "$out12"/o/*.rc; do
+	t=$(basename "$f" .rc)
+	[ "$(tr -d '\n' <"$f")" = 0 ] || [ ! -s "$out12/o/$t.json" ] ||
+		echo "   $t: код $(tr -d '\n' <"$f"), $(jq -c '.error | {code, message}' "$out12/o/$t.json" 2>/dev/null)"
+done
+
+eq "$(code dpkg)" 0 "dpkg -i пакета cream в госте"
+eq "$(code 01-source-fixtures) $(code 02-source-v12)" "0 0" "source add --path --sync в госте"
+
+# Фаза определяется сама (§10.1): в virt-customize PID 1 — не systemd.
+eq "$(code 03-lib)" 0 "install fixtures/lib-fixture без --phase"
+eq "$(r 03-lib .phase)" build "конверт: phase build"
+[[ "$(r 03-lib .reason)" =~ ^pid1= ]] && [[ "$(r 03-lib .reason)" != pid1=systemd ]] &&
+	ok "конверт: reason $(r 03-lib .reason)" || fail "reason «$(r 03-lib .reason)» — ожидалось pid1=<не systemd>"
+eq "$(code 04-lib-again) $(r 04-lib-again .result.changed)" "0 false" "повтор install — noop (changed false)"
+eq "$(code 05-token-missing) $(r 05-token-missing .error.code)" "64 config.build_required" \
+	"build-token без TOKEN — 64 config.build_required"
+eq "$(code 06-token) $(r 06-token .phase)" "0 build" "install build-token --params-file из tmpfs"
+eq "$(code 07-once)" 0 "install cfg-once (configure — только enable)"
+eq "$(code 11-child-dep) $(r 11-child-dep .phase)" "0 build" "потомок: install depends-lib без --with-deps"
+eq "$(code 12-child-show) $(r 12-child-show '.result.configured.at')" "0 null" "потомок: show cfg-once — configured.at null"
+
+# Реестр потомка описывает и базу: всё в фазе build.
+for n in lib-fixture build-token cfg-once depends-lib; do
+	eq "$(jq -r '.phase + " " + .status' "$out12/varlib/installed/$n.json")" "build installed" "реестр: $n build installed"
+done
+
+# scope: build (§10.9): хук получил TOKEN, значение нигде на диске.
+eq "$(cat "$out12/varlib/ext/build-token/token.sha256")" "$(printf '%s' "$token" | sha256sum | cut -d' ' -f1)" \
+	"хук install build-token получил TOKEN"
+eq "$(tail -n 1 "$out12/varlib/ext/build-token/install.log")" "phase=build level=high" "хук install: фаза build, LEVEL"
+grep -qx 'LEVEL=high' "$out12/etc/build-token/config" && ok "LEVEL=high в config" || fail "LEVEL нет в config"
+if grep -qs '^TOKEN=' "$out12/etc/build-token/config" "$out12/etc/build-token/secrets"; then fail "TOKEN в config/secrets"; fi
+ok "TOKEN нет в config и secrets"
+eq "$(section12 token-files | tr -d '\n')" "" "значения TOKEN нет ни в одном файле образа"
+eq "$(section12 run-secrets | tr -d '\n')" false "/run/secrets снят"
+if grep -rqF "$token" "$out12/o"; then fail "значение TOKEN в выводе cream"; fi
+ok "значения TOKEN нет в выводе cream"
+
+# Отметок configure в фазе build нет (§10.7): первая загрузка выполнит все.
+if [ "$(section12 configured | tr -d '\n')" = true ] && find "$out12/varlib/configured" -type f | grep -q .; then
+	fail "в образе есть отметки configure: $(find "$out12/varlib/configured" -type f)"
+fi
+ok "отметок configure в образе нет"
+[ -e "$out12/varlib/ext/cfg-once/configure.count" ] && fail "configure cfg-once выполнился в фазе build"
+ok "configure cfg-once в фазе build не выполнялся"
+[ -L "$out12/systemd/multi-user.target.wants/cream-configure@cfg-once.service" ] &&
+	ok "cream-configure@cfg-once включён ссылкой" || fail "cream-configure@cfg-once не включён"
+eq "$(section12 policy-rc.d | tr -d '\n')" false "/usr/sbin/policy-rc.d снят"
+
+# /etc/image-labels.d/cream.json (§8.2): потомок описывает и базу.
+names() { jq -r '."cream.extensions" | fromjson | map(.name) | sort | join(" ")' "$1"; }
+eq "$(names "$out12/base/cream.json")" "build-token cfg-once lib-fixture" "cream.json базы"
+eq "$(names "$out12/cream.json")" "build-token cfg-once depends-lib lib-fixture" "cream.json потомка — с базой"
+eq "$(jq -r '."cream.sources" | fromjson | map(.name + ":" + .type) | join(" ")' "$out12/cream.json")" \
+	"fixtures:path v12:path" "cream.sources"
+eq "$(jq -r '."cream.version"' "$out12/cream.json")" "$("$cream" --json version | jq -r '.cream | sub("^v"; "")')" \
+	"cream.version — версия пакета"
+if grep -qE 'params_digest|LEVEL|high' "$out12/cream.json"; then fail "параметры в cream.json"; fi
+ok "в cream.json нет параметров"
+
+# cream check на хосте (§10.3): база неизвестна — depends-lib с заметкой
+# check.maybe_installed; пустая база — 67 deps.missing; cream.json базы
+# (--installed) закрывает зависимость; состояние переносится между --step.
+jq -r '."cream.extensions"' "$out12/base/cream.json" >"$out12/installed.json"
+echo '[]' >"$out12/installed-empty.json"
+chk() { "$cream" --json check --catalog "fixtures=$src/testdata/catalog" --catalog "v12=$src/test/fixtures/catalog-1.2" \
+	--os debian:12 --arch amd64 "$@"; }
+maybe='[.result.steps[].warnings[].code | select(. == "check.maybe_installed")] | length'
+crc=0
+chk --step 'install depends-lib' >"$out12/check-unknown.json" || crc=$?
+eq "$crc $(jq -r "$maybe" "$out12/check-unknown.json")" "0 1" "check без --installed: заметка check.maybe_installed"
+crc=0
+chk --installed "$out12/installed-empty.json" --step 'install depends-lib' >"$out12/check-empty.json" || crc=$?
+eq "$crc $(jq -r .error.code "$out12/check-empty.json")" "67 deps.missing" "check с пустой базой: 67 deps.missing"
+crc=0
+chk --installed "$out12/installed.json" --step 'install depends-lib' >"$out12/check-base.json" || crc=$?
+eq "$crc $(jq -r '.result.steps[0].status' "$out12/check-base.json") $(jq -r "$maybe" "$out12/check-base.json")" "0 ok 0" \
+	"check с --installed из cream.json базы: зависимость закрыта"
+crc=0
+chk --installed "$out12/installed-empty.json" --step 'install fixtures/lib-fixture' --step 'install fixtures/depends-lib' \
+	--step 'install v12/build-token TOKEN=-' >"$out12/check-steps.json" || crc=$?
+eq "$crc $(jq -r '[.result.steps[].status] | join(",")' "$out12/check-steps.json")" "0 ok,ok,ok" \
+	"check: шаги базы подряд, TOKEN=- принят"
+
+# argv на время virt-customize: значения TOKEN нет.
+grep -q '^virt-customize ' "$pslog12" || fail "журнал ps не застал virt-customize (1.2)"
+if grep -qF -e "$token" "$pslog12"; then fail "значение TOKEN в argv процесса"; fi
+ok "ps -eo args ($(wc -l <"$pslog12") строк) без значения TOKEN"
+
+echo "$secret $secret2 $token" >"$work/values"
 log "все проверки прошли: $pass"

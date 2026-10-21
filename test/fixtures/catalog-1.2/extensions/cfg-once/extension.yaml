@@ -1,0 +1,15 @@
+schema: cream/v1
+name: cfg-once
+version: 1.0.0
+summary: configure один раз
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure один раз до успеха (§10.7): отметка выполнения, пропуск на загрузке.
+hooks:
+  install: {}
+  configure: {stage: system}
+  remove: {}
+config:
+  keys:
+    MESSAGE: {type: str, default: "hello", description: "что configure пишет в состояние"}
+    PASS: {type: str, default: "", empty: true, secret: file, description: "секрет: ротация растит secrets_rev"}
