@@ -30,7 +30,7 @@
 
 - [ ] Task 9: [bisquite] Удаление слоя `EXTENSION`, адаптера и источников на хосте; отказ парсера с подсказкой
 
-- [ ] Task 10: [cream] `scope: build` в движке: значение только в окружении хука
+- [x] Task 10: [cream] `scope: build` в движке: значение только в окружении хука
 
 - [ ] Task 11: [cream] Отметка выполнения configure, `secrets_rev`, `--force`, `--again`, `every_boot`
 

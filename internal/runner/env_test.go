@@ -171,3 +171,26 @@ func TestBuildEnvLockMode(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildEnvBuildValues: значения ключей scope: build (ADR-0004) идут в
+// окружение вместе с ключами домена, отсортированные по имени; Build не
+// перекрывает ключ домена с тем же именем (такого быть не может — домен их не
+// хранит — но перекрыть настройку значением сборки было бы хуже) и не
+// пропускает имена, которых не пропускает Values.
+func TestBuildEnvBuildValues(t *testing.T) {
+	t.Parallel()
+	in := EnvInput{Phase: "build", Ext: "x", ExtVersion: "1.0.0",
+		Values: map[string]string{"LEVEL": "a", "SAME": "domain"},
+		Build:  map[string]string{"TOKEN": "t0k", "SAME": "build", "bad": "v", "NUL": "a\x00b"}}
+	got := BuildEnv(in)
+	var keys []string
+	for _, kv := range got {
+		k, _, _ := strings.Cut(kv, "=")
+		if !strings.HasPrefix(k, "CREAM_") && k != "PATH" && k != "LANG" {
+			keys = append(keys, kv)
+		}
+	}
+	if want := []string{"LEVEL=a", "SAME=domain", "TOKEN=t0k"}; !slices.Equal(keys, want) {
+		t.Errorf("ключи = %q, ждали %q", keys, want)
+	}
+}

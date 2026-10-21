@@ -36,6 +36,12 @@ type EnvInput struct {
 	// "shared"; anything else is passed as "shared" (ruling Р19).
 	LockMode string
 	Values   map[string]string
+	// Build are the values of `scope: build` keys for this hook run only
+	// (ADR-0004, spec 2026-10-21 §10.9): config.BuildValues of the install or
+	// upgrade operation, never stored. They join Values in the environment; a
+	// name Values already has keeps the domain value. Build may hold secrets:
+	// the caller masks them in output through Spec.Secrets.
+	Build map[string]string
 }
 
 // BuildEnv returns the complete, clean environment of a hook or action
@@ -77,15 +83,22 @@ func BuildEnv(in EnvInput) []string {
 		}
 		env = append(env, "CREAM_LOCK_FD="+strconv.Itoa(in.LockFD), "CREAM_LOCK_MODE="+mode)
 	}
-	keys := make([]string, 0, len(in.Values))
+	vals := make(map[string]string, len(in.Values)+len(in.Build))
+	for k, v := range in.Build {
+		vals[k] = v
+	}
 	for k, v := range in.Values {
+		vals[k] = v
+	}
+	keys := make([]string, 0, len(vals))
+	for k, v := range vals {
 		if passableKey(k) && !strings.ContainsRune(v, 0) {
 			keys = append(keys, k)
 		}
 	}
 	slices.Sort(keys)
 	for _, k := range keys {
-		env = append(env, k+"="+in.Values[k])
+		env = append(env, k+"="+vals[k])
 	}
 	return env
 }

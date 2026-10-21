@@ -7,6 +7,7 @@ import (
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/runner"
 )
@@ -14,7 +15,8 @@ import (
 // RunHook runs hook of an installed extension (spec §6.1–§6.3) and waits.
 //
 // env carries what only the caller knows (Phase, PrevVersion, Reason,
-// ChangedKeys); RunHook fills Ext, ExtVersion, the directories, Root and the
+// ChangedKeys, Build — scope: build values, secret ones masked in output);
+// RunHook fills Ext, ExtVersion, the directories, Root and the
 // non-secret domain values, and defaults Phase to e.Phase(). The lock/<ext>
 // the caller holds is passed to the hook when ctx comes from WithLock.
 // Output of the hook goes to e.Stderr with known secret values masked.
@@ -45,6 +47,13 @@ func (e *Engine) RunHook(ctx context.Context, in Installed, hook manifest.HookNa
 	secrets, err := dom.Secrets()
 	if err != nil {
 		return runner.Failed, err
+	}
+	// scope: build values the caller passes (install/upgrade) are masked like
+	// the domain's secrets when the key is a secret (§10.9).
+	for k, v := range env.Build {
+		if sp, ok := in.Manifest.Config.Lookup(k); ok && sp.Secret != keytype.SecretNone && v != "" {
+			secrets = append(secrets, v)
+		}
 	}
 	if err := os.MkdirAll(e.L.StateDir(name), 0o755); err != nil {
 		return runner.Failed, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: каталог состояния", name)

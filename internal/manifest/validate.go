@@ -430,11 +430,14 @@ func validateKeys(in map[string]rawKey) (keytype.Schema, error) {
 		if r.Default != nil {
 			sp.Default = *r.Default
 		}
+		// A scope: build key with empty: false and no default is required: its
+		// value comes with every install (spec 2026-10-21 §10.9).
+		requiredBuild := sp.Scope == keytype.ScopeBuild && r.Default == nil && !sp.Empty
 		if r.Pattern {
 			if sp.Default != "" {
 				return nil, invalid(field+".default", "у шаблона умолчания нет")
 			}
-		} else if err := sp.CheckValue(sp.Default); err != nil {
+		} else if err := sp.CheckValue(sp.Default); err != nil && !requiredBuild {
 			hint := ""
 			if typ.Kind == keytype.KindBool {
 				hint = " (bool в cream — строка 0 или 1, не true/false)"

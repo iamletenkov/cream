@@ -221,8 +221,18 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 	ops := make(map[string]string, len(entries))
 	req := make([]resolve.Node, 0, len(entries))
 	params := map[string]map[string]string{}
+	build := map[string][]config.Change{}
 	for _, en := range entries {
 		name := en.Manifest.Name
+		// scope: build values leave the stored parameters here: they reach only
+		// the hook environment, never the domain or params_digest (§10.9).
+		stored, b, err := config.SplitBuild(changes[name], en.Manifest.Config)
+		if err != nil {
+			return nil, err
+		}
+		if changes[name] != nil {
+			changes[name], build[name] = stored, b
+		}
 		op, err := installDecide(prev[name], en)
 		if err != nil {
 			return nil, err
@@ -261,7 +271,7 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 			continue
 		}
 		job := installJob{entry: byName[layer.Name], layer: layer, changes: changes[layer.Name],
-			prev: prev[layer.Name], op: ops[layer.Name], phase: phase, registry: recs}
+			build: build[layer.Name], prev: prev[layer.Name], op: ops[layer.Name], phase: phase, registry: recs}
 		res, err := e.installOne(ctx, job, o)
 		if res != nil {
 			out = append(out, *res)
@@ -381,9 +391,11 @@ func (e *Engine) installCandidates(err error, dirs []source.SourceDir) error {
 
 // installJob is one extension to install or upgrade.
 type installJob struct {
-	entry    catalog.Entry
-	layer    resolve.Layer
-	changes  []config.Change
+	entry   catalog.Entry
+	layer   resolve.Layer
+	changes []config.Change
+	// build are the scope: build assignments: only the hook environment.
+	build    []config.Change
 	prev     *Installed
 	op       string
 	phase    string
@@ -396,9 +408,6 @@ type installJob struct {
 // then daemon-reload and a synchronous configure.
 func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*InstallResult, error) {
 	m := j.entry.Manifest
-	if err := refuseScopeBuild(m); err != nil {
-		return nil, err
-	}
 	name := m.Name
 	h, err := e.Locks.Ext(ctx, name, lock.Exclusive)
 	if err != nil {
@@ -414,6 +423,10 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 		if !scoped {
 			h.Release()
+			if len(j.build) > 0 {
+				e.warn("install.build_unused",
+					"%s: установлено и параметры установки не менялись — хук install не запускался, значения ключей только для сборки не применены (--reinstall)", name)
+			}
 			res := &InstallResult{Record: j.prev.Record}
 			if rest := installNonScope(m, j.changes); len(rest) > 0 {
 				if _, err := e.Set(ctx, name, rest, SetOptions{}); err != nil {
@@ -424,6 +437,13 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 	}
 
+	// scope: build values: the environment of this operation's hook only; a
+	// required one is required for the install hook (§10.9). Checked, like
+	// the parameters, before the tree.
+	buildEnv, err := config.BuildValues(m.Config, j.build, j.op == installOpInstall)
+	if err != nil {
+		return nil, err
+	}
 	// Parameters are checked before the tree and written after files (§6.5,
 	// steps 3–4): a refusal of files (67) leaves the domain untouched.
 	if len(j.changes) > 0 {
@@ -461,7 +481,7 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		rec.Phase, rec.InstalledAt, rec.Configure = j.prev.Record.Phase, j.prev.Record.InstalledAt, j.prev.Record.Configure
 		rec.Held = j.prev.Record.Held
 	}
-	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase}
+	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase, Build: buildEnv}
 	if upgrade {
 		env.PrevVersion = from
 		if hasHook(m, manifest.HookUpgrade) {
