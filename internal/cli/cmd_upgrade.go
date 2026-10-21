@@ -30,6 +30,7 @@ func (f *namesFlag) Set(v string) error {
 type upgradeFlags struct {
 	all, dryRun, yes, failFast bool
 	acceptRisk                 namesFlag
+	phase                      string
 }
 
 // upgradeCommand is `cream upgrade` (§6.5): the plan first, then the
@@ -39,7 +40,7 @@ type upgradeFlags struct {
 func upgradeCommand() Command {
 	var f upgradeFlags
 	return Command{Name: "upgrade",
-		Usage: "upgrade [--dry-run] [-y] [--accept-risk <ext>|all]… [--fail-fast] <ext>… | --all" +
+		Usage: "upgrade [--phase build|live] [--dry-run] [-y] [--accept-risk <ext>|all]… [--fail-fast] <ext>… | --all" +
 			"  — обновление до версии в кеше источника: сначала план, потом действия",
 		Flags: func(fs *flag.FlagSet) {
 			fs.BoolVar(&f.all, "all", false, "обновить все установленные (закреплённые cream hold пропускаются)")
@@ -47,6 +48,7 @@ func upgradeCommand() Command {
 			fs.BoolVar(&f.yes, "y", false, "не спрашивать подтверждение в терминале (то же, что --yes)")
 			fs.BoolVar(&f.yes, "yes", false, "не спрашивать подтверждение в терминале")
 			fs.BoolVar(&f.failFast, "fail-fast", false, "остановиться на первом пропуске плана или первой ошибке")
+			fs.StringVar(&f.phase, "phase", "", "фаза `P`: live или build; без флага — CREAM_PHASE родителя, иначе по PID 1")
 			fs.Var(&f.acceptRisk, "accept-risk", "обновлять расширение `ext` с targets.live: confirm (all — все); можно повторять")
 		},
 		Run: func(ctx *Context, args []string) (any, error) { return runUpgrade(ctx, args, f) }}
@@ -56,13 +58,17 @@ func runUpgrade(ctx *Context, args []string, f upgradeFlags) (any, error) {
 	if err := requireRoot(ctx, "upgrade"); err != nil {
 		return nil, err
 	}
+	e, err := phaseEngine(ctx, f.phase)
+	if err != nil {
+		return nil, err
+	}
 	r := engine.UpgradeRequest{Names: args, All: f.all, AcceptRisk: f.acceptRisk, DryRun: f.dryRun,
 		FailFast: f.failFast}
 	if !f.yes && !f.dryRun && !ctx.Globals.JSON && ctx.App.Interactive != nil && ctx.App.Interactive() {
 		p := &prompter{in: bufio.NewReader(ctx.App.Stdin), out: ctx.Stderr()}
 		r.ConfirmRisk, r.Confirm = p.risk, p.plan
 	}
-	rep, err := newEngine(ctx).Upgrade(ctx.Ctx, r)
+	rep, err := e.Upgrade(ctx.Ctx, r)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@
 
 - [ ] Task 3: [cream-extensions] Аудит 14 хуков configure по А1–А6 и гейт `lint-hooks` в режиме warn (день 1)
 
-- [ ] Task 4: [cream] Автоопределение фазы
+- [x] Task 4: [cream] Автоопределение фазы
 
 - [ ] Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
 
@@ -173,6 +173,10 @@ cream = выпуск 1.2.0 через release-please (Task 17).
   (`reason: pid1=<имя>`); нет `/proc` → 64 `phase.undetermined`; флаг побеждает всё; `CREAM_PHASE` родителя
   побеждает автоопределение.
 - **Приёмка:** `make test PKG=./internal/engine/... ./internal/cli/...` зелёный, golden `--json` обновлены.
+- **Рулинги исполнения:** systemd без `/run/systemd/system` (chroot с `/proc` хоста) — `build`, `reason:
+  pid1=systemd,no-run` (ADR-0004 п.1 «иначе — build»). «Журнал» §10.1 — строка `cream: фаза <ф> (<причина>)` в
+  stderr (кроме `-q`), её видит журнал сборки bisquite; набор полей `history.jsonl` — контракт, причина туда не
+  пишется. Для Task 5: `Engine.buildPhase()` копирует решённую фазу — копии ставить `phase = build` явно.
 
 ## Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
 - **Файлы:** `internal/engine/{build,install,upgrade,remove}.go`, их `_test.go`, `internal/cli/{cmd_install,cmd_upgrade,cmd_remove}.go`,

@@ -1,6 +1,8 @@
 {
   "cream": "dev",
   "command": "upgrade",
+  "phase": "live",
+  "reason": "env",
   "ok": true,
   "result": {
     "dry_run": false,

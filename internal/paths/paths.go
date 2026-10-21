@@ -236,6 +236,9 @@ func (l Layout) OSRelease() string { return l.sys("etc/os-release") }
 // SystemdRunning is /run/systemd/system: it exists only while systemd is PID 1.
 func (l Layout) SystemdRunning() string { return l.sys("run/systemd/system") }
 
+// PID1Comm is /proc/1/comm, the name of PID 1: cream decides its phase by it (§10.1).
+func (l Layout) PID1Comm() string { return l.sys("proc/1/comm") }
+
 // CloudUserUnit is the unit that pulls the configure instances of the
 // cloud-user stage, /usr/lib/systemd/system/cream-configure-cloud-user.service.
 func (l Layout) CloudUserUnit() string { return l.sys(unitDir, "cream-configure-cloud-user.service") }

@@ -1,6 +1,8 @@
 {
   "cream": "dev",
   "command": "remove",
+  "phase": "live",
+  "reason": "env",
   "ok": true,
   "result": {
     "ext": "with-config",
