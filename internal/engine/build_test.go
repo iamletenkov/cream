@@ -560,3 +560,20 @@ func TestBuildRemove(t *testing.T) {
 		t.Errorf("history: %s", h)
 	}
 }
+
+// TestBuildFromDirOverridesDecidedPhase — фаза, уже решённая ResolvePhase
+// (live), не мешает слою --from-dir: buildPhase задаёт build явно.
+func TestBuildFromDirOverridesDecidedPhase(t *testing.T) {
+	t.Parallel()
+	te := buildEngine(t)
+	if _, err := te.ResolvePhase(PhaseLive); err != nil {
+		t.Fatal(err)
+	}
+	res, err := te.InstallFromDir(context.Background(), buildIncoming(t, te, "d1", fixtureDir(t, "noop"), ""))
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if res.Phase != PhaseBuild {
+		t.Errorf("phase = %q", res.Phase)
+	}
+}

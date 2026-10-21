@@ -23,7 +23,7 @@ func (App) installCommands() []Command {
 	var reinstall, acceptRisk, allowSkip, removeParams, withDeps bool
 	return []Command{
 		{Name: "install",
-			Usage: "install [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка (в образе — фаза build)\n" +
+			Usage: "install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка (в образе — фаза build)\n" +
 				"  install --phase build --from-dir D --record F [--params-file P] [--remove-params-file] [--allow-skip]  — устарело: фаза build из дерева bisquite 2.x",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&src, "source", "", "искать ссылки без источника в источнике `S`")
@@ -31,7 +31,7 @@ func (App) installCommands() []Command {
 				fs.BoolVar(&acceptRisk, "accept-risk", false, "ставить расширение с targets.live: confirm")
 				fs.BoolVar(&allowSkip, "allow-skip", false, "код 20 хука — status: skipped без ошибки")
 				fs.StringVar(&paramsFile, "params-file", "", "файл `F` с KEY=VALUE (0600, владелец root)")
-				fs.StringVar(&phase, "phase", engine.PhaseLive, "фаза `P`: live или build (build — только с --from-dir)")
+				fs.StringVar(&phase, "phase", "", "фаза `P`: live или build; без флага — CREAM_PHASE родителя, иначе по PID 1")
 				fs.BoolVar(&withDeps, "with-deps", false, "добрать недостающие depends из источника расширения")
 				fs.StringVar(&fromDir, "from-dir", "", "устарело (cream 2.0 уберёт): фаза build, дерево `D` (incoming/<id>/<имя>)")
 				fs.StringVar(&record, "record", "", "устарело (cream 2.0 уберёт): фаза build, record.json `F` — слой resolve --json")
@@ -39,13 +39,16 @@ func (App) installCommands() []Command {
 				reserveFlags(fs, "allow-downgrade", "require-pinned")
 			},
 			Run: func(ctx *Context, args []string) (any, error) {
-				if phase != engine.PhaseLive || fromDir != "" || record != "" || removeParams {
+				// --from-dir, --record, --remove-params-file: the deprecated layer of
+				// bisquite 2.x; otherwise the tree comes from the sources in either
+				// phase (spec 2026-10-21 §10.2).
+				if fromDir != "" || record != "" || removeParams {
 					return runInstallBuild(ctx, args, installBuildFlags{phase: phase, source: src,
 						reinstall: reinstall, acceptRisk: acceptRisk, withDeps: withDeps},
 						engine.BuildRequest{FromDir: fromDir, Record: record, ParamsFile: paramsFile,
 							RemoveParamsFile: removeParams, AllowSkip: allowSkip})
 				}
-				return runInstall(ctx, args, engine.InstallRequest{Source: src, Reinstall: reinstall,
+				return runInstall(ctx, args, phase, engine.InstallRequest{Source: src, Reinstall: reinstall,
 					AcceptRisk: acceptRisk, AllowSkip: allowSkip, WithDeps: withDeps,
 					Params: config.AssignInput{ParamsFile: paramsFile}})
 			}},
@@ -99,7 +102,8 @@ func installOutput(res []engine.InstallResult, single bool) any {
 }
 
 // runInstall splits args into references and KEY=VALUE parameters.
-func runInstall(ctx *Context, args []string, r engine.InstallRequest) (any, error) {
+// phase is --phase ("" — decided by CREAM_PHASE or PID 1, §10.1).
+func runInstall(ctx *Context, args []string, phase string, r engine.InstallRequest) (any, error) {
 	if err := requireRoot(ctx, "install"); err != nil {
 		return nil, err
 	}
@@ -113,9 +117,13 @@ func runInstall(ctx *Context, args []string, r engine.InstallRequest) (any, erro
 	if len(r.Refs) == 0 {
 		return nil, ctx.Usagef("install: нужна ссылка на расширение")
 	}
+	e, err := phaseEngine(ctx, phase)
+	if err != nil {
+		return nil, err
+	}
 	r.Params.Stdin = ctx.App.Stdin
 	r.Params.CheckPerm = ctx.Layout.NeedsRoot()
-	res, err := newEngine(ctx).InstallAll(ctx.Ctx, r)
+	res, err := e.InstallAll(ctx.Ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +143,7 @@ type installBuildFlags struct {
 // --params-file (never argv: secrets), the source from record.json.
 func runInstallBuild(ctx *Context, args []string, f installBuildFlags, r engine.BuildRequest) (any, error) {
 	switch {
-	case f.phase != engine.PhaseBuild && f.phase != engine.PhaseLive:
+	case f.phase != "" && f.phase != engine.PhaseBuild && f.phase != engine.PhaseLive:
 		return nil, cerr.New(cerr.ExitUsage, "usage.phase", "--phase %q: ожидается build или live", f.phase)
 	case f.phase != engine.PhaseBuild:
 		return nil, ctx.Usagef("install: --from-dir, --record и --remove-params-file — только с --phase build")

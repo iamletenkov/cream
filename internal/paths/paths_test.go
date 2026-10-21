@@ -138,6 +138,7 @@ func TestLayoutMethodsUnderRoot(t *testing.T) {
 		{"PolicyRcD", l.PolicyRcD(), "/tmp/x/usr/sbin/policy-rc.d"},
 		{"OSRelease", l.OSRelease(), "/tmp/x/etc/os-release"},
 		{"SystemdRunning", l.SystemdRunning(), "/tmp/x/run/systemd/system"},
+		{"PID1Comm", l.PID1Comm(), "/tmp/x/proc/1/comm"},
 		{"CloudUserUnit", l.CloudUserUnit(), "/tmp/x/usr/lib/systemd/system/cream-configure-cloud-user.service"},
 	}
 	for _, tc := range tests {

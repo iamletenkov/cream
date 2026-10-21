@@ -13,9 +13,13 @@ import (
 const Contract = "cream/v1"
 
 // envelope is the single object printed to stdout with --json (spec §11.4).
+// phase and reason are present only where the command decided its phase
+// (install, upgrade, remove; §10.1).
 type envelope struct {
 	Cream    string         `json:"cream"`
 	Command  string         `json:"command"`
+	Phase    string         `json:"phase,omitempty"`
+	Reason   string         `json:"reason,omitempty"`
 	OK       bool           `json:"ok"`
 	Result   any            `json:"result"`
 	Warnings []cerr.Warning `json:"warnings"`

@@ -76,7 +76,7 @@ cream catalog pack DIR --out FILE
 ## Установка, обновление, удаление
 
 ```
-cream install [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]
+cream install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]
 cream upgrade [--dry-run] [-y] [--accept-risk <ext>|all]… [--fail-fast] <ext>… | --all
 cream hold <ext>…
 cream unhold <ext>…
@@ -91,7 +91,8 @@ cream remove [--purge|--forget] [--force] <ext>
 | `--accept-risk` | ставить расширение с `targets.live: confirm` |
 | `--allow-skip` | код 20 хука — статус `skipped` без ошибки (иначе код 68) |
 | `--params-file F` | параметры `KEY=VALUE` из файла (0600, владелец root) |
-| `--phase build`, `--from-dir`, `--record`, `--remove-params-file` | устарело с 1.2, уйдёт в cream 2.0: один слой, доставленный bisquite 2.x, — [для сборщиков](../guides/build-phase.md) |
+| `--phase build\|live` | фаза; без флага — `CREAM_PHASE` родителя, иначе по PID 1 |
+| `--from-dir`, `--record`, `--remove-params-file` | устарело с 1.2, уйдёт в cream 2.0: один слой, доставленный bisquite 2.x, — [для сборщиков](../guides/build-phase.md) |
 
 - Параметры `KEY=VALUE` проверяются по манифесту до запуска хука; секрет — только
   `KEY=-` (значение со stdin, один ключ) или `--params-file`.

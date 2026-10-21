@@ -161,6 +161,7 @@ func (e *Engine) buildGuard() (func(), error) {
 // CREAM_PHASE=build, configure is only enabled, systemd is not touched.
 func (e *Engine) buildPhase() *Engine {
 	b := *e
+	b.phase = PhaseBuild
 	env := e.Env
 	b.Env = func(k string) string {
 		if k == "CREAM_PHASE" {

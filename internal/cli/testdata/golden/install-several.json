@@ -1,6 +1,8 @@
 {
   "cream": "dev",
   "command": "install",
+  "phase": "live",
+  "reason": "env",
   "ok": true,
   "result": {
     "extensions": [

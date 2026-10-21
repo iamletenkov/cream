@@ -129,7 +129,6 @@ func TestInstallBuildCommand(t *testing.T) {
 		args []string
 	}{
 		{name: "--from-dir без --phase build", args: []string{"install", "--from-dir", args[4], "--record", args[6]}},
-		{name: "--phase build без --from-dir", args: []string{"install", "--phase", "build", "noop"}},
 		{name: "--phase build со ссылкой", args: append(append([]string{}, args...), "noop")},
 		{name: "--phase build с KEY=VALUE", args: append(append([]string{}, args...), "X=1")},
 		{name: "--phase build с --source", args: append([]string{"install", "--source", "core"}, args[1:]...)},
@@ -180,6 +179,18 @@ func TestInstallBuildFromSourceCommand(t *testing.T) {
 		hist, err := os.ReadFile(l.History())
 		if err != nil || strings.Count(string(hist), `"phase":"build"`) != 3 {
 			t.Errorf("history: %s %v", hist, err)
+		}
+	})
+	t.Run("явный --phase build без --from-dir", func(t *testing.T) {
+		t.Parallel()
+		root := installCLIRoot(t)
+		out := runCLI(t, cliIn{Root: root}, "install", "--phase", "build", "noop")
+		if out.Code != 0 || !strings.Contains(out.Stderr, "cream: фаза build") {
+			t.Fatalf("install --phase build: %+v", out)
+		}
+		reg, err := os.ReadFile(paths.Layout{Root: root}.InstalledFile("noop"))
+		if err != nil || !strings.Contains(string(reg), `"phase": "build"`) {
+			t.Errorf("реестр: %s %v", reg, err)
 		}
 	})
 	t.Run("--with-deps", func(t *testing.T) {

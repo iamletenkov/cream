@@ -12,14 +12,16 @@ import (
 // removeCommands is `cream remove` (§6.5, §11.2).
 func (App) removeCommands() []Command {
 	var o engine.RemoveOptions
+	var phase string
 	return []Command{
-		{Name: "remove", Usage: "remove [--purge|--forget] [--force] <ext>  — удалить расширение",
+		{Name: "remove", Usage: "remove [--phase build|live] [--purge|--forget] [--force] <ext>  — удалить расширение",
 			Flags: func(fs *flag.FlagSet) {
 				fs.BoolVar(&o.Purge, "purge", false, "удалить и /etc/cream/<ext>, /var/lib/cream/ext/<ext>")
 				fs.BoolVar(&o.Forget, "forget", false, "без хука remove: только реестр, дерево и артефакты cream")
 				fs.BoolVar(&o.Force, "force", false, "удалить, хотя от расширения зависят установленные")
+				fs.StringVar(&phase, "phase", "", "фаза `P`: live или build; без флага — CREAM_PHASE родителя, иначе по PID 1")
 			},
-			Run: func(ctx *Context, args []string) (any, error) { return runRemove(ctx, args, o) }},
+			Run: func(ctx *Context, args []string) (any, error) { return runRemove(ctx, args, phase, o) }},
 	}
 }
 
@@ -48,14 +50,18 @@ func (r removeResult) WriteText(w io.Writer) error {
 	return err
 }
 
-func runRemove(ctx *Context, args []string, o engine.RemoveOptions) (any, error) {
+func runRemove(ctx *Context, args []string, phase string, o engine.RemoveOptions) (any, error) {
 	if err := requireRoot(ctx, "remove"); err != nil {
 		return nil, err
 	}
 	if len(args) != 1 {
 		return nil, ctx.Usagef("remove: нужно одно имя расширения")
 	}
-	res, err := newEngine(ctx).Remove(ctx.Ctx, args[0], o)
+	e, err := phaseEngine(ctx, phase)
+	if err != nil {
+		return nil, err
+	}
+	res, err := e.Remove(ctx.Ctx, args[0], o)
 	if err != nil {
 		return nil, err
 	}
