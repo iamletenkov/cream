@@ -41,7 +41,9 @@ bisquite 3.0.0 становится дистрибутивом cream: везёт
 5. **configure по отметке выполнения** `/var/lib/cream/configured/<ext>.json` (§10.7): на загрузке хук не
    запускается, если отметка совпала с реестром (`version`, `ext_digest`, `params_digest`, `secrets_rev`,
    `machine_id`); `cream configure --force`, `--again`.
-6. **Код `20` хука configure** — `skipped`: не ошибка, отметка не пишется, повтор на следующей загрузке (§10.8).
+6. **Код `20` хука configure** — `skipped`: не ошибка, отметка не пишется, а прежняя снимается — повтор на следующей
+   загрузке (§10.8). `cream configure --wait` через юнит отдаёт исход (`status: ok|skipped`) из
+   `/run/cream/configure/<ext>.result`, который пишет юнит.
 7. **Поле `hooks.configure.every_boot`** (bool, по умолчанию `false`) — configure на каждой загрузке, мимо отметки.
 8. **Значение `scope: build`** у ключа `config.keys` — третье в перечислении `config|install|build`: значение живёт
    только в окружении хуков текущей операции `install`/`upgrade` и нигде на машине не хранится (§10.9).

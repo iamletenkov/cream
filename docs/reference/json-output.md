@@ -51,11 +51,11 @@ JSON-объект; сообщения cream и вывод хуков уходя�
 | `hold`, `unhold` | `{extensions: [{name, version, held, changed}]}` | [hold.json](../../internal/cli/testdata/golden/hold.json) |
 | `remove` | `{ext, version, hook, purged, forgotten, dependents, reboot_required}` | [remove.json](../../internal/cli/testdata/golden/remove.json) |
 | `list` | `{extensions: [{name, version, kind, status, domain, apply, secret, actions, reboot_required, held}]}` | [list.json](../../internal/cli/testdata/golden/list.json) |
-| `show` | `{ext, keys: [{key, value, origin, type, secret, invalid}]}` | [show.json](../../internal/cli/testdata/golden/show.json) |
+| `show` | `{ext, keys: [{key, value, origin, type, secret, invalid}], configured: {at, matches, every_boot}\|null}` (ключи `scope: build` не печатаются) | [show.json](../../internal/cli/testdata/golden/show.json) |
 | `get`, `config get` | `{ext, key, value}` | [get.json](../../internal/cli/testdata/golden/get.json) |
 | `set` | `{ext, changed, changed_keys, apply: none\|hook\|restart\|skipped, reboot_required}` | [set.json](../../internal/cli/testdata/golden/set.json) |
 | `config export` | `{ext, format, text}` | [config-export.json](../../internal/cli/testdata/golden/config-export.json) |
-| `configure` | `{ext, reason, mode, status?, reboot_required}`; `status: "skipped"` — хук, запущенный самим cream (без systemd), вернул 20; без поля — иначе | [configure.json](../../internal/cli/testdata/golden/configure.json) |
+| `configure` | `{ext, reason, mode: hook\|restart\|queued\|up-to-date\|none, status?, reboot_required}`; `status` — исход хука `ok` или `skipped` (вернул 20): при `mode: hook` (хук исполнил сам cream) всегда, при `mode: restart` (`--wait`, юнит) — из файла исхода юнита; нет поля — исход неизвестен (`queued`, пропуск по отметке, нет хука). Сбой — 79 `hook.failed` с `details.status: failed`. `configure --force --all` — `{extensions: [<то же>…]}` | [configure.json](../../internal/cli/testdata/golden/configure.json), [configure-force-all.json](../../internal/cli/testdata/golden/configure-force-all.json) |
 | `system init` | `{unit, daemon_reload}` | [system-init.json](../../internal/cli/testdata/golden/system-init.json) |
 | `run` | `{action, exit_code, output}` — ниже | [run-json.json](../../internal/cli/testdata/golden/run-json.json) |
 | `actions` | `{ext, version, actions: [ActionInfo…]}` — ниже | [actions.json](../../internal/cli/testdata/golden/actions.json) |
