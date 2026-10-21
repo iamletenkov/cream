@@ -16,7 +16,7 @@
 | 65 | неверные данные: манифест, каталог, значение ключа, `readonly`, запись слоя, юнит | `manifest.*`, `catalog.*` (`schema`, `invalid`, `duplicate_name`, `depends`, `depends_cycle`), `config.*` (`invalid`, `unknown_key`, `readonly`, `reserved`, `install_scope`, `params_file`), `installed.invalid`, `record.invalid`, `record.mismatch`, `source.invalid`, `source.conflict`, `source.reserved`, `source.catalog`, `version.downgrade`, `version.same_digest`, `hook.missing_remove`, `stage.unsupported`, `unit.invalid` |
 | 66 | не найдено: расширение, источник, ключ, действие, манифест, файл; `@версия` не совпала | `not_found.*`, `version.mismatch`, `record.not_found` |
 | 67 | граф: нет зависимости, не та версия, нет способности, цикл, конфликт, чужой файл, есть зависимые | `deps.*` (`missing`, `version`, `requires`, `cycle`, `dependents`, `failed` — поставщик не обновился в этом `upgrade`), `conflict.*` (`extension`, `capability`, `file`, `file_owner`, `file_unowned`) |
-| 68 | неприменимо: архитектура, семейство, ОС, нет команд, `targets`, версия cream, хук вернул 20, расширение закреплено | `platform.*` (`arch`, `arch_barrier`, `family`, `os`, `commands`, `cream_version`), `target.*` (`build`, `live`, `confirm`), `hold.held`, `action.phase`, `hook.not_applicable` |
+| 68 | неприменимо: архитектура, семейство, ОС, нет команд, `targets`, версия cream, хук вернул 20 (кроме `configure`), расширение закреплено | `platform.*` (`arch`, `arch_barrier`, `family`, `os`, `commands`, `cream_version`), `target.*` (`build`, `live`, `confirm`), `hold.held`, `action.phase`, `hook.not_applicable` |
 | 69 | источник: не синхронизирован, sha256 не совпала, сеть, архив, путь | `source.*` (`not_synced`, `missing`, `fetch`, `redirect`, `too_large`, `bad_archive`, `path`) |
 | 70 | внутренняя ошибка cream | `internal` |
 | 74 | ввод-вывод; реестр повреждён или новее cream | `io.read`, `io.write`, `io.stdin`, `io.stdout`, `io.stderr`, `file.stat`, `state.corrupt`, `state.newer`, `state.tree`, `state.lock_dir`, `state.lock_file` |
@@ -41,12 +41,15 @@
 
 ## Коды хуков
 
-| Код хука | Значение для cream |
-|---|---|
-| 0 | успех |
-| 10 | успех, нужна перезагрузка: `reboot_required: true`, файл `/run/reboot-required` |
-| 20 | неприменимо здесь: с `--allow-skip` — статус `skipped`, иначе код 68 `hook.not_applicable` |
-| другой | сбой: код 79 `hook.failed`, статус `failed` |
+| Код хука | `install`, `upgrade`, `remove`, `apply`, `secret` | `configure` |
+|---|---|---|
+| 0 | успех | успех, отметка выполнения пишется |
+| 10 | успех, нужна перезагрузка: `reboot_required: true`, файл `/run/reboot-required` | то же, отметка пишется |
+| 20 | неприменимо здесь: с `--allow-skip` — статус `skipped`, иначе код 68 `hook.not_applicable` | **пропущено**, не ошибка: cream — 0, при запуске хука самим cream — `"status": "skipped"` (через юнит — `mode: restart`, юнит успешен), запись `skipped` в `history.jsonl`; отметка не пишется и прежняя не удаляется — на загрузке хук пойдёт снова, если отметки нет или она не совпадает |
+| другой | сбой: код 79 `hook.failed`, статус `failed` | сбой: код 79 `hook.failed`, отметка удаляется, запись `failed` в `history.jsonl`; повтор на каждой загрузке до успеха |
+
+Отметка выполнения `configure` — `/var/lib/cream/configured/<ext>.json`
+([cli: configure](cli.md)); в фазе build отметок нет.
 
 ## Предупреждения
 
