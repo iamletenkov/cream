@@ -326,7 +326,12 @@ func (e *Engine) Upgrade(ctx context.Context, r UpgradeRequest) (*UpgradeReport,
 			return nil, cerr.New(cerr.ExitCheck, "upgrade.declined", "upgrade: отменено — ничего не изменено")
 		}
 	}
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
 	e.upgradeRun(ctx, r, layers, cands, byName, installed, rep)
+	drop()
 	return finish()
 }
 

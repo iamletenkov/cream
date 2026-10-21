@@ -147,6 +147,16 @@ func (e *Engine) InstallFromDir(ctx context.Context, r BuildRequest) (*InstallRe
 	return &res[0], err
 }
 
+// buildGuard puts cream's policy-rc.d for the hooks of install, upgrade and
+// remove in the build phase (§10.2) and returns what takes it away; in live
+// it does nothing.
+func (e *Engine) buildGuard() (func(), error) {
+	if e.Phase() != PhaseBuild {
+		return func() {}, nil
+	}
+	return e.policyRcDPut()
+}
+
 // buildPhase is a copy of the engine whose Phase() is build: hooks get
 // CREAM_PHASE=build, configure is only enabled, systemd is not touched.
 func (e *Engine) buildPhase() *Engine {

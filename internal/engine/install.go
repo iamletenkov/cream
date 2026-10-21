@@ -22,7 +22,8 @@ import (
 	"github.com/iamletenkov/cream/internal/systemd"
 )
 
-// InstallRequest is `cream install` on a live machine (§6.5, §11.2).
+// InstallRequest is `cream install` from the sources, live or build (§6.5,
+// §11.2; build phase — spec 2026-10-21 §10.2).
 type InstallRequest struct {
 	// Refs are [source/]name[@version]; several only without parameters.
 	Refs []string
@@ -37,6 +38,9 @@ type InstallRequest struct {
 	AcceptRisk bool
 	// AllowSkip turns hook code 20 into status skipped without an error.
 	AllowSkip bool
+	// WithDeps adds the missing depends of the requested extensions from the
+	// source each was found in (§9.4).
+	WithDeps bool
 }
 
 // InstallResult is the result of install/upgrade for one extension: the
@@ -81,6 +85,10 @@ func (e *Engine) Install(ctx context.Context, r InstallRequest) (*InstallResult,
 // lower one 65 version.downgrade, the same version with another digest
 // 65 version.same_digest. The results come in install order; on an error
 // they hold the extensions done before it.
+//
+// In the build phase (Phase()) the same path applies the build rules
+// (§10.2): targets.build, hooks under policy-rc.d, configure only enabled,
+// systemd untouched. WithDeps adds missing depends first.
 func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallResult, error) {
 	if len(r.Refs) == 0 {
 		return nil, cerr.New(cerr.ExitUsage, "usage.args", "install: нужна ссылка на расширение")
@@ -135,8 +143,54 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 	if err != nil {
 		return nil, err
 	}
+	if r.WithDeps {
+		if entries, err = e.installWithDeps(dirs, entries, all); err != nil {
+			return nil, err
+		}
+	}
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
 	return e.installEntries(ctx, entries, changes, all, dirs,
 		installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip})
+}
+
+// installWithDeps adds to entries the depends (by name, transitively) that
+// neither the registry nor the request has, each from the source of the
+// extension that needs it (--with-deps, §9.4). A dependency that source
+// lacks stays missing: the graph refuses with 67 deps.missing and its
+// candidates. The range is not checked here: a wrong version is 67
+// deps.version of the graph. requires are not added.
+func (e *Engine) installWithDeps(dirs []source.SourceDir, entries []catalog.Entry, all []Installed) ([]catalog.Entry, error) {
+	have := make(map[string]bool, len(all)+len(entries))
+	for _, in := range all {
+		if in.Manifest != nil {
+			have[in.Record.Name] = true
+		}
+	}
+	for _, en := range entries {
+		have[en.Manifest.Name] = true
+	}
+	for i := 0; i < len(entries); i++ {
+		en := entries[i]
+		for _, d := range en.Manifest.Depends {
+			if have[d.Name] {
+				continue
+			}
+			dep, err := catalog.Lookup(dirs, catalog.Ref{Source: en.Source.Source.Name, Name: d.Name}, e.Cream, e.Warn)
+			switch {
+			case cerr.CodeOf(err) == "not_found.extension":
+				continue
+			case err != nil:
+				return nil, err
+			}
+			have[d.Name] = true
+			entries = append(entries, dep)
+		}
+	}
+	return entries, nil
 }
 
 // installSourceDirs reads sources.yaml and sources.lock and returns the

@@ -13,6 +13,7 @@ import (
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/fsx"
 	"github.com/iamletenkov/cream/internal/resolve"
+	"github.com/iamletenkov/cream/internal/source"
 	"github.com/iamletenkov/cream/internal/state"
 	"github.com/iamletenkov/cream/internal/systemd"
 )
@@ -378,5 +379,184 @@ func TestBuildSecret(t *testing.T) {
 	want := state.ParamsDigest(map[string]string{"TOKEN": "x", "LEVEL": "high"}, func(k string) bool { return k == "TOKEN" })
 	if res.ParamsDigest != want {
 		t.Errorf("params_digest %s, ждали %s (секрет — только <secret>)", res.ParamsDigest, want)
+	}
+}
+
+// buildProbeBody — тело хука: код policy-rc.d (или «нет») в $CREAM_STATE_DIR/<file>.
+func buildProbeBody(file string) string {
+	return `mkdir -p "$CREAM_STATE_DIR"
+p="$CREAM_ROOT/usr/sbin/policy-rc.d"
+if [ -x "$p" ]; then rc=0; "$p" x start || rc=$?; echo "$rc" > "$CREAM_STATE_DIR/` + file + `"; else echo нет > "$CREAM_STATE_DIR/` + file + `"; fi`
+}
+
+// buildSourceEngine — движок гостя с источниками srcs (без srcs — fixtures),
+// фаза build задана родителем (CREAM_PHASE), systemd «запущен»: build его
+// всё равно не трогает.
+func buildSourceEngine(t *testing.T, srcs ...installSrc) *testEngine {
+	t.Helper()
+	te := installEngine(t, srcs...)
+	te.EnvVars["CREAM_PHASE"] = PhaseBuild
+	te.systemdRunning("running")
+	return te
+}
+
+// buildNoSystemctl требует, чтобы в фазе build systemctl не звали ни для чего,
+// кроме вопроса «запущен ли».
+func buildNoSystemctl(t *testing.T, te *testEngine) {
+	t.Helper()
+	for _, c := range te.Sys.Calls() {
+		if c != "is-system-running" {
+			t.Errorf("вызовы systemctl в фазе build: %v", te.Sys.Calls())
+			return
+		}
+	}
+}
+
+func TestBuildInstallFromSource(t *testing.T) {
+	t.Parallel()
+	te := buildSourceEngine(t)
+	res, err := installRun(t, te, "configure-system", "MESSAGE=из-образа")
+	if err != nil {
+		t.Fatalf("install: %v (stderr: %s)", err, te.Err.String())
+	}
+	if !res.Changed || res.Status != state.StatusInstalled || res.Phase != PhaseBuild {
+		t.Fatalf("результат: %+v", res)
+	}
+	rec := installRecord(t, te, "configure-system")
+	if rec.Phase != PhaseBuild || rec.Source.Name != "fixtures" || rec.Source.Type != source.TypePath ||
+		rec.Configure == nil || rec.Configure.Target != "multi-user.target" {
+		t.Errorf("запись: %+v", rec)
+	}
+	link := filepath.Join(te.L.WantsDir("multi-user.target"), systemd.UnitName("configure-system"))
+	if !installExists(link) {
+		t.Errorf("нет ссылки %s", link)
+	}
+	if log := readState(t, te, "configure-system", "install.log"); !strings.Contains(log, "phase=build") {
+		t.Errorf("install.log: %q", log)
+	}
+	// configure только включается: не вызывается, systemd не трогается.
+	if n := hookCount(t, te, "configure-system", "configure"); n != 0 {
+		t.Errorf("configure вызван %d раз", n)
+	}
+	buildNoSystemctl(t, te)
+	if installExists(te.L.PolicyRcD()) {
+		t.Error("policy-rc.d остался")
+	}
+	if h := installHistory(t, te); !strings.Contains(h, `"phase":"build"`) {
+		t.Errorf("history: %s", h)
+	}
+
+	// Повтор той же версии — ничего не делается.
+	res, err = installRun(t, te, "configure-system", "MESSAGE=из-образа")
+	if err != nil || res.Changed {
+		t.Fatalf("повтор: %+v %v", res, err)
+	}
+	if n := hookCount(t, te, "configure-system", "install"); n != 1 {
+		t.Errorf("install.count = %d после повтора", n)
+	}
+}
+
+func TestBuildInstallFromSourcePolicyRcD(t *testing.T) {
+	t.Parallel()
+	cat := installCatalog(t, "1.0.0", map[string]string{"policy-probe": buildPolicyProbe(t)})
+	te := buildSourceEngine(t, installSrc{"core", cat})
+	installMust(t, te, "policy-probe")
+	if got := strings.TrimSpace(readState(t, te, "policy-probe", "policy")); got != "101" {
+		t.Errorf("policy-rc.d во время хука: %q, ждали 101", got)
+	}
+	if installExists(te.L.PolicyRcD()) {
+		t.Error("policy-rc.d не снят")
+	}
+	// В live policy-rc.d не ставится.
+	live := installEngine(t, installSrc{"core", cat})
+	installMust(t, live, "policy-probe")
+	if got := strings.TrimSpace(readState(t, live, "policy-probe", "policy")); got != "нет" {
+		t.Errorf("policy-rc.d в live: %q", got)
+	}
+}
+
+func TestBuildInstallFromSourceRefusals(t *testing.T) {
+	t.Parallel()
+	t.Run("@версия не та — 66", func(t *testing.T) {
+		t.Parallel()
+		te := buildSourceEngine(t)
+		_, err := installRun(t, te, "noop@9.9.9")
+		wantCode(t, err, cerr.ExitNotFound, "version.mismatch")
+	})
+	t.Run("незакрытая зависимость — 67", func(t *testing.T) {
+		t.Parallel()
+		te := buildSourceEngine(t)
+		_, err := installRun(t, te, "depends-lib")
+		wantCode(t, err, cerr.ExitGraph, "deps.missing")
+		if _, ok, _ := te.Store.Get("depends-lib"); ok {
+			t.Error("запись появилась при deps.missing")
+		}
+	})
+	t.Run("--with-deps добирает из того же источника", func(t *testing.T) {
+		t.Parallel()
+		te := buildSourceEngine(t)
+		r := installReq([]string{"depends-lib"})
+		r.WithDeps = true
+		res, err := te.InstallAll(context.Background(), r)
+		if err != nil {
+			t.Fatalf("install --with-deps: %v (stderr: %s)", err, te.Err.String())
+		}
+		if len(res) != 2 || res[0].Name != "lib-fixture" || res[1].Name != "depends-lib" {
+			t.Fatalf("порядок: %+v", res)
+		}
+		if rec := installRecord(t, te, "lib-fixture"); rec.Phase != PhaseBuild || rec.Source.Name != "fixtures" {
+			t.Errorf("зависимость: %+v", rec)
+		}
+	})
+}
+
+func TestBuildUpgradeFromSource(t *testing.T) {
+	t.Parallel()
+	te := installEngine(t)
+	te.EnvVars["CREAM_PHASE"] = PhaseBuild
+	te.systemdRunning("running")
+	installMust(t, te, "upgrade-fixture")
+	installSync(t, te, installSrc{"fixtures", upgradeCatalog(t, buildProbeBody("policy-upgrade"))})
+	res, err := upgradeRun(te, []string{"upgrade-fixture"}, false)
+	if err != nil {
+		t.Fatalf("upgrade: %v (stderr: %s)", err, te.Err.String())
+	}
+	if len(res) != 1 || res[0].Version != "2.0.0" || res[0].Status != state.StatusInstalled {
+		t.Fatalf("результат: %+v", res)
+	}
+	if got := strings.TrimSpace(readState(t, te, "upgrade-fixture", "policy-upgrade")); got != "101" {
+		t.Errorf("policy-rc.d во время upgrade: %q, ждали 101", got)
+	}
+	if installExists(te.L.PolicyRcD()) {
+		t.Error("policy-rc.d не снят")
+	}
+	buildNoSystemctl(t, te)
+	if h := installHistory(t, te); !strings.Contains(h, `"op":"upgrade","ext":"upgrade-fixture","from":"1.0.0","to":"2.0.0","status":"installed","phase":"build"`) {
+		t.Errorf("history: %s", h)
+	}
+}
+
+func TestBuildRemove(t *testing.T) {
+	t.Parallel()
+	ext := buildPolicyProbe(t)
+	if err := os.WriteFile(filepath.Join(ext, "hooks", "remove"), []byte("#!/bin/sh\nset -eu\n"+buildProbeBody("policy-remove")+
+		"\ncp \"$CREAM_STATE_DIR/policy-remove\" \"$CREAM_ROOT/policy-remove\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	te := buildSourceEngine(t, installSrc{"core", installCatalog(t, "1.0.0", map[string]string{"policy-probe": ext})})
+	installMust(t, te, "policy-probe")
+	if _, err := te.Remove(context.Background(), "policy-probe", RemoveOptions{}); err != nil {
+		t.Fatalf("remove: %v (stderr: %s)", err, te.Err.String())
+	}
+	data, err := os.ReadFile(filepath.Join(te.Root, "policy-remove"))
+	if err != nil || strings.TrimSpace(string(data)) != "101" {
+		t.Errorf("policy-rc.d во время remove: %q %v, ждали 101", data, err)
+	}
+	if installExists(te.L.PolicyRcD()) {
+		t.Error("policy-rc.d не снят")
+	}
+	buildNoSystemctl(t, te)
+	if h := installHistory(t, te); !strings.Contains(h, `"op":"remove","ext":"policy-probe","from":"1.0.0","to":"","status":"removed","phase":"build"`) {
+		t.Errorf("history: %s", h)
 	}
 }
