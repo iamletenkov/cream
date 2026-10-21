@@ -72,7 +72,8 @@ ADR 0001 разрешает в минорах только добавлять, �
   - значения ключей `scope: build` (`K=V`, `K=- <` stdin, `--params-file`) выделяются из параметров до домена и
     попадают только в окружение хука `install`/`upgrade` этой операции (умолчания — под заданными значениями); в
     `config`/`secrets` домена, `params_digest` (в том числе слоя `cream resolve` и пути `--from-dir`),
-    `history.jsonl` и `cream.json` их нет; секретные (`secret: file`) вымарываются в выводе хука, в argv секрет
+    `history.jsonl` и `cream.json` их нет; в выводе хука вымарываются только секретные (`secret: file`) — решение
+    владельца 2026-10-21: несекретные значения сборки (адрес зеркала и т. п.) в выводе допустимы; в argv секрет
     по-прежнему запрещён (64 `secret.in_argv`);
   - `cream set`/`get` такого ключа — 64 `config.scope_build`; `cream show`, `config export --shell` и окружение
     `configure`/`apply`/действий их не содержат;
