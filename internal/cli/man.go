@@ -83,7 +83,7 @@ var manCommands = map[string]manCommand{
 			"everything after the action name is passed to the action verbatim. " +
 			"The exit code is the code of the action (0\\(en63)."},
 	"actions":   {"list the actions of an extension", "Prints the actions declared by an installed extension with their parameters."},
-	"configure": {"run the configure hook", "Restarts the configure unit cream\\-configure@<ext>.service, which runs the configure hook. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
+	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical); its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
 	"system":    {"initialise the system layout", "\\fBsystem init\\fR creates cream directories, installs the configure unit template and the configure targets."},
 }
 
@@ -154,8 +154,8 @@ var manFlags = map[string]map[string]string{
 		"shell":  "config export: print KEY='value' lines for a POSIX shell.",
 	},
 	"configure": {
-		"wait":      "Wait until the configure unit restart has finished.",
-		"from-unit": "Called from the cream\\-configure@ unit (unit only).",
+		"wait":      "Wait for the result of the hook (exit code 79 if it failed); without it the restart is queued. While systemd is still booting the restart is queued anyway, with the warning configure.no_block.",
+		"from-unit": "Called by the unit cream\\-configure@<ext>.service itself; not for manual use.",
 	},
 }
 
