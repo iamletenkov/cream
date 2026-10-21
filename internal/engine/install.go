@@ -342,6 +342,9 @@ type installJob struct {
 // then daemon-reload and a synchronous configure.
 func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*InstallResult, error) {
 	m := j.entry.Manifest
+	if err := refuseScopeBuild(m); err != nil {
+		return nil, err
+	}
 	name := m.Name
 	h, err := e.Locks.Ext(ctx, name, lock.Exclusive)
 	if err != nil {
