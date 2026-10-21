@@ -1,0 +1,15 @@
+schema: cream/v1
+name: build-token
+version: 1.0.0
+summary: ключ только для сборки
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# scope: build (§10.9): TOKEN — только в окружении хука install, нигде не хранится;
+# обязателен (empty: false без default). LEVEL — обычный ключ, хранится в config.
+hooks:
+  install: {}
+  remove: {}
+config:
+  keys:
+    TOKEN: {type: str, secret: file, scope: build, description: "токен сборки"}
+    LEVEL: {type: "enum:low,high", default: low, description: "обычная настройка"}

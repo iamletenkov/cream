@@ -40,7 +40,7 @@
 
 - [ ] Task 14: [bisquite] Сбор `/etc/image-labels.d/*.json` в метки OCI
 
-- [ ] Task 15: [cream] e2e (`make test-build`) и integration (две перезагрузки) для 1.2.0
+- [x] Task 15: [cream] e2e (`make test-build`) и integration (две перезагрузки) для 1.2.0
 
 - [ ] Task 16: [bisquite] Предсборочная проверка `cream_lint` и раздел `cream` в `bs image validate`
 
