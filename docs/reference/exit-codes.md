@@ -73,6 +73,8 @@
 | `system.registry_busy` | `system init`: шла другая операция cream — реестр не обновлён, повторите `sudo cream system init` |
 | `systemd.reload_failed`, `systemd.stop_failed` | `systemctl daemon-reload` или `stop` не удался |
 | `configure.no_block` | systemd ещё загружается — перезапуск configure поставлен в очередь без ожидания |
+| `configure.no_systemd` | `configure --again` без systemd — повтор не поставлен |
+| `configure.mark` | отметку выполнения configure не удалось записать или удалить (операция выполнена; на загрузке хук пойдёт ещё раз) |
 | `install.build_none` | у слоя `targets.build: none` — при сборке не ставится |
 | `install.staging`, `install.prev`, `install.unplace` | не удалось убрать временное или прежнее дерево, откатить `files` |
 | `upgrade.no_source` | `upgrade --all`: расширение поставлено не из источника — пропущено (`skipped`, `no_source`) |

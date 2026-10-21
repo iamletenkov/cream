@@ -16,6 +16,7 @@
 | `/etc/systemd/system/cream-configure@<ext>.service.d/10-stage.conf` | порядок стадии `configure` | 0644 |
 | `/opt/cream/ext/<ext>/` | дерево расширения; рабочий каталог хуков | 0755 |
 | `/var/lib/cream/installed/<ext>.json` | запись реестра (`cream-state/v1`) | 0644 |
+| `/var/lib/cream/configured/<ext>.json` | отметка выполнения configure `{version, ext_digest, params_digest, secrets_rev, machine_id, at}`, без значений | 0644 |
 | `/var/lib/cream/history.jsonl` | журнал операций `{time, op, ext, from, to, status, phase}`, без параметров | 0644 |
 | `/var/lib/cream/sources.lock` | что синхронизировано: sha256 или отпечаток, версия каталога, время | 0644 |
 | `/var/lib/cream/ext/<ext>/` | состояние расширения (`$CREAM_STATE_DIR`) | 0755 |

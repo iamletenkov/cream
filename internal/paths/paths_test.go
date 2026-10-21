@@ -141,6 +141,9 @@ func TestLayoutMethodsUnderRoot(t *testing.T) {
 		{"PID1Comm", l.PID1Comm(), "/tmp/x/proc/1/comm"},
 		{"CloudUserUnit", l.CloudUserUnit(), "/tmp/x/usr/lib/systemd/system/cream-configure-cloud-user.service"},
 		{"ImageLabels", l.ImageLabels(), "/tmp/x/etc/image-labels.d/cream.json"},
+		{"ConfiguredFile", l.ConfiguredFile("teleport"), "/tmp/x/var/lib/cream/configured/teleport.json"},
+		{"ConfiguredDir", l.ConfiguredDir(), "/tmp/x/var/lib/cream/configured"},
+		{"MachineID", l.MachineID(), "/tmp/x/etc/machine-id"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

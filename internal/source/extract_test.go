@@ -94,7 +94,7 @@ func TestExtractTarGz(t *testing.T) {
 			// it is metadata, not an entry, and must not count as a top name.
 			name: "pax global header is skipped",
 			entries: []tarEntry{{name: "pax_global_header", typ: tar.TypeXGlobalHeader,
-				pax: map[string]string{"comment": "0123456789abcdef0123456789abcdef01234567"}},
+				pax: map[string]string{"comment": "machine-of-the-test-host01234567"}},
 				{name: "cream-extensions-4.0.0/", typ: tar.TypeDir},
 				{name: "cream-extensions-4.0.0/cream-catalog.yaml", body: "cat"}},
 			want: map[string]string{"cream-catalog.yaml": "cat"},

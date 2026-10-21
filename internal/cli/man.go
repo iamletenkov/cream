@@ -98,7 +98,7 @@ var manCommands = map[string]manCommand{
 			"everything after the action name is passed to the action verbatim. " +
 			"The exit code is the code of the action (0\\(en63)."},
 	"actions":   {"list the actions of an extension", "Prints the actions declared by an installed extension with their parameters."},
-	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical); its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
+	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical) and skips the hook when the configure mark /var/lib/cream/configured/<ext>.json matches the registry (version, tree, settings, secrets_rev, machine\\-id), unless the manifest sets configure.every_boot; its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
 	"system":    {"initialise the system layout", "\\fBsystem init\\fR creates cream directories, installs the configure unit template and the configure targets."},
 }
 
@@ -187,6 +187,9 @@ var manFlags = map[string]map[string]string{
 	},
 	"configure": {
 		"wait":      "Wait for the result of the hook (exit code 79 if it failed); without it the restart is queued. While systemd is still booting the restart is queued anyway, with the warning configure.no_block.",
+		"force":     "Remove the configure mark /var/lib/cream/configured/<ext>.json first, then run the hook now; the mark is written again on success.",
+		"all":       "With \\fB\\-\\-force\\fR: every installed extension with a configure hook.",
+		"again":     "Ask for one more configure run (reason followup, past the mark): the reason marker is written and the unit is restarted with \\-\\-no\\-block. A hook schedules it for after it has finished, e.g. \\fBsystemd\\-run \\-\\-on\\-active=60 cream configure \\-\\-again <ext>\\fR; called synchronously from a running hook it would restart, and so stop, that very run. Without systemd nothing is run (warning configure.no_systemd).",
 		"from-unit": "Called by the unit cream\\-configure@<ext>.service itself; not for manual use.",
 	},
 }

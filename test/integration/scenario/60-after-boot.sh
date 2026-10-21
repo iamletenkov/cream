@@ -31,6 +31,8 @@ step "сбой configure — failed юнит и history.jsonl, реестр не
 reg_before=$(sha256sum /var/lib/cream/installed/$D.json)
 home=$(getent passwd "$CLOUD_USER" | cut -d: -f6)
 mv "$home" "$home.away"
+# Отметка выполнения от загрузки совпала бы — хук не пошёл бы (§10.7).
+rm -f /var/lib/cream/configured/$D.json
 if systemctl restart cream-configure@$D.service 2>/dev/null; then fail "configure без пользователя прошёл"; fi
 eq "$(systemctl show -p ActiveState --value cream-configure@$D.service)" failed "cream-configure@$D failed"
 systemctl --failed --no-legend --plain >/tmp/failed.txt
@@ -44,3 +46,8 @@ systemctl restart cream-configure@$D.service
 eq "$(systemctl show -p ActiveState --value cream-configure@$D.service)" active "после восстановления — active"
 eq "$(tail -n 1 $STATE/$D/configure.log)" "reason=boot user=$CLOUD_USER level=warn dockerd=active" \
 	"перезапуск юнита без маркера — reason=boot"
+exists /var/lib/cream/configured/$D.json "после успеха отметка выполнения записана"
+lines=$(count $STATE/$D/configure.log)
+systemctl restart cream-configure@$D.service
+eq "$(systemctl show -p Result --value cream-configure@$D.service)" success "повтор с совпавшей отметкой — success"
+eq "$(count $STATE/$D/configure.log)" "$lines" "повтор без маркера при совпавшей отметке — хук не запущен"

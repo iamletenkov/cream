@@ -103,6 +103,8 @@ type ListEntry struct {
 	RebootRequired bool     `json:"reboot_required"`
 	// Held is cream hold: upgrade --all skips it.
 	Held bool `json:"held"`
+	// Configured is the configure mark (§10.7); nil without a configure hook.
+	Configured *ConfiguredInfo `json:"configured"`
 }
 
 // List is `cream list`: the installed extensions with what their domain offers.
@@ -128,6 +130,7 @@ func (e *Engine) List() ([]ListEntry, error) {
 				le.Actions = append(le.Actions, name)
 			}
 			slices.Sort(le.Actions)
+			le.Configured = e.configuredInfo(in)
 		}
 		out = append(out, le)
 	}
