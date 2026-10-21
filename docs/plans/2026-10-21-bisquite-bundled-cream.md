@@ -32,7 +32,7 @@
 
 - [x] Task 10: [cream] `scope: build` в движке: значение только в окружении хука
 
-- [ ] Task 11: [cream] Отметка выполнения configure, `secrets_rev`, `--force`, `--again`, `every_boot`
+- [x] Task 11: [cream] Отметка выполнения configure, `secrets_rev`, `--force`, `--again`, `every_boot`
 
 - [ ] Task 12: [bisquite] Скрытый шаг cream, `--no-cream`, `CREAM off`, метки `bisquite.cream.*` и `bisquite.os-release`
 

@@ -19,7 +19,8 @@
           "status"
         ],
         "reboot_required": false,
-        "held": false
+        "held": false,
+        "configured": null
       },
       {
         "name": "apply-hook",
@@ -31,7 +32,8 @@
         "secret": false,
         "actions": [],
         "reboot_required": false,
-        "held": false
+        "held": false,
+        "configured": null
       },
       {
         "name": "configure-system",
@@ -43,7 +45,12 @@
         "secret": false,
         "actions": [],
         "reboot_required": false,
-        "held": false
+        "held": false,
+        "configured": {
+          "at": null,
+          "matches": false,
+          "every_boot": false
+        }
       },
       {
         "name": "with-config",
@@ -55,7 +62,8 @@
         "secret": true,
         "actions": [],
         "reboot_required": false,
-        "held": false
+        "held": false,
+        "configured": null
       }
     ]
   },

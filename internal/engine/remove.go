@@ -209,7 +209,8 @@ func (e *Engine) removeHook(ctx context.Context, in Installed, res *RemoveResult
 
 // removeArtifacts removes what cream put on the machine for in: the
 // configure instance (stopped with a running systemd) and its drop-in
-// (daemon-reload with a running systemd), the reason marker, the files of the registry, the tree with its
+// (daemon-reload with a running systemd), the reason marker, the configure
+// mark, the files of the registry, the tree with its
 // .new/.prev leftovers and, with purge, the domain and the state directory.
 func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) error {
 	ext := in.Record.Name
@@ -247,7 +248,8 @@ func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) 
 	if err := os.Remove(e.L.RunReason(ext)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: маркер причины", ext)
 	}
-	return nil
+	// The configure mark goes with the record (§10.7).
+	return e.Store.DeleteConfigured(ext)
 }
 
 // removeJournal appends a remove entry to history.jsonl; a journal that

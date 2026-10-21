@@ -155,6 +155,11 @@ cream config export --shell <ext>
   закреплено ли (`cream hold`).
 - `show` — ключи: значение, откуда (`default` или `file`), тип; секреты — `***`,
   `(задан)` или `(пусто)`; битое значение в файле помечено `invalid`.
+- `show --json` и `list --json` у расширения с хуком `configure` дают
+  `configured: {at, matches, every_boot}` — когда configure последний раз
+  прошёл успешно (`null` — ещё не проходил или упал), совпадает ли отметка
+  выполнения с реестром и настройками, идёт ли configure на каждой загрузке;
+  без хука `configure` — `null`.
 - `get` — одно значение; секрет — только с `--secret` и только root.
 - `set` проверяет все ключи до записи и пишет одной транзакцией.
 
@@ -191,7 +196,9 @@ cream run [--json] [--lock-timeout D] [-q] <ext> <action> [args…]
 ## Настройка на загрузке и система
 
 ```
-cream configure [--wait] <ext>
+cream configure [--wait] [--force] <ext>
+cream configure --force --all
+cream configure --again <ext>
 cream configure --from-unit <ext>
 cream system init
 ```
@@ -204,6 +211,26 @@ cream system init
   `--from-unit` — только для вызова из самого юнита. На загрузке юнит
   выполняется сам на стадии расширения —
   [стадии configure](../guides/configure-stages.md).
+- **Отметка выполнения.** После успешного configure (код хука 0 или 10) cream
+  пишет `/var/lib/cream/configured/<ext>.json`: версию, отпечаток дерева,
+  `params_digest` несекретных настроек, счётчик записей секретов `secrets_rev`
+  и sha256 от `/etc/machine-id` — без значений. На загрузке (причина `boot`)
+  совпавшая отметка пропускает хук: юнит завершается успехом, в журнал юнита —
+  `configure <ext>: пропуск, отметка совпала`. Не совпало что-либо (`install`,
+  `upgrade`, `set`, ротация секрета, клон машины) или отметки нет — хук идёт.
+  Сбой хука удаляет отметку — хук повторяется на каждой загрузке до успеха;
+  `remove` удаляет её вместе с записью реестра. Причины `install`, `upgrade`,
+  `apply`, `followup` идут мимо отметки. `configure.every_boot: true` в
+  манифесте — хук на каждой загрузке, отметка пишется только для `show`.
+  Фаза build отметок не пишет.
+- `--force` удаляет отметку и запускает хук сейчас (при успехе отметка пишется
+  снова); `--force --all` — для всех расширений с хуком `configure`.
+- `--again` — повтор, который хук ставит себе сам: пишет причину `followup` в
+  `/run/cream/<ext>.reason` и перезапускает юнит без ожидания (`--no-block`);
+  следующий прогон идёт мимо отметки. Вызывать **отложенно**, когда хук уже
+  завершился: `systemd-run --on-active=60 cream configure --again <ext>`.
+  Синхронный вызов из работающего хука перезапустит его же юнит и оборвёт
+  текущий прогон. Без systemd ничего не запускает (`configure.no_systemd`).
 - `system init` создаёт каталоги cream с нужными правами, ставит шаблон
   `cream-configure@.service` и `cream-configure-cloud-user.service`, пересчитывает
   цели configure и при работающем systemd делает `daemon-reload`. Повтор

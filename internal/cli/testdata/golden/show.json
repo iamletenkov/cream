@@ -101,7 +101,8 @@
         "secret": false,
         "invalid": false
       }
-    ]
+    ],
+    "configured": null
   },
   "warnings": [],
   "error": null

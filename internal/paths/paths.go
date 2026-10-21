@@ -189,6 +189,18 @@ func (l Layout) InstalledFile(ext string) string {
 	return l.sys(varLib, "installed", ext+".json")
 }
 
+// ConfiguredDir holds the configure run marks, /var/lib/cream/configured.
+func (l Layout) ConfiguredDir() string { return l.sys(varLib, "configured") }
+
+// ConfiguredFile is the configure run mark of one extension (spec
+// bisquite-bundled-cream §10.7), /var/lib/cream/configured/<ext>.json.
+func (l Layout) ConfiguredFile(ext string) string {
+	return l.sys(varLib, "configured", ext+".json")
+}
+
+// MachineID is /etc/machine-id; the configure mark keeps only its sha256.
+func (l Layout) MachineID() string { return l.sys("etc/machine-id") }
+
 // History is the operation journal, /var/lib/cream/history.jsonl.
 func (l Layout) History() string { return l.sys(varLib, "history.jsonl") }
 

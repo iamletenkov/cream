@@ -479,6 +479,7 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		from = j.prev.Record.Version
 		rec.Phase, rec.InstalledAt, rec.Configure = j.prev.Record.Phase, j.prev.Record.InstalledAt, j.prev.Record.Configure
 		rec.Held = j.prev.Record.Held
+		rec.SecretsRev = j.prev.Record.SecretsRev
 	}
 	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase, Build: buildEnv}
 	if upgrade {
@@ -496,7 +497,12 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 		// A write that fails after the tree and files are in place is a failed
 		// operation in the registry, like a failed hook: the retry repeats it.
-		_, herr = dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only})
+		var written []string
+		written, herr = dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only})
+		// A secret written by install/upgrade counts like cream set (§10.7).
+		if secretChanged(m, written) {
+			rec.SecretsRev++
+		}
 	}
 	if herr == nil && hasHook(m, hook) {
 		outcome, herr = e.RunHook(WithLock(ctx, h, lock.Exclusive), Installed{Record: rec, Manifest: m}, hook, env)
@@ -511,6 +517,7 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		// The old version stays in the registry and in .prev (§6.5).
 		failed := j.prev.Record
 		failed.Status, failed.PrevVersion, failed.Files = state.StatusFailedUpgrade, from, files
+		failed.SecretsRev = rec.SecretsRev
 		rec = failed
 	case herr != nil:
 		rec.Status = state.StatusFailed
