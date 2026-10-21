@@ -204,6 +204,10 @@ func (l Layout) ExtLock(ext string) string { return l.sys(varLib, "lock", ext) }
 // Incoming is the build-phase drop directory, /var/lib/cream/incoming/<id>.
 func (l Layout) Incoming(id string) string { return l.sys(varLib, "incoming", id) }
 
+// ImageLabels is the composition of the image for its OCI labels (spec
+// bisquite-bundled-cream §8.2), /etc/image-labels.d/cream.json.
+func (l Layout) ImageLabels() string { return l.sys("etc/image-labels.d", "cream.json") }
+
 // UnitTemplate is the configure unit template, /usr/lib/systemd/system/cream-configure@.service.
 func (l Layout) UnitTemplate() string { return l.sys(unitDir, "cream-configure@.service") }
 

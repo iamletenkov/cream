@@ -14,6 +14,7 @@ import (
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/fsx"
 	"github.com/iamletenkov/cream/internal/paths"
+	"github.com/iamletenkov/cream/internal/version"
 )
 
 // Store reads and writes the registry and the journal of one layout.
@@ -22,6 +23,10 @@ type Store struct {
 	now    func() time.Time
 	// write is fsx.WriteAtomic; tests inject a crash.
 	write func(path string, data []byte, perm fs.FileMode) error
+	// cream is the build version written to cream.json (version.Version).
+	cream string
+	// Warn receives labels.write_failed; nil drops the warning.
+	Warn *cerr.Warnings
 }
 
 // NewStore returns a Store; now stamps installed_at, updated_at and journal lines.
@@ -29,7 +34,7 @@ func NewStore(l paths.Layout, now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{layout: l, now: now, write: fsx.WriteAtomic}
+	return &Store{layout: l, now: now, write: fsx.WriteAtomic, cream: version.Version}
 }
 
 func (s *Store) stamp() time.Time { return s.now().UTC().Truncate(time.Second) }
@@ -142,7 +147,8 @@ func schemaMajorOf(s string) (int, bool) {
 
 // Put writes the record atomically (mode 0644). Schema is set to SchemaV1,
 // UpdatedAt to now, InstalledAt to now when zero; times are UTC seconds.
-// nil Files and Bin are written as empty lists.
+// nil Files and Bin are written as empty lists. After the record the image
+// labels (cream.json) are rewritten; their failure is only a warning.
 func (s *Store) Put(r Record) error {
 	if err := checkName(r.Name); err != nil {
 		return err
@@ -171,10 +177,12 @@ func (s *Store) Put(r Record) error {
 	if err := s.write(s.layout.InstalledFile(r.Name), data, 0o644); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "реестр %s", r.Name)
 	}
+	s.writeLabels()
 	return nil
 }
 
-// Delete removes the record; a missing record is not an error.
+// Delete removes the record and rewrites the image labels; a missing record
+// is not an error.
 func (s *Store) Delete(name string) error {
 	if err := checkName(name); err != nil {
 		return err
@@ -189,6 +197,7 @@ func (s *Store) Delete(name string) error {
 	if err := syncDir(filepath.Dir(s.layout.InstalledFile(name))); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "удаление записи реестра %s: fsync каталога", name)
 	}
+	s.writeLabels()
 	return nil
 }
 
