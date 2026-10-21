@@ -32,6 +32,10 @@ INTEGRATION_DISTROS ?= debian-12 ubuntu-24.04
 # (кеш .cache/test-build/); TEST_BUILD_HOST=1 — virt-customize хоста вместо контейнера.
 TEST_BUILD_IMAGE_URL    ?= https://cloud.debian.org/images/cloud/bookworm/20261006-2623/debian-12-genericcloud-amd64-20261006-2623.qcow2
 TEST_BUILD_IMAGE_SHA512 ?= a09170d17e13af43da61774666f520e3bbec0f8bd96b4db37c15f3426fb327ccad950b80dbe78c09aa5ca90ce5015e99334b0ba5188fd4018736bc3fb5f0882c
+# Контракт ADR-0004 (make contract-old): релизный cream, которому фикстуры
+# testdata/contract обязаны дать 68 platform.cream_version; сумма — тарбола linux_amd64.
+OLD_CREAM_VERSION ?= 1.1.4
+OLD_CREAM_SHA256  ?= 1e8ff8baaf4dc3366f3bd4462a15f8937220da8481b4fe53263799ada33302ca
 LDFLAGS        := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 
 UID := $(shell id -u)
@@ -52,7 +56,8 @@ GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -p
 .DEFAULT_GOAL := help
 .PHONY: help build build-all test test-golden lint fmt tidy man ci ci-unlocked clean cache \
 	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln \
-	test-integration test-integration-unlocked test-build test-build-unlocked envfile-refs
+	test-integration test-integration-unlocked test-build test-build-unlocked envfile-refs \
+	contract-old
 
 help: ## список целей
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -89,10 +94,13 @@ lint: cache ## gofmt -l, go vet, golangci-lint
 	$(GO) go vet ./...
 	$(DOCKER_RUN) $(GOLANGCI_IMAGE) golangci-lint run ./...
 
-ci: ## всё, что гоняет CI: lint + test + build-all (под замком HEAVY_LOCK)
+ci: ## всё, что гоняет CI: lint + test + contract-old + build-all (под замком HEAVY_LOCK)
 	$(HEAVY) $(MAKE) --no-print-directory ci-unlocked
 
-ci-unlocked: lint test build-all
+ci-unlocked: lint test contract-old build-all
+
+contract-old: cache ## фикстуры testdata/contract на старом релизном cream: отказ 68 по cream:, не по полю (ADR-0004)
+	DEBIAN_IMAGE=$(DEBIAN_IMAGE) sh scripts/contract-old.sh $(OLD_CREAM_VERSION) $(OLD_CREAM_SHA256) .cache
 
 deb: ## $(RELEASE_DIR)/cream_<v>_$(ARCH).deb (nfpm; ARCH=amd64|arm64, под замком)
 	$(HEAVY) $(MAKE) --no-print-directory deb-unlocked

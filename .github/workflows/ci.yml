@@ -75,6 +75,11 @@ jobs:
       - name: Test
         run: make test
 
+      # ADR-0004: фикстуры testdata/contract (поля cream 1.2) на релизном
+      # cream 1.1.4 — отказ 68 по cream:, а не «неизвестное поле».
+      - name: Contract on released cream
+        run: make contract-old
+
       - name: Build linux/amd64 and linux/arm64
         run: make build-all
 

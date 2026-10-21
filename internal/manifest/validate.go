@@ -316,8 +316,8 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 			hk.Timeout = d
 		}
 		if h != HookConfigure {
-			if r.Stage != "" || r.After != nil || r.Before != nil || r.Wants != nil {
-				return nil, invalid(field, "stage, after, before, wants — только у configure")
+			if r.Stage != "" || r.After != nil || r.Before != nil || r.Wants != nil || r.EveryBoot != nil {
+				return nil, invalid(field, "stage, after, before, wants, every_boot — только у configure")
 			}
 		} else {
 			switch st := Stage(r.Stage); st {
@@ -340,6 +340,7 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 				}
 				*l.out = l.in
 			}
+			hk.EveryBoot = r.EveryBoot != nil && *r.EveryBoot
 		}
 		out[h] = hk
 	}
@@ -421,10 +422,10 @@ func validateKeys(in map[string]rawKey) (keytype.Schema, error) {
 		switch keytype.Scope(r.Scope) {
 		case "", keytype.ScopeConfig:
 			sp.Scope = keytype.ScopeConfig
-		case keytype.ScopeInstall:
-			sp.Scope = keytype.ScopeInstall
+		case keytype.ScopeInstall, keytype.ScopeBuild:
+			sp.Scope = keytype.Scope(r.Scope)
 		default:
-			return nil, invalid(field+".scope", "%q: допустимо config или install", r.Scope)
+			return nil, invalid(field+".scope", "%q: допустимо config, install или build", r.Scope)
 		}
 		if r.Default != nil {
 			sp.Default = *r.Default

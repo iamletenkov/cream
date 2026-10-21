@@ -1,0 +1,12 @@
+schema: cream/v1
+name: every-boot
+version: 1.0.0
+summary: configure на каждой загрузке (cream 1.2.0)
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Контрактная фикстура ADR-0004: cream 1.2.0 принимает, cream 1.1.x отказывает
+# по cream: (68 platform.cream_version), а не по неизвестному полю every_boot
+# (make contract-old).
+hooks:
+  install: {}
+  configure: {stage: system, every_boot: true}
