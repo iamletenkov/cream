@@ -57,9 +57,6 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 	if err != nil {
 		return res, err
 	}
-	if err := refuseScopeBuild(in.Manifest); err != nil {
-		return res, err
-	}
 
 	changed, err := e.Domain(in).Set(ch, config.SetOpts{AllowReadonly: o.AllowReadonly})
 	if err != nil {

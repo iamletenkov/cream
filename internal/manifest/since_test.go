@@ -163,3 +163,23 @@ func TestParseScopeEnum(t *testing.T) {
 		t.Errorf("сообщение: %s", msg)
 	}
 }
+
+// TestParseRequiredBuildKey: ключ scope: build с empty: false без default —
+// обязательный (передаётся при каждом install, спека 2026-10-21 §10.9) и
+// разбирается; такой же ключ config или install — по-прежнему ошибка default.
+func TestParseRequiredBuildKey(t *testing.T) {
+	t.Parallel()
+	for scope, ok := range map[string]bool{"build": true, "install": false, "config": false} {
+		doc := mk(t, "config: {keys: {A: {type: str, scope: "+scope+", description: a}}}\n",
+			`cream: ">=1.0.0"`, `cream: ">=1.2.0"`)
+		m, err := Parse([]byte(doc), ParseCreamBuild("1.2.0"), nil)
+		switch {
+		case ok && err != nil:
+			t.Errorf("scope %s: %v", scope, err)
+		case ok && (m.Config["A"].Empty || m.Config["A"].Default != ""):
+			t.Errorf("scope %s: %+v", scope, m.Config["A"])
+		case !ok && (cerr.CodeOf(err) != "manifest.invalid" || !strings.Contains(err.Error(), "config.keys.A.default")):
+			t.Errorf("scope %s: err = %v, ждали manifest.invalid по default", scope, err)
+		}
+	}
+}

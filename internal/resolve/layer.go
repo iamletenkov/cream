@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/semver"
 	"github.com/iamletenkov/cream/internal/state"
@@ -145,8 +146,15 @@ func newLayer(g *gnode, set map[string]*gnode, params map[string]string) Layer {
 		sp, ok := m.Config.Lookup(k)
 		return ok && sp.Secret != ""
 	}
+	// scope: build values are never part of params_digest (spec 2026-10-21
+	// §10.9): they live only in the hook environment.
+	stored := make(map[string]string, len(params))
 	secrets := []string{}
-	for k := range params {
+	for k, v := range params {
+		if sp, ok := m.Config.Lookup(k); ok && sp.Scope == keytype.ScopeBuild {
+			continue
+		}
+		stored[k] = v
 		if secret(k) {
 			secrets = append(secrets, k)
 		}
@@ -160,7 +168,7 @@ func newLayer(g *gnode, set map[string]*gnode, params map[string]string) Layer {
 		SourceResolved: src.Resolved,
 		CatalogVersion: src.CatalogVersion,
 		ExtDigest:      g.Digest,
-		ParamsDigest:   state.ParamsDigest(params, secret),
+		ParamsDigest:   state.ParamsDigest(stored, secret),
 		Deps:           layerDeps(g, set),
 		Mode:           g.mode,
 		Token:          token(src, m),
