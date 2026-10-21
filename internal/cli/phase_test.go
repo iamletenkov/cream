@@ -111,14 +111,18 @@ func TestPhaseUndeterminedText(t *testing.T) {
 	}
 }
 
-// С -v фаза и причина — в stderr, stdout не тронут.
-func TestPhaseVerbose(t *testing.T) {
+// Фаза и причина — строкой в stderr (журнал сборки), stdout не тронут; -q — без строки.
+func TestPhaseStderr(t *testing.T) {
 	t.Parallel()
 	root := installCLIRoot(t)
 	pid1(t, root, "systemd", true)
-	out := runCLI(t, cliIn{Root: root, Env: noPhaseEnv}, "install", "-v", "noop")
-	if out.Code != 0 || !strings.Contains(out.Stderr, "фаза live (pid1=systemd)") || strings.Contains(out.Stdout, "фаза") {
+	out := runCLI(t, cliIn{Root: root, Env: noPhaseEnv}, "install", "noop")
+	if out.Code != 0 || !strings.Contains(out.Stderr, "cream: фаза live (pid1=systemd)\n") || strings.Contains(out.Stdout, "фаза") {
 		t.Errorf("%+v", out)
+	}
+	out = runCLI(t, cliIn{Root: root, Env: noPhaseEnv}, "remove", "-q", "noop")
+	if out.Code != 0 || strings.Contains(out.Stderr, "фаза") {
+		t.Errorf("-q: %+v", out)
 	}
 }
 

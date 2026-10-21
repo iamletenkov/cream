@@ -23,6 +23,7 @@ JSON-объект; сообщения cream и вывод хуков уходя�
 |---|---|
 | `cream` | версия cream |
 | `command` | команда (`install`, `source`, `run`, …) |
+| `phase`, `reason` | только `install`, `upgrade`, `remove` (с 1.2.0): фаза `live`/`build` и почему — `flag` (`--phase`), `env` (`CREAM_PHASE` родителя), `pid1=<имя>` (по PID 1); нет, если фаза не решена |
 | `ok` | нет ошибки и код выхода 0 (у `cream run` — `exit_code == 0`) |
 | `result` | форма своя у каждой команды; при ошибке — `null` |
 | `warnings` | всегда массив; `details` — только если есть |

@@ -55,9 +55,10 @@ func validPhase(p string) bool { return p == PhaseBuild || p == PhaseLive }
 // /run/systemd/system is live; any other readable PID 1 is build (in
 // virt-customize it is the libguestfs appliance init, /proc bound into the
 // chroot; a container without systemd is build too — services do not start
-// there). Without a readable /proc/1/comm, and for systemd without
-// /run/systemd/system (a chroot with the host's /proc), it refuses with 64
-// phase.undetermined instead of guessing.
+// there; systemd without /run/systemd/system is a chroot with the host's
+// /proc — an image being built, reason pid1=systemd,no-run; ADR-0004 п.1).
+// Without a readable /proc/1/comm it refuses with 64 phase.undetermined
+// instead of guessing.
 func DetectPhase(l paths.Layout) (PhaseInfo, error) {
 	b, err := os.ReadFile(l.PID1Comm())
 	comm := strings.TrimSpace(string(b))
@@ -74,9 +75,5 @@ func DetectPhase(l paths.Layout) (PhaseInfo, error) {
 	if fi, err := os.Stat(l.SystemdRunning()); err == nil && fi.IsDir() {
 		return PhaseInfo{Phase: PhaseLive, Reason: reason}, nil
 	}
-	ce := cerr.New(cerr.ExitUsage, "phase.undetermined",
-		"фаза не определена: PID 1 — systemd, но %s нет (chroot с /proc хоста?) — задайте --phase build или --phase live",
-		l.SystemdRunning())
-	ce.Details = map[string]any{"pid1": comm, "path": l.SystemdRunning()}
-	return PhaseInfo{}, ce
+	return PhaseInfo{Phase: PhaseBuild, Reason: reason + ",no-run"}, nil
 }

@@ -43,7 +43,8 @@ func newEngine(ctx *Context) *engine.Engine {
 
 // phaseEngine is newEngine with the phase decided (§10.1): --phase (phase,
 // "" — not given), else CREAM_PHASE of a parent cream, else PID 1. The
-// decision goes to the --json envelope, and with -v to stderr.
+// decision goes to the --json envelope and, unless -q, to stderr as one line
+// (the build log of an image names the phase and why, §10.1).
 func phaseEngine(ctx *Context, phase string) (*engine.Engine, error) {
 	e := newEngine(ctx)
 	p, err := e.ResolvePhase(phase)
@@ -53,7 +54,7 @@ func phaseEngine(ctx *Context, phase string) (*engine.Engine, error) {
 	if ctx.Phase != nil {
 		*ctx.Phase = p
 	}
-	if ctx.Globals.Verbose {
+	if !ctx.Globals.Quiet {
 		_, _ = fmt.Fprintf(ctx.Stderr(), "cream: фаза %s (%s)\n", p.Phase, p.Reason)
 	}
 	return e, nil

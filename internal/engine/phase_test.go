@@ -46,7 +46,8 @@ func TestDetectPhase(t *testing.T) {
 			want: PhaseInfo{Phase: PhaseBuild, Reason: "pid1=bash"}},
 		{name: "нет /proc — отказ", wantRefuse: true},
 		{name: "нет /proc при /run/systemd/system — отказ", run: true, wantRefuse: true},
-		{name: "systemd без /run/systemd/system — отказ, не догадка", comm: "systemd", wantRefuse: true},
+		{name: "systemd без /run/systemd/system — chroot с /proc хоста, build", comm: "systemd",
+			want: PhaseInfo{Phase: PhaseBuild, Reason: "pid1=systemd,no-run"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,7 +69,7 @@ func TestDetectPhase(t *testing.T) {
 func TestDetectPhaseEmptyComm(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	fakePID1(t, root, "systemd", false)
+	fakePID1(t, root, "systemd", true)
 	l := paths.Layout{Root: root}
 	if err := os.WriteFile(l.PID1Comm(), []byte("\n"), 0o644); err != nil {
 		t.Fatal(err)

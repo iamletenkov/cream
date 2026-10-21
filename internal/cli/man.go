@@ -100,8 +100,10 @@ var manGlobalFlags = map[string]string{
 
 // manPhase describes --phase of install, upgrade and remove (§10.1).
 const manPhase = "Phase: \\fBlive\\fR or \\fBbuild\\fR. Without it: CREAM_PHASE of a parent cream, " +
-	"otherwise decided by PID 1 \\(em systemd with /run/systemd/system is live, any other PID 1 is build; " +
+	"otherwise decided by PID 1 \\(em systemd with /run/systemd/system is live, anything else is build " +
+	"(systemd without /run/systemd/system is a chroot with the host's /proc); " +
 	"without a readable /proc/1/comm cream refuses (exit 64, phase.undetermined). " +
+	"The phase and its reason go to stderr unless \\fB\\-q\\fR, and to the \\fB\\-\\-json\\fR envelope. " +
 	"install: explicit build is still only with \\fB\\-\\-from\\-dir\\fR."
 
 // manFlags describes the own flags of each command, by command then flag name.
