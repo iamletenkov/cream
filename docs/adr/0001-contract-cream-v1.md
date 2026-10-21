@@ -36,7 +36,7 @@ cream исполняет расширения на живых машинах и 
 3. **CLI** (§11.2) и **коды выхода** (§11.3): 0, 1, 0–63 у `cream run`, 64–70, 74–77, 79 — значения не меняются
    никогда; строковый `error.code` стабилен.
 4. **`--json`**: ровно один объект в stdout, конверт `{cream, command, ok, result, warnings, error}` (§11.4),
-   формы `result` закреплены golden-файлами `internal/cli/testdata/golden/` и описаны в [docs/cli.md](../cli.md).
+   формы `result` закреплены golden-файлами `internal/cli/testdata/golden/` и описаны в [docs/reference/json-output.md](../reference/json-output.md).
 5. **Реестр** `cream-state/v1` (§10): реестр новее исполнителя — 74 `state.newer`.
 
 Правило изменения: в минорных версиях cream поля и значения только **добавляются** (новые поля JSON, новые
@@ -53,7 +53,7 @@ golden-формы позволяют bisquite и stvor-agent ветвиться 
   резервируется так, что манифесты v1 не придётся менять при его реализации.
 - **Отрицательные:** поле JSON, выпущенное в 1.0, остаётся до 2.0, даже если оказалось лишним; ошибки дизайна путей
   исправляются только мажором.
-- **Действия:** golden-файлы меняются только добавлением полей (ревью проверяет дифф); [docs/cli.md](../cli.md)
+- **Действия:** golden-файлы меняются только добавлением полей (ревью проверяет дифф); [docs/reference/json-output.md](../reference/json-output.md)
   обновляется вместе с формой.
 
 Следствия, ставшие частью контракта (рулинги плана, на сведение владельцу):
@@ -79,5 +79,5 @@ golden-формы позволяют bisquite и stvor-agent ветвиться 
 ## Связанные ADR / документы
 - [docs/specs/2026-10-18-cream-core.md](../specs/2026-10-18-cream-core.md) — §4, §5, §10, §11, §12.4, §18
 - [docs/plans/2026-10-18-cream-core.md](../plans/2026-10-18-cream-core.md) — рулинги Р1–Р31
-- [docs/cli.md](../cli.md) — справочник CLI и формы `result`
+- [docs/reference/cli.md](../reference/cli.md) — справочник CLI, [docs/reference/json-output.md](../reference/json-output.md) — формы `result`
 - [ADR 0002](0002-single-dependency-stdlib-cli.md) — как реализован CLI и чем собирается пакет

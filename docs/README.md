@@ -1,18 +1,52 @@
 # Документация cream
 
-Где что лежит и когда писать документ — [.claude/rules/docs.md](../.claude/rules/docs.md).
-Новый документ без строки в этой таблице не считается готовым.
+Начните с [первых шагов](getting-started.md). Новый документ добавляется строкой
+в этот индекс.
+
+## Начало
+
+- [Первые шаги](getting-started.md) — установить cream, подключить каталог,
+  поставить и настроить расширение.
+
+## Руководства
+
+| Задача | Документ |
+|---|---|
+| подключить каталог расширений, поднять его версию, работать без сети | [guides/add-catalog.md](guides/add-catalog.md) |
+| поставить расширение, передать секрет, поменять настройки, вызвать действие, удалить | [guides/install-extension.md](guides/install-extension.md) |
+| написать своё расширение и каталог, проверить без root | [guides/write-extension.md](guides/write-extension.md) |
+| понять, что сломалось: статусы, журналы, блокировки, коды | [guides/diagnostics.md](guides/diagnostics.md) |
+| обновить или откатить cream на машине | [guides/upgrade-cream.md](guides/upgrade-cream.md) |
+| ставить расширения в образ при сборке (`virt-customize`) | [guides/build-phase.md](guides/build-phase.md) |
+
+## Справочник
+
+| Что | Документ |
+|---|---|
+| команды и флаги | [reference/cli.md](reference/cli.md) |
+| `extension.yaml`, `cream-catalog.yaml`, `sources.yaml` | [reference/manifest.md](reference/manifest.md) |
+| коды выхода, `error.code`, предупреждения, коды хуков | [reference/exit-codes.md](reference/exit-codes.md) |
+| конверт `--json`, формы `result`, контракт `run`/`actions` для агентов | [reference/json-output.md](reference/json-output.md) |
+| пути на машине, переменные окружения, окружение хуков, юниты, блокировки | [reference/files-and-environment.md](reference/files-and-environment.md) |
+
+## Устройство и разработка
 
 | Документ | Зачем читать |
 |---|---|
-| [STATUS.md](STATUS.md) | состояние работ: что сделано, что дальше, что сломано |
-| [adr/README.md](adr/README.md) | индекс архитектурных решений; шаблон — [adr/0000-template.md](adr/0000-template.md) |
-| [cli.md](cli.md) | справочник CLI cream 1.1 (по 1.1.3): команды, флаги, коды выхода, формы `--json`, контракт для stvor-agent, фаза build для bisquite |
-| [adr/0001-contract-cream-v1.md](adr/0001-contract-cream-v1.md) | ADR: что входит в контракт cream/v1 и как он меняется |
-| [adr/0002-single-dependency-stdlib-cli.md](adr/0002-single-dependency-stdlib-cli.md) | ADR: одна зависимость yaml, CLI на stdlib `flag`, nfpm без goreleaser |
-| [specs/2026-10-18-cream-core.md](specs/2026-10-18-cream-core.md) | спека cream/v1: формат расширения, жизненный цикл, действия, настройки, источники, CLI, фаза build, MVP |
-| [runbooks/01_release.md](runbooks/01_release.md) | выпуск версии: release-please, ассеты, `SHA256SUMS`, воспроизводимая сборка, что тянет выпуск (подъём пина у потребителей) |
-| [runbooks/02_diagnostics.md](runbooks/02_diagnostics.md) | диагностика на машине: `cream list`/`show`, журналы `cream-configure@`, блокировки, коды выхода |
-| [runbooks/03_upgrade-cream.md](runbooks/03_upgrade-cream.md) | обновление cream на роботе: `.deb`, сверка `SHA256SUMS`, проверка и откат |
-| [plans/2026-10-18-cream-core.md](plans/2026-10-18-cream-core.md) | план MVP cream: 23 задачи, 9 волн, Progress Tracker |
-| [research/2026-10-18-bisquite-extension-system-inventory.md](research/2026-10-18-bisquite-extension-system-inventory.md) | опись системы расширений bisquite на 2026-10-18 — вход спеки |
+| [architecture.md](architecture.md) | место в экосистеме, ход операции, пакеты Go |
+| [development.md](development.md) | сборка, тесты, пакеты, как вносить изменения |
+| [runbooks/01_release.md](runbooks/01_release.md) | выпуск версии: release-please, ассеты, проверка, подъём пина у потребителей |
+| [adr/README.md](adr/README.md) | архитектурные решения: [0001](adr/0001-contract-cream-v1.md) — контракт `cream/v1`, [0002](adr/0002-single-dependency-stdlib-cli.md) — одна зависимость, CLI на stdlib, nfpm |
+| [../CHANGELOG.md](../CHANGELOG.md) | изменения по версиям |
+
+## Проектные документы
+
+Исторические и рабочие материалы: по ним строился cream, для пользования они не
+нужны.
+
+| Документ | Что это |
+|---|---|
+| [specs/2026-10-18-cream-core.md](specs/2026-10-18-cream-core.md) | исходная спека `cream/v1` с обоснованиями и отвергнутыми вариантами |
+| [plans/2026-10-18-cream-core.md](plans/2026-10-18-cream-core.md) | план MVP (закрыт) |
+| [research/2026-10-18-bisquite-extension-system-inventory.md](research/2026-10-18-bisquite-extension-system-inventory.md) | опись системы расширений bisquite до cream |
+| [STATUS.md](STATUS.md) | текущее состояние работ (handoff между сессиями) |

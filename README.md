@@ -1,31 +1,23 @@
 # cream
 
-Исполнитель расширений для машин и образов: один статический бинарь `cream`
-(linux/amd64, linux/arm64), ставится пакетом `.deb`.
+Исполнитель расширений для машин на Debian и Ubuntu и для сборки их образов.
 
-cream:
-
-- читает манифест расширения `extension.yaml` (формат `cream/v1`);
-- ведёт жизненный цикл `install` / `upgrade` / `configure` / `remove` на живой
-  машине и фазу `build` внутри `virt-customize` — её вызывает
-  [bisquite](https://github.com/iamletenkov/bisquite) в слоях сборки образа;
-- хранит состояние установленного в `/var/lib/cream`;
-- `cream set` / `cream show` — типизированные настройки расширений (бывший
-  `bisquite-conf`), совместимые с `EnvironmentFile` systemd;
-- `cream run` / `cream actions` — действия расширений с машинно-читаемым
-  выводом (через них работает stvor-agent);
-- берёт расширения из источников-каталогов, например
-  [cream-extensions](https://github.com/iamletenkov/cream-extensions); сеть —
-  только в `cream source sync`.
+Расширение — каталог с манифестом `extension.yaml` и скриптами: как поставить
+программу, как её настроить, обновить и убрать. cream берёт расширения из
+проверенных каталогов, хранит их настройки и состояние, запускает настройку на
+каждой загрузке и даёт расширениям действия с машинно-читаемым выводом. Один и
+тот же манифест работает и на живой машине, и внутри `virt-customize` при сборке
+образа.
 
 ## Установка
 
-Пакеты лежат в [выпусках GitHub](https://github.com/iamletenkov/cream/releases):
-`cream_<версия>_amd64.deb`, `cream_<версия>_arm64.deb`, тарболы
-`cream_<версия>_linux_<arch>.tar.gz` и `SHA256SUMS`.
+Пакеты — в [выпусках GitHub](https://github.com/iamletenkov/cream/releases): `.deb`
+и `tar.gz` для `amd64` и `arm64`, рядом — `SHA256SUMS`.
+
+**Пакет `.deb`:**
 
 ```bash
-V=1.1.3; ARCH=$(dpkg --print-architecture)   # amd64 | arm64
+V=1.1.4; ARCH=$(dpkg --print-architecture)    # amd64 | arm64
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_${ARCH}.deb"
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS
@@ -33,75 +25,86 @@ sudo apt install "./cream_${V}_${ARCH}.deb"
 cream version
 ```
 
-Пакет кладёт `/usr/bin/cream`, шаблон юнита `cream-configure@.service`,
-юнит стадии `cloud-user` `cream-configure-cloud-user.service` (с 1.1.1) и
-гостевые бинари обеих архитектур для хоста сборки
-(`/usr/lib/cream/guest/linux-{amd64,arm64}/cream`); `postinst` делает
-`cream system init`. Зависимостей нет; `Suggests: git, libguestfs-tools`.
+**Архив `tar.gz`** — тот же бинарь без пакетного менеджера:
+
+```bash
+V=1.1.4; ARCH=$(dpkg --print-architecture)
+curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_linux_${ARCH}.tar.gz"
+curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS
+tar xzf "cream_${V}_linux_${ARCH}.tar.gz" cream
+sudo install -m 0755 cream /usr/bin/cream
+sudo cream system init      # каталоги и юниты systemd (пакет делает это сам)
+```
+
+Сборка из исходников — [docs/development.md](docs/development.md).
 
 ## Быстрый старт
 
+Подключить общий каталог [cream-extensions](https://github.com/iamletenkov/cream-extensions)
+и поставить из него расширение:
+
 ```bash
-# 1. источник — архив каталога по URL и sha256, сразу синхронизировать
-sudo cream source add core \
-  --archive https://example.org/cream-extensions-5.1.0.tar.gz \
-  --sha256 <sha256 архива> --sync
+CV=5.2.0
+URL="https://github.com/iamletenkov/cream-extensions/releases/download/v$CV"
+SUM=$(curl -fsSL "$URL/SHA256SUMS" | awk -v f="cream-extensions-$CV.tar.gz" '$2 == f {print $1}')
+sudo cream source add core --archive "$URL/cream-extensions-$CV.tar.gz" --sha256 "$SUM" --sync
 
-# 2. установить расширение с параметрами; секрет — только со stdin (KEY=-)
-sudo cream install core/teleport TELEPORT_PROXY=proxy.example:443
-
-# 3. поменять настройку: проверка всех ключей, запись, применение по apply расширения
-sudo cream set teleport TELEPORT_PROXY=proxy2.example:443
-
-# 4. действие расширения; флаги cream — до имени расширения
-cream actions teleport
-sudo cream run --json teleport status
-
-# 5. что установлено и в каком состоянии
+sudo cream install core/apt-guard core/btop    # btop зависит от apt-guard
 cream list
-cream show teleport
+sudo cream remove btop
 ```
 
-Все команды и флаги — [docs/cli.md](docs/cli.md); коды выхода и `error.code` —
-[docs/cli.md «Коды выхода»](docs/cli.md#коды-выхода-спека-113): 0 — успех, 64 — неверный
-вызов, 65 — неверные данные, 66 — не найдено, 75 — блокировка занята, 79 — упал хук или
-действие; у `cream run` — код самого действия (0–63).
+Дальше — [первые шаги](docs/getting-started.md): настройки, действия, обновление.
+
+## Возможности
+
+- **Проверяемые источники.** Каталог — архив по `https://` с обязательной sha256
+  или локальный каталог. Сеть нужна только `cream source sync`; установка идёт из
+  кеша.
+- **Полный жизненный цикл.** `install`, `upgrade`, `remove` проверяют платформу,
+  зависимости и конфликты до запуска хуков; повтор после сбоя — та же команда.
+- **Настройка на каждой загрузке.** Хук `configure` запускается юнитом
+  `cream-configure@<ext>` в выбранной стадии: до сети, после сети, после cloud-init
+  или поверх графического входа.
+- **Типизированные настройки.** `cream set` проверяет значения по типам манифеста
+  до записи; файлы — в формате `EnvironmentFile` systemd, секреты — отдельным
+  файлом 0600 и только со stdin.
+- **Действия расширений.** `cream run <ext> <действие>` — с блокировками,
+  таймаутами и выводом одним JSON-объектом, для людей, скриптов и агентов.
+- **Сборка образов.** Фаза build ставит то же расширение внутри `virt-customize`
+  без сети; так работает [bisquite](https://github.com/iamletenkov/bisquite).
+- **Машинно-читаемый вывод.** У каждой команды есть `--json` со стабильными
+  кодами ошибок.
 
 ## Документация
 
-- [docs/cli.md](docs/cli.md) — справочник CLI 1.1: команды, флаги, коды выхода и
-  предупреждений, формы `--json`, контракт для stvor-agent, фаза build для bisquite;
-- [спека cream/v1](docs/specs/2026-10-18-cream-core.md) — формат манифеста
-  `extension.yaml` (§4), жизненный цикл, блокировки, настройки, источники;
-- runbooks: [01 выпуск](docs/runbooks/01_release.md),
-  [02 диагностика на машине](docs/runbooks/02_diagnostics.md),
-  [03 обновление cream на роботе](docs/runbooks/03_upgrade-cream.md);
-- [ADR](docs/adr/README.md) — решения, которые трудно откатить;
-- [docs/README.md](docs/README.md) — полный индекс, [docs/STATUS.md](docs/STATUS.md) —
-  текущее состояние;
-- [CHANGELOG.md](CHANGELOG.md) — изменения по версиям.
+- [Первые шаги](docs/getting-started.md)
+- Руководства: [подключить каталог](docs/guides/add-catalog.md) ·
+  [поставить и настроить расширение](docs/guides/install-extension.md) ·
+  [написать расширение](docs/guides/write-extension.md) ·
+  [диагностика](docs/guides/diagnostics.md) ·
+  [обновить cream](docs/guides/upgrade-cream.md) ·
+  [фаза build для сборщика образов](docs/guides/build-phase.md)
+- Справочник: [CLI](docs/reference/cli.md) ·
+  [манифест](docs/reference/manifest.md) ·
+  [коды выхода и предупреждения](docs/reference/exit-codes.md) ·
+  [вывод `--json`](docs/reference/json-output.md) ·
+  [файлы и переменные окружения](docs/reference/files-and-environment.md)
+- [Устройство cream](docs/architecture.md) · [все документы](docs/README.md) ·
+  [изменения по версиям](CHANGELOG.md)
 
-## Сборка
+На машине с пакетом: `man cream`, `man cream-extension.yaml`, `cream help <команда>`.
 
-Нужны `docker` и `make`; Go на хосте не нужен — всё идёт в контейнере
-`golang:1.26.9`.
+## Совместимость
 
-```bash
-make help        # список целей
-make build       # dist/cream под архитектуру хоста
-make build-all   # dist/cream-linux-amd64, dist/cream-linux-arm64
-make test        # go test -race ./...
-make lint        # gofmt, go vet, golangci-lint
-make ci          # lint + test + build-all — то же, что CI
-```
-
-Версия зашивается при сборке из `git describe`: `dist/cream version`.
-
-## Участие
-
-Регламент разработки — [AGENTS.md](AGENTS.md). Коммиты — Conventional Commits
-(текст по-русски), версии и `CHANGELOG.md` ведёт release-please.
+| | |
+|---|---|
+| ОС | Debian и Ubuntu; в CI — Debian 12, Debian 13, Ubuntu 24.04 |
+| Архитектуры | `amd64`, `arm64` |
+| Зависимости | нет, бинарь статический; systemd — для настройки на загрузке; `libguestfs-tools` — только для фазы build |
+| Формат расширений | `cream/v1`; в пределах мажорной версии команды, флаги, поля `--json` и коды ошибок только добавляются |
 
 ## Лицензия
 
-[Apache-2.0](LICENSE), © 2026 Letenkov Maksim.
+[Apache-2.0](LICENSE), © 2026 Letenkov Maksim. Сторонний код — [NOTICE](NOTICE).
