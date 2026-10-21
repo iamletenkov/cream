@@ -17,6 +17,15 @@ import (
 // written: the operation itself succeeds (spec bisquite-bundled-cream §8.2).
 const CodeLabelsWriteFailed = "labels.write_failed"
 
+// CodeLabelsTooLarge is the warning of a cream.extensions value longer than
+// MaxLabelValue: bisquite skips such a file whole (spec §8.1), so the image
+// gets no cream.* labels; the file is still written in full.
+const CodeLabelsTooLarge = "labels.too_large"
+
+// MaxLabelValue is the limit of one label value bisquite reads from
+// /etc/image-labels.d (spec §8.1): 8 KiB.
+const MaxLabelValue = 8 << 10
+
 // maxManifestSize bounds the manifest read for provides.
 const maxManifestSize = 1 << 20
 
@@ -92,6 +101,12 @@ func (s *Store) labels() error {
 	}, "", "  ")
 	if err != nil {
 		return err
+	}
+	if len(extJSON) > MaxLabelValue && !s.warnedLarge && s.Warn != nil {
+		s.warnedLarge = true
+		s.Warn.Add(CodeLabelsTooLarge,
+			"%s: cream.extensions — %d байт, больше %d: bisquite пропустит файл, метки cream.* в образ не попадут",
+			s.layout.ImageLabels(), len(extJSON), MaxLabelValue)
 	}
 	path := s.layout.ImageLabels()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

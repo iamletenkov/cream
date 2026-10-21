@@ -43,7 +43,9 @@ var manCommands = map[string]manCommand{
 			"(\\fB\\-\\-catalog\\fR NAME=ARCHIVE|DIR: an archive is read without unpacking it to disk) and the " +
 			"extensions of the base image (\\fB\\-\\-installed\\fR, the cream.extensions label), carrying the state " +
 			"from step to step: existence and version, platform (os, arch; platform.commands only warns), targets.build, " +
-			"depends, requires and conflicts, install parameters (a secret only as KEY=\\-). " +
+			"depends, requires and conflicts, install parameters (a secret only as KEY=\\-), required " +
+			"scope: build keys of an extension whose install hook will run (config.build_required; a step with " +
+			"\\fB\\-\\-params\\-file\\fR is left to the guest). " +
 			"\\fBinstall \\-\\-with\\-deps\\fR adds missing depends from the source of the extension that needs them, " +
 			"never requires. Steps from a source added by \\fBsource add \\-\\-archive\\fR are skipped (the guest checks " +
 			"them). No root, no network, no hooks, nothing written. Exit status: that of the first failed step; " +
@@ -98,7 +100,7 @@ var manCommands = map[string]manCommand{
 			"everything after the action name is passed to the action verbatim. " +
 			"The exit code is the code of the action (0\\(en63)."},
 	"actions":   {"list the actions of an extension", "Prints the actions declared by an installed extension with their parameters."},
-	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical) and skips the hook when the configure mark /var/lib/cream/configured/<ext>.json matches the registry (version, tree, settings, secrets_rev, machine\\-id), unless the manifest sets configure.every_boot; its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
+	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical) and skips the hook when the configure mark /var/lib/cream/configured/<ext>.json matches the registry (version, tree, settings, secrets_rev, machine\\-id), unless the manifest sets configure.every_boot. Hook code 20 is status skipped, not an error: the mark is removed and the hook runs again at the next boot. With \\fB\\-\\-wait\\fR the answer carries the outcome the unit wrote to /run/cream/configure/<ext>.result (status ok or skipped, reboot_required); \\fB\\-\\-force\\fR removes the mark first; \\fB\\-\\-again\\fR is a follow\\-up run a hook schedules for itself, called deferred (systemd\\-run \\-\\-on\\-active=30 \\-\\-timer\\-property=AccuracySec=1s cream configure \\-\\-again <ext>). Its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
 	"system":    {"initialise the system layout", "\\fBsystem init\\fR creates cream directories, installs the configure unit template and the configure targets."},
 }
 
@@ -203,11 +205,11 @@ var manExitCodes = []struct {
 	{"0", "Success."},
 	{"1", "A check did not pass (check.failed); \\fBupgrade\\fR: the plan was declined on a terminal (upgrade.declined)."},
 	{"0\\(en63", "\\fBcream run\\fR: the exit code of the action itself."},
-	{"64", "Usage error: flags, arguments, a secret in argv, a reserved command or flag (usage.*)."},
+	{"64", "Usage error: flags, arguments, a secret in argv, a reserved command or flag (usage.*); the phase cannot be determined (phase.undetermined); a required scope: build key not given (config.build_required) or read and written as a setting (config.scope_build)."},
 	{"65", "Invalid data: manifest, catalog, setting value, readonly key, record.json (manifest.*, config.*)."},
 	{"66", "Not found: extension, source, key, action, manifest; @version mismatch (not_found.*)."},
 	{"67", "Dependency graph: missing dependency, version, capability, cycle, conflict, file ownership, dependents, a provider whose upgrade failed (deps.*, conflict.*)."},
-	{"68", "Not applicable: architecture, family, OS, commands, targets, cream version, hook returned 20, a held extension (platform.*, target.*, hold.held)."},
+	{"68", "Not applicable: architecture, family, OS, commands, targets, cream version, hook returned 20 (except configure: skipped), a held extension (platform.*, target.*, hold.held)."},
 	{"69", "Source error: not synchronised, sha256 mismatch, network, archive (source.*)."},
 	{"70", "Internal error of cream."},
 	{"74", "Input/output or registry error (io.*, state.*)."},
@@ -477,12 +479,16 @@ List of {name, version?} dependencies by name with a version range.
 .TP
 .B hooks
 install, upgrade, configure, apply, remove: each {timeout?};
-\fBconfigure\fR also has \fBstage\fR (early, system, cloud\-user, graphical)
-and \fBafter\fR, \fBbefore\fR, \fBwants\fR.
+\fBconfigure\fR also has \fBstage\fR (early, system, cloud\-user, graphical),
+\fBafter\fR, \fBbefore\fR, \fBwants\fR and, since cream 1.2.0,
+\fBevery_boot\fR (run at every boot, not only when the configure mark
+does not match).
 .TP
 .B config.keys
 Settings of the extension: KEY \-> description (type, default, secret,
-readonly, ...).
+readonly, scope, ...). \fBscope: build\fR (cream 1.2.0) \- the value
+reaches only the install or upgrade hook of the operation and is stored
+nowhere.
 .TP
 .B actions
 Actions run by \fBcream run\fR.

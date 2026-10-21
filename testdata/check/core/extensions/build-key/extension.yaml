@@ -1,0 +1,13 @@
+schema: cream/v1
+name: build-key
+version: 1.0.0
+summary: фикстура cream check build-key
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+config:
+  keys:
+    MIRROR_TOKEN: {type: str, secret: file, scope: build, description: "обязательный ключ только для сборки"}
+    MIRROR_URL: {type: str, default: "https://mirror", scope: build, description: "ключ сборки с умолчанием"}
+hooks:
+  install: {}
+  remove: {}

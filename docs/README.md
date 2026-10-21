@@ -19,7 +19,8 @@
 | понять, что сломалось: статусы, журналы, блокировки, коды | [guides/diagnostics.md](guides/diagnostics.md) |
 | обновить расширения: план, `--dry-run`, закрепление (`hold`), риск, частичный исход | [guides/upgrade-extensions.md](guides/upgrade-extensions.md) |
 | обновить или откатить cream на машине | [guides/upgrade-cream.md](guides/upgrade-cream.md) |
-| ставить расширения в образ при сборке (`virt-customize`) | [guides/build-phase.md](guides/build-phase.md) |
+| ставить расширения в образ при сборке (`virt-customize`): фаза сама, коды | [guides/build-phase.md](guides/build-phase.md) |
+| писать строки cream в VMFILE bisquite: бандл, скрытый шаг, `cream check`, `scope: build`, метки образа | [guides/bisquite-images.md](guides/bisquite-images.md) |
 
 ## Справочник
 
@@ -38,7 +39,7 @@
 | [architecture.md](architecture.md) | место в экосистеме, ход операции, пакеты Go |
 | [development.md](development.md) | сборка, тесты, пакеты, как вносить изменения |
 | [runbooks/01_release.md](runbooks/01_release.md) | выпуск версии: release-please, ассеты, проверка, подъём пина у потребителей |
-| [adr/README.md](adr/README.md) | архитектурные решения: [0001](adr/0001-contract-cream-v1.md) — контракт `cream/v1`, [0002](adr/0002-single-dependency-stdlib-cli.md) — одна зависимость, CLI на stdlib, nfpm, [0003](adr/0003-upgrade-plan-hold.md) — `upgrade`: план до действий, `hold`, код худшего исхода |
+| [adr/README.md](adr/README.md) | архитектурные решения: [0001](adr/0001-contract-cream-v1.md) — контракт `cream/v1`, [0002](adr/0002-single-dependency-stdlib-cli.md) — одна зависимость, CLI на stdlib, nfpm, [0003](adr/0003-upgrade-plan-hold.md) — `upgrade`: план до действий, `hold`, код худшего исхода, [0004](adr/0004-bundled-cream-contract-1-2.md) — контракт 1.2: `every_boot`, `scope: build`, автоопределение фазы, `cream.json` |
 | [../CHANGELOG.md](../CHANGELOG.md) | изменения по версиям |
 
 ## Проектные документы

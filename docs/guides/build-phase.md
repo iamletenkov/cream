@@ -1,99 +1,115 @@
 # Фаза build: расширения при сборке образа
 
-Для авторов сборщиков образов (так работает
-[bisquite](https://github.com/iamletenkov/bisquite)). Расширение с
-`targets.build: exec` ставится внутрь образа: cream на хосте разрешает слои по
-кешу, а cream в госте (`virt-customize`) выполняет хук `install` без сети. Хост
-сборки — Debian или Ubuntu с пакетом cream и `libguestfs-tools`; root на хосте
-не нужен.
+Для авторов сборщиков образов и тех, кто зовёт cream внутри `virt-customize`,
+`chroot` или контейнера. С cream 1.2.0 **основной путь** — обычная команда
+`cream install` в госте: cream сам понимает, что идёт сборка, берёт дерево
+расширения из источника, как на живой машине, и применяет правила фазы build.
+Как это устроено в bisquite — [cream в образах bisquite](bisquite-images.md).
 
-## 1. На хосте: разрешить слои
+## 1. Что нужно в госте
 
-```bash
-cream --json resolve --phase build \
-  --target-arch amd64 --host-arch "$(dpkg --print-architecture)" --family deb \
-  --sources "$DATA_DIR/sources.yaml" --cache "$DATA_DIR/cream" \
-  core/apt-guard core/btop core/locale LOCALE=ru_RU.UTF-8
-```
-
-- Источники и кеш — свои (`--sources`, `--cache`), машинные не трогаются;
-  синхронизировать их — `cream source sync` с теми же флагами.
-- Каждый элемент `result.layers` — будущий `record.json` слоя; `dir` — дерево
-  расширения в кеше. Секретные параметры называются только именем (`KEY` или
-  `KEY=-`): значения в `resolve` не нужны.
-- Если в базовом образе часть расширений уже стоит, передайте их списком:
-  `--installed FILE` с JSON-массивом `[{"name", "version", "provides"?}]` или
-  `[{"token": "<источник>/<имя>@<версия>#<rev>"}]` — они закроют `depends` и
-  `requires`, но слоями не станут.
-- Отказы: 67 — граф; 68 `platform.arch_barrier` — слой `exec` для чужой
-  архитектуры (собирайте на хосте той же архитектуры); 69 — источник не
-  синхронизирован.
-
-## 2. На хосте: подготовить слой
-
-Каталог 0700, в нём:
-
-- `<name>/` — копия `dir`;
-- `record.json` — элемент `layers` (можно добавить `source_type`, `source_origin`);
-- `params.env` — все параметры слоя `KEY=VALUE`, включая секреты, права 0600.
-
-Упаковать с владельцем root, иначе в госте `params.env` окажется не у root и будет
-отвергнут (код 77):
+- пакет cream (`dpkg -i cream_<v>_<arch>.deb`; `postinst` выполнит
+  `cream system init`);
+- синхронизированный источник — обычно каталог на диске гостя:
 
 ```bash
-tar --owner=0 --group=0 --numeric-owner -C "$STAGING" -cf "$STAGING/$ID.tar" .
+cream source add core --path /usr/share/cream-catalogs/core-5.2.0 --replace --sync
 ```
 
-Архив удаляется после вызова.
+`--sync` для `--path` сети не требует. Внешний каталог по URL (`--archive …
+--sha256 …`) потребует сеть у appliance — как любой `apt-get` в сборке.
 
-## 3. Один вызов `virt-customize` на слой
+## 2. Команды
 
-```
---copy-in /usr/lib/cream/guest/linux-<arch>/cream:/usr/bin
---chmod 0755:/usr/bin/cream
---run-command '/usr/bin/cream system init'
---mkdir /var/lib/cream/incoming/<id>
---copy-in <staging>/<id>.tar:/var/lib/cream/incoming/
---run-command 'tar -C /var/lib/cream/incoming/<id> --numeric-owner -xf /var/lib/cream/incoming/<id>.tar
-     && rm -f /var/lib/cream/incoming/<id>.tar'
---run-command '/usr/bin/cream --json install --phase build
-     --from-dir /var/lib/cream/incoming/<id>/<name>
-     --record /var/lib/cream/incoming/<id>/record.json
-     --params-file /var/lib/cream/incoming/<id>/params.env --remove-params-file'
+```bash
+cream install desktop@2.1.0 DESKTOP_AUTOLOGIN=1
+cream install --with-deps x11vnc selkies
+cream install --params-file /run/secrets/mirror apt-mirror     # секреты и ключи scope: build
+cream upgrade --all
+cream remove gnome
 ```
 
-- Гостевой бинарь копируется всегда: версия cream в образе равна версии на хосте.
-- Последовательность работает и на `virt-customize` 1.48 (Debian 12), где нет
-  `--tar-in`; поэтому каталог создаётся `--mkdir`.
-- Параметры не попадают в argv `virt-customize` и в текст ошибок cream.
+Флаг `--phase` не нужен: фаза определяется сама (раздел 3). `@версия` —
+проверка: другая версия в источнике — 66. Зависимость, которой нет ни в
+образе, ни в этой команде, — 67; `--with-deps` добирает `depends` из того же
+источника.
 
-## 4. Что делает cream в госте
+## 3. Как cream узнаёт фазу
 
-Под блокировкой `lock/global`:
+Порядок: флаг `--phase build|live` → `CREAM_PHASE` родителя (вложенный вызов из
+хука) → автоопределение по PID 1:
 
-1. сверяет имя, версию, отпечаток дерева и параметров с `record.json`
-   (65 `record.mismatch`, поле — в `details.field`);
-2. проверяет платформу и граф по **реестру образа** — расширения из базового
-   образа учитываются;
-3. ставит `/usr/sbin/policy-rc.d` (exit 101) на время хука, если его не было, и
-   снимает после, в том числе при сбое — пакеты не запускают службы в образе;
-4. выполняет хук `install` с `CREAM_PHASE=build`;
-5. включает `configure` ссылкой в `*.wants`, не запуская его — он выполнится на
-   первой загрузке на своей [стадии](configure-stages.md);
-6. пишет реестр с `phase: build` и удаляет `incoming/<id>`; при сбое каталог
-   остаётся для разбора. `params.env` с `--remove-params-file` удаляется в любом
-   исходе.
+| Что видит cream | Фаза |
+|---|---|
+| `/proc/1/comm` = `systemd` и есть `/run/systemd/system` | `live` |
+| `/proc/1/comm` прочитан, это не systemd (init appliance `virt-customize`, контейнер без systemd) | `build` |
+| `/proc` не смонтирован или не читается | отказ 64 `phase.undetermined` — задайте `--phase` |
+
+`--json` и журнал называют фазу и причину: `"phase": "build", "reason":
+"pid1=init"` (или `flag`, `env`). Docker-контейнер без systemd тоже даёт
+`build` — это верно: службы там не стартуют.
+
+## 4. Что меняется в фазе build
+
+1. Расширение с `targets.build: none` не ставится (предупреждение
+   `install.build_none`); `targets.build: exec` — ставится.
+2. На время хуков cream ставит `/usr/sbin/policy-rc.d` (exit 101), если его не
+   было, и снимает после, в том числе при сбое, — пакеты не запускают службы в
+   образе.
+3. Хук `configure` **не запускается**: cream включает юнит ссылкой в `*.wants`
+   на его [стадии](configure-stages.md). Отметок выполнения в образе нет —
+   первая загрузка машины из образа выполнит все `configure`.
+4. systemd не трогается (`daemon-reload`, перезапуски).
+5. Реестр пишет `phase: build`; `/etc/image-labels.d/cream.json` описывает
+   весь реестр образа — так потомок видит, что стоит в базе.
+6. Ключи `scope: build` (токен зеркала, пароль реестра) уходят только в
+   окружение хука `install`/`upgrade` и нигде не хранятся
+   ([манифест](../reference/manifest.md#ключи-scope-build)). Секрет домена
+   (`secret: file` без `scope: build`), заданный при сборке, остаётся в образе
+   — так задумано контрактом расширения; токены сборки делайте `scope: build`.
+
+## 5. Проверка до сборки
+
+`cream check` проверяет строки cream будущего образа без root, сети и хуков —
+как hadolint для Dockerfile ([cli: check](../reference/cli.md#предсборочная-проверка-образа)):
+
+```bash
+cream --json check --catalog core=cream-extensions-5.2.0.tar.gz --os ubuntu:24.04 --arch amd64 \
+  --installed base-extensions.json \
+  --step 'install desktop@2.1.0 DESKTOP_AUTOLOGIN=1' --step 'install --with-deps x11vnc'
+```
+
+`--installed` — значение метки `cream.extensions` базового образа. Ошибка шага
+— тот же код и `error.code`, что ответит гость.
 
 ## Коды фазы build
 
 | Код | Причина |
 |---|---|
-| 0 | успех ([пример ответа](../../internal/cli/testdata/golden/install-build.json)) |
-| 64 | неполный вызов: `--from-dir`/`--record` без `--phase build`, ссылки или `K=V` в argv, `--source`/`--reinstall`/`--accept-risk` |
-| 65 | `record.invalid`, `record.mismatch` |
-| 66 | `record.not_found`, `not_found.params_file` |
-| 67 | граф по реестру образа |
-| 68 | `target.build` (`targets.build: none`), `platform.*`, `hook.not_applicable` |
+| 0 | успех |
+| 64 | `phase.undetermined` (`/proc` не читается — задайте `--phase`); `config.build_required` — обязательный ключ `scope: build` не передан (`KEY=…`, `KEY=-` со stdin, `--params-file`); `config.scope_build` — `get`/`set` такого ключа; `secret.in_argv` — значение секрета в аргументах; прочие `usage.*` |
+| 65 | `manifest.invalid`, `config.invalid`, `version.downgrade` |
+| 66 | нет расширения, версии или источника |
+| 67 | граф по реестру образа: `deps.missing`, `deps.version`, `deps.requires`, `conflict.*` |
+| 68 | `platform.*`, `hook.not_applicable`, `hold.held` |
+| 69 | источник не синхронизирован или битый |
 | 75 | блокировка |
 | 77 | `perm.params_file`: файл не 0600 или не root |
 | 79 | `hook.failed` |
+
+## Устаревший путь: слой с хоста (`--from-dir`, `--record`)
+
+bisquite 2.x разрешал слои на хосте (`cream resolve --phase build`), упаковывал
+дерево с `record.json` и `params.env` и звал в госте
+
+```
+cream --json install --phase build --from-dir <dir>/<name> --record <dir>/record.json \
+  --params-file <dir>/params.env --remove-params-file
+```
+
+Этот путь работает весь cream 1.x (контракт `cream/v1`) и уйдёт в cream 2.0;
+новый код его не использует. Его коды: 64 — `--from-dir`/`--record` без
+`--phase build`, ссылки или `K=V` в argv, `--source`/`--reinstall`/`--accept-risk`
+вместе с `--from-dir`; 65 — `record.invalid`, `record.mismatch`; 66 —
+`record.not_found`; 68 — `target.build` (`targets.build: none`). Пример ответа —
+[install-build.json](../../internal/cli/testdata/golden/install-build.json).

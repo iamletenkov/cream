@@ -155,6 +155,21 @@ func TestCheckSteps(t *testing.T) {
 		{"nonstandard-no-cascade", []string{"install base-lib; true", "install app"}, []string{"skipped", "ok"}, nil},
 		{"unsupported", []string{"set app MODE=slow"}, []string{"skipped"}, nil},
 		{"empty", []string{"   "}, []string{"usage.step"}, []int{64}},
+		// Обязательный ключ scope: build (§10.9): гость ответит 64 config.build_required.
+		{"build-required", []string{"install build-key"}, []string{"config.build_required"}, []int{64}},
+		{"build-required-stdin", []string{"install build-key MIRROR_TOKEN=- < /run/secrets/mirror"}, []string{"ok"}, nil},
+		{"build-required-params-file", []string{"install build-key --params-file /run/secrets/mirror"},
+			[]string{"ok"}, nil},
+		{"build-required-noop", []string{"install build-key MIRROR_TOKEN=-", "install build-key"},
+			[]string{"ok", "ok"}, nil},
+		{"build-required-reinstall", []string{"install build-key MIRROR_TOKEN=-", "install --reinstall build-key"},
+			[]string{"ok", "config.build_required"}, []int{0, 64}},
+		{"build-required-dep", []string{"install --with-deps needs-build-key"}, []string{"config.build_required"},
+			[]int{64}},
+		{"build-required-after-nonstandard", []string{"install base-lib; true", "install build-key"},
+			[]string{"skipped", "ok"}, nil},
+		{"build-required-optional-only", []string{"install build-key MIRROR_TOKEN=- MIRROR_URL=https://m2"},
+			[]string{"ok"}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,6 +202,18 @@ func TestCheckSteps(t *testing.T) {
 				t.Errorf("секрет в ответе: %s", out)
 			}
 		})
+	}
+}
+
+// Без --installed база неизвестна: расширение, возможно, уже стоит, и гость
+// хук install не запустит — обязательный ключ scope: build — предупреждение.
+func TestCheckBuildRequiredBaseUnknown(t *testing.T) {
+	t.Parallel()
+	r := Check(CheckRequest{Catalogs: checkCatalogs(t), Host: checkHost(), BaseUnknown: true,
+		Steps: []string{"install build-key"}, Cream: checkCream})
+	s := r.Steps[0]
+	if stepCode(s) != "ok" || !slices.Contains(warnCodes(s), "config.build_required") {
+		t.Errorf("шаг: %s, предупреждения %v", stepCode(s), warnCodes(s))
 	}
 }
 

@@ -7,12 +7,12 @@
 ## 1. Поставить cream
 
 ```bash
-V=1.1.4; ARCH=$(dpkg --print-architecture)
+V=1.2.0; ARCH=$(dpkg --print-architecture)
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_${ARCH}.deb"
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS        # cream_…deb: OK
 sudo apt install "./cream_${V}_${ARCH}.deb"
-cream version                                    # cream 1.1.4
+cream version                                    # cream 1.2.0
 ```
 
 ## 2. Подключить каталог

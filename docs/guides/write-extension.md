@@ -154,7 +154,7 @@ cream --root "$R" remove --purge hello
 
 | Задача | Поле |
 |---|---|
-| запускать настройку на каждой загрузке | `hooks.configure` со `stage: early \| system \| cloud-user \| graphical` — [как выбрать стадию](configure-stages.md) |
+| запускать настройку на загрузке | `hooks.configure` со `stage: early \| system \| cloud-user \| graphical` — [как выбрать стадию](configure-stages.md); на каждой загрузке, а не только при изменениях, — `every_boot: true` (с 1.2.0) |
 | разложить юниты и конфиги, которыми владеет cream | `files: [{src, dst, mode}]` |
 | потребовать другое расширение или способность | `depends`, `requires`; дать свою — `provides` |
 | запретить соседство | `conflicts.extensions`, `conflicts.capabilities` |
@@ -162,6 +162,7 @@ cream --root "$R" remove --purge hello
 | ограничить ОС и потребовать команды | `platform.os`, `platform.commands` |
 | общий код для нескольких расширений | `kind: library` + `depends` у потребителей |
 | ключ, который меняется только переустановкой | `config.keys.<KEY>.scope: install` |
+| значение только на время установки (токен зеркала при сборке), нигде не хранится | `config.keys.<KEY>.scope: build` (с 1.2.0) — [ключи `scope: build`](../reference/manifest.md#ключи-scope-build) |
 | секрет | `config.keys.<KEY>.secret: file`, в действии — `params.<KEY>.secret: true` и `stdin: secret` |
 
 Подробно — [справочник манифеста](../reference/manifest.md); живые примеры —

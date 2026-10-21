@@ -8,12 +8,15 @@
 ```
 cream-extensions ──(архив каталога)──► cream ◄──(cream run --json)── stvor-agent
                                          ▲
-                     bisquite ──(resolve на хосте, install --phase build в госте)
+                     bisquite ──(check на хосте, cream install в госте)
 ```
 
 - **cream-extensions** — каталог расширений `cream/v1`.
-- **bisquite** — сборщик образов: разрешает слои `cream resolve` и ставит их
-  `cream install --phase build` внутри `virt-customize`.
+- **bisquite** — сборщик образов: везёт cream и снимок каталога в бандле,
+  проверяет строки cream образа `cream check` до сборки, а в госте
+  (`virt-customize`) зовёт обычный `cream install` — фазу build cream
+  определяет сам. Состав образа cream отдаёт в `/etc/image-labels.d/cream.json`
+  ([cream в образах bisquite](guides/bisquite-images.md)).
 - **stvor-agent** — служба на машине; управляет ею через действия расширения
   `teleport` (`cream run --json`).
 

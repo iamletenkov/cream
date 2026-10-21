@@ -26,7 +26,7 @@ journalctl -b --no-pager -u cream-configure@cfg-once.service >/tmp/cfg-once.jour
 has /tmp/cfg-once.journal 'configure cfg-once: пропуск, отметка совпала' "журнал: пропуск по отметке"
 eq "$(counter $STATE/cfg-every-boot/configure.count)" 3 "every_boot: снова"
 eq "$(counter $STATE/cfg-failing/configure.count)" 3 "падающий: снова"
-eq "$(counter $STATE/cfg-skip/configure.count)" 3 "код 20: снова"
+eq "$(counter $STATE/cfg-skip/configure.count)" 4 "код 20: снова"
 eq "$(counter $STATE/cfg-again/configure.count)" 6 "cfg-again: загрузка и повтор снова"
 
 step "configure --force: мимо отметки"

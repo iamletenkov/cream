@@ -5,7 +5,7 @@
 Расширение — каталог с манифестом `extension.yaml` и скриптами: как поставить
 программу, как её настроить, обновить и убрать. cream берёт расширения из
 проверенных каталогов, хранит их настройки и состояние, запускает настройку на
-каждой загрузке и даёт расширениям действия с машинно-читаемым выводом. Один и
+загрузке, когда она нужна, и даёт расширениям действия с машинно-читаемым выводом. Один и
 тот же манифест работает и на живой машине, и внутри `virt-customize` при сборке
 образа.
 
@@ -17,7 +17,7 @@
 **Пакет `.deb`:**
 
 ```bash
-V=1.1.4; ARCH=$(dpkg --print-architecture)    # amd64 | arm64
+V=1.2.0; ARCH=$(dpkg --print-architecture)    # amd64 | arm64
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_${ARCH}.deb"
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS
@@ -28,7 +28,7 @@ cream version
 **Архив `tar.gz`** — тот же бинарь без пакетного менеджера:
 
 ```bash
-V=1.1.4; ARCH=$(dpkg --print-architecture)
+V=1.2.0; ARCH=$(dpkg --print-architecture)
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/cream_${V}_linux_${ARCH}.tar.gz"
 curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS
@@ -64,16 +64,21 @@ sudo cream remove btop
   из кеша.
 - **Полный жизненный цикл.** `install`, `upgrade`, `remove` проверяют платформу,
   зависимости и конфликты до запуска хуков; повтор после сбоя — та же команда.
-- **Настройка на каждой загрузке.** Хук `configure` запускается юнитом
+- **Настройка на загрузке.** Хук `configure` запускается юнитом
   `cream-configure@<ext>` в выбранной стадии: до сети, после сети, после cloud-init
-  или поверх графического входа.
+  или поверх графического входа. С 1.2.0 — один раз до успеха и снова при
+  изменениях (отметка выполнения), `every_boot: true` — на каждой загрузке;
+  код 20 — «пропущено, повторить на следующей».
 - **Типизированные настройки.** `cream set` проверяет значения по типам манифеста
   до записи; файлы — в формате `EnvironmentFile` systemd, секреты — отдельным
   файлом 0600 и только со stdin.
 - **Действия расширений.** `cream run <ext> <действие>` — с блокировками,
   таймаутами и выводом одним JSON-объектом, для людей, скриптов и агентов.
-- **Сборка образов.** Фаза build ставит то же расширение внутри `virt-customize`
-  без сети; так работает [bisquite](https://github.com/iamletenkov/bisquite).
+- **Сборка образов.** `cream install` внутри `virt-customize` сам узнаёт фазу
+  build и ставит то же расширение из каталога в образе, без сети; ключи
+  `scope: build` живут только в окружении хука. `cream check` проверяет строки
+  cream образа до сборки, `/etc/image-labels.d/cream.json` отдаёт состав в метки
+  образа. Так работает [bisquite](https://github.com/iamletenkov/bisquite).
 - **Машинно-читаемый вывод.** У каждой команды есть `--json` со стабильными
   кодами ошибок.
 
@@ -86,7 +91,8 @@ sudo cream remove btop
   [стадии configure](docs/guides/configure-stages.md) ·
   [диагностика](docs/guides/diagnostics.md) ·
   [обновить cream](docs/guides/upgrade-cream.md) ·
-  [фаза build для сборщика образов](docs/guides/build-phase.md)
+  [фаза build для сборщика образов](docs/guides/build-phase.md) ·
+  [cream в образах bisquite](docs/guides/bisquite-images.md)
 - Справочник: [CLI](docs/reference/cli.md) ·
   [манифест](docs/reference/manifest.md) ·
   [коды выхода и предупреждения](docs/reference/exit-codes.md) ·
@@ -103,7 +109,7 @@ sudo cream remove btop
 |---|---|
 | ОС | Debian и Ubuntu; в CI — Debian 12, Debian 13, Ubuntu 24.04 |
 | Архитектуры | `amd64`, `arm64` |
-| Зависимости | нет, бинарь статический; systemd — для настройки на загрузке; `libguestfs-tools` — только для фазы build |
+| Зависимости | нет, бинарь статический; systemd — для настройки на загрузке; в фазе build cream работает внутри гостя (`virt-customize`), на хосте сборки ему ничего не нужно |
 | Формат расширений | `cream/v1`; в пределах мажорной версии команды, флаги, поля `--json` и коды ошибок только добавляются |
 
 ## Лицензия

@@ -32,10 +32,10 @@ eq "$(mono cream-configure@cfg-failing.service Result)" exit-code "cream-configu
 absent $MARKS/cfg-failing.json "падающий: отметки нет"
 eq "$(hist '[.[] | select(.op == "configure" and .ext == "cfg-failing" and .status == "failed")] | length')" 2 \
 	"history.jsonl: каждая попытка cfg-failing — failed"
-eq "$(counter $STATE/cfg-skip/configure.count)" 2 "код 20: повтор на загрузке"
+eq "$(counter $STATE/cfg-skip/configure.count)" 3 "код 20: повтор на загрузке"
 absent $MARKS/cfg-skip.json "код 20: отметки нет"
 eq "$(mono cream-configure@cfg-skip.service Result)" success "код 20: юнит успешен"
-eq "$(hist '[.[] | select(.op == "configure" and .ext == "cfg-skip" and .status == "skipped")] | length')" 2 \
+eq "$(hist '[.[] | select(.op == "configure" and .ext == "cfg-skip" and .status == "skipped")] | length')" 3 \
 	"history.jsonl: каждый пропуск cfg-skip — skipped"
 eq "$(counter $STATE/cfg-again/configure.count)" 4 "cfg-again: загрузка и повтор"
 eq "$(tail -n 2 $STATE/cfg-again/configure.log | paste -sd' ')" "reason=boot phase=live reason=followup phase=live" \

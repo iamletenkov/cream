@@ -36,6 +36,19 @@ tail -n 20 /var/lib/cream/history.jsonl | jq -c '{time, op, ext, from, to, statu
 Сбой `configure` на загрузке виден как упавший юнит (`systemctl --failed`) и
 запись в `history.jsonl`; запись реестра при этом не меняется.
 
+`configure` не пошёл на загрузке — с cream 1.2.0 это обычно совпавшая отметка
+выполнения: в журнале юнита `configure <ext>: пропуск, отметка совпала`.
+
+```bash
+cream show --json <ext> | jq .result.configured     # {at, matches, every_boot}
+sudo cream configure --wait --json <ext> | jq .result.status   # ok | skipped; 79 — упал
+sudo cream configure --force <ext>                  # снять отметку и запустить сейчас
+```
+
+Код 20 хука configure — «пропущено» (`status: skipped`, юнит успешен, отметка
+снята, повтор на следующей загрузке). Подробнее —
+[отметка выполнения](configure-stages.md#отметка-выполнения-и-every_boot).
+
 ## 3. Блокировки (код 75)
 
 Операции берут `flock` на `/var/lib/cream/lock/global` и
@@ -63,7 +76,7 @@ ps -o pid,etime,cmd -p <PID>
 
 | Код | Что проверить |
 |---|---|
-| 64 | вызов: флаги, аргументы, секрет в argv (`KEY=-` со stdin) |
+| 64 | вызов: флаги, аргументы, секрет в argv (`KEY=-` со stdin); `config.build_required` — не передан обязательный ключ `scope: build`; `phase.undetermined` — задайте `--phase` |
 | 65 | значение ключа, манифест; текст ошибки называет поле |
 | 66 | имя расширения, ключа, действия; синхронизирован ли источник |
 | 67 | зависимости и конфликты: `details.missing`, `details.candidates` |

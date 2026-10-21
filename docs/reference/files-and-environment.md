@@ -23,6 +23,9 @@
 | `/var/lib/cream/lock/{global,<ext>}` | файлы блокировок | 0600, каталог 0700 |
 | `/var/lib/cream/incoming/<id>/` | приёмник фазы build | 0700 |
 | `/var/cache/cream/sources/<источник>/` | кеш источника | 0755 |
+| `/etc/image-labels.d/cream.json` | метки образа `{cream.version, cream.extensions, cream.sources}` по всему реестру — без параметров и путей; переписывается при каждой записи реестра (`install`, `upgrade`, `remove`, `hold`, `set`, код 10 хука, `system init`), атомарно; сбой — предупреждение `labels.write_failed`. bisquite переносит их в метки OCI | 0644 |
+| `/run/cream/<ext>.reason` | причина следующего прогона `configure` (`install`, `upgrade`, `apply`, `followup`); юнит читает и удаляет | 0644 |
+| `/run/cream/configure/<ext>.result` | исход последнего прогона хука юнитом `{status: ok\|skipped\|failed, reboot_required}` — его читает `cream configure --wait` | 0644 |
 | `/run/reboot-required` | создаётся, если хук вернул 10 | |
 
 **Режим пользователя.** Без root и без `--root` cream работает со своими файлами:
@@ -39,7 +42,7 @@
 | `CREAM_CACHE` | то же, что `--cache` |
 | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` | пути режима пользователя |
 | `SOURCE_DATE_EPOCH` | время файлов в архиве `cream catalog pack` (без неё — 0) |
-| `CREAM_PHASE` | фаза для вложенного `cream run` из хука (`build` или `live`) |
+| `CREAM_PHASE` | фаза (`build` или `live`) для вложенного вызова cream из хука; без флага `--phase` и без переменной фаза определяется по PID 1: `systemd` и `/run/systemd/system` — `live`, другой процесс (appliance `virt-customize`, контейнер без systemd) — `build`, `/proc` не читается — 64 `phase.undetermined` |
 | `CREAM_LOCK_FD`, `CREAM_LOCK_MODE` | унаследованная блокировка для вложенного вызова (ставит сам cream) |
 
 Флаг командной строки сильнее переменной.
@@ -62,11 +65,12 @@ cream запускает хук и действие напрямую, без о�
 | `CREAM_STATE_DIR` | `/var/lib/cream/ext/<ext>` |
 | `CREAM_ROOT` | корень (`/` или значение `--root`) |
 | `CREAM_CONFIG_FILE`, `CREAM_SECRETS_FILE` | файлы настроек и секретов |
-| `CREAM_REASON` | у `configure`: `boot`, `install`, `upgrade` или `apply` |
+| `CREAM_REASON` | у `configure`: `boot`, `install`, `upgrade`, `apply` или `followup` (повтор, поставленный `cream configure --again`) |
 | `CREAM_CHANGED_KEYS` | у `apply`: изменённые ключи через пробел |
 | `CREAM_ACTION`, `CREAM_OUTPUT` | у действия: имя и формат вывода (`json` или `text`) |
 | `CREAM_LOCK_FD`, `CREAM_LOCK_MODE` | дескриптор и режим удерживаемой блокировки |
 | ключи настроек | все **несекретные** ключи `config.keys` под своими именами |
+| ключи `scope: build` | только у `install`/`upgrade` текущей операции: переданные значения и умолчания, секретные тоже ([манифест](manifest.md#ключи-scope-build)) |
 
 Секреты в окружение не попадают: хук читает их из `$CREAM_SECRETS_FILE` или
 `cream config get --secret "$CREAM_EXT" KEY`. Вывод хука и действия проходит

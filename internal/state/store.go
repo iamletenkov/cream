@@ -25,8 +25,11 @@ type Store struct {
 	write func(path string, data []byte, perm fs.FileMode) error
 	// cream is the build version written to cream.json (version.Version).
 	cream string
-	// Warn receives labels.write_failed; nil drops the warning.
+	// Warn receives labels.write_failed and labels.too_large; nil drops the
+	// warning.
 	Warn *cerr.Warnings
+	// warnedLarge: labels.too_large was given once in this process.
+	warnedLarge bool
 }
 
 // NewStore returns a Store; now stamps installed_at, updated_at and journal lines.
