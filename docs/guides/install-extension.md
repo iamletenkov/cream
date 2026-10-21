@@ -115,7 +115,7 @@ sudo cream run --json --lock-timeout 20s <ext> status
 ## Обновление
 
 ```bash
-sudo cream source sync                # получить новую версию каталога
+sudo cream source add core --archive "$NEW_URL" --sha256 "$NEW_SUM" --replace --sync   # новый каталог
 sudo cream upgrade <ext>              # до версии из кеша того же источника
 sudo cream upgrade --all
 ```

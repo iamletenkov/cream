@@ -83,9 +83,11 @@ sudo cream run --json <ext> <действие>   # результат в кон�
 
 ## 6. Обновить и удалить
 
+Архивный источник закреплён sha256, поэтому новая версия каталога — это замена источника:
+
 ```bash
-sudo cream source sync           # перечитать источники (единственный сетевой шаг)
-sudo cream upgrade locale        # до версии из кеша
+sudo cream source add core --archive "$NEW_URL" --sha256 "$NEW_SUM" --replace --sync
+sudo cream upgrade locale        # до версии из нового кеша
 sudo cream remove locale         # хук remove; настройки в /etc/cream/locale остаются
 ```
 
