@@ -216,7 +216,7 @@ func (inv *invocation) finishText(result any, err error, code int) int {
 		}
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(inv.app.Stderr, "cream: %s\n", err.Error())
+		_, _ = fmt.Fprintf(inv.app.Stderr, "cream: %s\n", errorLine(err))
 		if inv.usage != "" {
 			_, _ = fmt.Fprintf(inv.app.Stderr, "\n%s", inv.usage)
 		}
@@ -228,6 +228,18 @@ func (inv *invocation) finishText(result any, err error, code int) int {
 		}
 	}
 	return code
+}
+
+// errorLine is the error as one line of stderr with its error.code: the
+// build log of an image (virt-customize) carries only stderr and the exit
+// code, so the refusal must be readable there without --json (spec
+// 2026-10-21 §17 р. 4).
+func errorLine(err error) string {
+	msg := strings.Join(strings.FieldsFunc(err.Error(), func(r rune) bool { return r == '\n' || r == '\r' }), " ")
+	if code := cerr.CodeOf(err); code != "" {
+		msg += " (" + code + ")"
+	}
+	return msg
 }
 
 // stdoutFailed reports a failed write to stdout (closed pipe, full disk): 74.

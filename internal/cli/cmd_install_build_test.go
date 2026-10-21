@@ -144,3 +144,72 @@ func TestInstallBuildCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestInstallBuildFromSourceCommand — фаза build без --from-dir (спека
+// 2026-10-21 §10.2): install, upgrade и remove берут дерево из источника;
+// отказ — одна строка stderr с error.code без --verbose (§17 р. 4).
+func TestInstallBuildFromSourceCommand(t *testing.T) {
+	t.Parallel()
+	build := map[string]string{"CREAM_PHASE": "build"}
+	t.Run("install, повтор, upgrade и remove", func(t *testing.T) {
+		t.Parallel()
+		root := installCLIRoot(t)
+		in := cliIn{Root: root, Env: build}
+		if out := runCLI(t, in, "install", "upgrade-fixture"); out.Code != 0 ||
+			out.Stdout != "upgrade-fixture 1.0.0: installed (изменено)\n" {
+			t.Fatalf("install: %+v", out)
+		}
+		l := paths.Layout{Root: root}
+		reg, err := os.ReadFile(l.InstalledFile("upgrade-fixture"))
+		if err != nil || !strings.Contains(string(reg), `"phase": "build"`) {
+			t.Errorf("реестр: %s %v", reg, err)
+		}
+		if out := runCLI(t, in, "install", "upgrade-fixture"); out.Code != 0 ||
+			out.Stdout != "upgrade-fixture 1.0.0: installed (без изменений)\n" {
+			t.Errorf("повтор: %+v", out)
+		}
+		dir := installCLICatalog(t, root, "next", "1.1.0", map[string]string{
+			"upgrade-fixture": cliTestdataDir(t, "catalog-next", "extensions", "upgrade-fixture")})
+		installCLISources(t, root, dir)
+		if out := runCLI(t, in, "upgrade", "-y", "upgrade-fixture"); out.Code != 0 || !strings.Contains(out.Stdout, "2.0.0") {
+			t.Errorf("upgrade: %+v", out)
+		}
+		if out := runCLI(t, in, "remove", "upgrade-fixture"); out.Code != 0 {
+			t.Errorf("remove: %+v", out)
+		}
+		hist, err := os.ReadFile(l.History())
+		if err != nil || strings.Count(string(hist), `"phase":"build"`) != 3 {
+			t.Errorf("history: %s %v", hist, err)
+		}
+	})
+	t.Run("--with-deps", func(t *testing.T) {
+		t.Parallel()
+		root := installCLIRoot(t)
+		in := cliIn{Root: root, Env: build}
+		if out := runCLI(t, in, "install", "depends-lib"); out.Code != 67 {
+			t.Errorf("без --with-deps: %+v", out)
+		}
+		out := runCLI(t, in, "install", "--with-deps", "depends-lib")
+		if out.Code != 0 || out.Stdout != "lib-fixture 1.0.0: installed (изменено)\ndepends-lib 1.0.0: installed (изменено)\n" {
+			t.Errorf("--with-deps: %+v", out)
+		}
+	})
+	t.Run("отказ — одна строка с error.code", func(t *testing.T) {
+		t.Parallel()
+		root := installCLIRoot(t)
+		out := runCLI(t, cliIn{Root: root, Env: build}, "install", "noop@9.9.9")
+		if out.Code != 66 {
+			t.Fatalf("exit: %+v", out)
+		}
+		var fail []string
+		for _, line := range strings.Split(strings.TrimRight(out.Stderr, "\n"), "\n") {
+			if strings.HasPrefix(line, "cream: ") && !strings.HasPrefix(line, "cream: предупреждение") &&
+				!strings.HasPrefix(line, "cream: фаза") {
+				fail = append(fail, line)
+			}
+		}
+		if len(fail) != 1 || !strings.HasSuffix(fail[0], "(version.mismatch)") || !strings.Contains(fail[0], "9.9.9") {
+			t.Errorf("строка отказа: %q", out.Stderr)
+		}
+	})
+}

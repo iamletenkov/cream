@@ -47,7 +47,10 @@ var manCommands = map[string]manCommand{
 			"places the tree under /opt/cream/ext, writes settings from KEY=VALUE arguments or \\fB\\-\\-params\\-file\\fR " +
 			"and runs the install hook. KEY=\\- prompts for the value on stdin. " +
 			"An unchanged extension is not reinstalled. " +
-			"\\fB\\-\\-phase build\\fR installs one layer inside an image build (virt\\-customize) from \\fB\\-\\-from\\-dir\\fR."},
+			"In the build phase (inside an image build) the tree also comes from the sources; hooks run under " +
+			"policy\\-rc.d, configure is only enabled and systemd is not touched. " +
+			"\\fB\\-\\-from\\-dir\\fR with \\fB\\-\\-record\\fR (one layer delivered by bisquite 2.x) is deprecated " +
+			"and goes in cream 2.0."},
 	"upgrade": {"upgrade extensions to the version in the source cache",
 		"Upgrades the named extensions (or all installed ones with \\fB\\-\\-all\\fR) to the version " +
 			"found in the source cache of the source each was installed from. " +
@@ -120,13 +123,14 @@ var manFlags = map[string]map[string]string{
 	"install": {
 		"source":             "Look up references without an explicit source in source \\fIS\\fR.",
 		"reinstall":          "Run the install hook even if nothing changed.",
+		"with-deps":          "Add missing dependencies (depends) from the source of the extension that needs them.",
 		"accept-risk":        "Allow extensions with targets.live: confirm.",
 		"allow-skip":         "Treat hook exit code 20 as status skipped instead of an error.",
 		"params-file":        "Read KEY=VALUE parameters from file \\fIF\\fR (mode 0600, owned by root).",
 		"phase":              "Phase: \\fBlive\\fR or \\fBbuild\\fR (build only with \\fB\\-\\-from\\-dir\\fR).",
-		"from-dir":           "build: extension tree \\fID\\fR (incoming/<id>/<name>).",
-		"record":             "build: record.json \\fIF\\fR, a layer of \\fBcream resolve \\-\\-json\\fR.",
-		"remove-params-file": "build: delete \\fB\\-\\-params\\-file\\fR after reading it.",
+		"from-dir":           "Deprecated (removed in cream 2.0). build: extension tree \\fID\\fR (incoming/<id>/<name>).",
+		"record":             "Deprecated (removed in cream 2.0). build: record.json \\fIF\\fR, a layer of \\fBcream resolve \\-\\-json\\fR.",
+		"remove-params-file": "Deprecated (removed in cream 2.0). build: delete \\fB\\-\\-params\\-file\\fR after reading it.",
 	},
 	"upgrade": {
 		"all":         "Upgrade every installed extension that is not held.",

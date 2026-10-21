@@ -82,7 +82,7 @@ func TestGoldenInstall(t *testing.T) {
 		{name: "install-several", args: []string{"install", "--json", "depends-lib", "lib-fixture"}},
 		{name: "install-deps-missing", args: []string{"install", "--json", "depends-lib"}, wantExit: 67},
 		{name: "install-several-params", args: []string{"install", "--json", "noop", "lib-fixture", "X=1"}, wantExit: 64},
-		{name: "install-with-deps-reserved", args: []string{"install", "--json", "--with-deps", "noop"}, wantExit: 64},
+		{name: "install-with-deps", args: []string{"install", "--json", "--with-deps", "depends-lib"}},
 		{name: "upgrade", before: [][]string{{"install", "upgrade-fixture"}}, next: true,
 			args: []string{"upgrade", "--json", "upgrade-fixture"}},
 		{name: "upgrade-all", before: [][]string{{"install", "upgrade-fixture"}, {"install", "noop"}}, next: true,
