@@ -26,7 +26,7 @@
 
 - [ ] Task 7: [cream] `cream check` (обобщение `resolve`)
 
-- [ ] Task 8: [cream] `/etc/image-labels.d/cream.json`
+- [x] Task 8: [cream] `/etc/image-labels.d/cream.json`
 
 - [ ] Task 9: [bisquite] Удаление слоя `EXTENSION`, адаптера и источников на хосте; отказ парсера с подсказкой
 

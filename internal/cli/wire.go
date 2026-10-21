@@ -24,9 +24,11 @@ import (
 func newEngine(ctx *Context) *engine.Engine {
 	l := ctx.Layout
 	now := ctx.App.Now
+	store := state.NewStore(l, now)
+	store.Warn = ctx.Warn // labels.write_failed (cream.json)
 	return &engine.Engine{
 		L:         l,
-		Store:     state.NewStore(l, now),
+		Store:     store,
 		Locks:     lock.NewLocker(l, ctx.Globals.LockTimeout, ctx.App.Env),
 		Run:       runner.Exec{},
 		Systemctl: systemd.NewSystemctl(l, execCommand),
