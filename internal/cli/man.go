@@ -98,6 +98,12 @@ var manGlobalFlags = map[string]string{
 	"v":            "More messages on stderr.",
 }
 
+// manPhase describes --phase of install, upgrade and remove (§10.1).
+const manPhase = "Phase: \\fBlive\\fR or \\fBbuild\\fR. Without it: CREAM_PHASE of a parent cream, " +
+	"otherwise decided by PID 1 \\(em systemd with /run/systemd/system is live, any other PID 1 is build; " +
+	"without a readable /proc/1/comm cream refuses (exit 64, phase.undetermined). " +
+	"install: explicit build is still only with \\fB\\-\\-from\\-dir\\fR."
+
 // manFlags describes the own flags of each command, by command then flag name.
 // Reserved flags (reserveFlags) are described automatically.
 var manFlags = map[string]map[string]string{
@@ -123,12 +129,13 @@ var manFlags = map[string]map[string]string{
 		"accept-risk":        "Allow extensions with targets.live: confirm.",
 		"allow-skip":         "Treat hook exit code 20 as status skipped instead of an error.",
 		"params-file":        "Read KEY=VALUE parameters from file \\fIF\\fR (mode 0600, owned by root).",
-		"phase":              "Phase: \\fBlive\\fR or \\fBbuild\\fR (build only with \\fB\\-\\-from\\-dir\\fR).",
+		"phase":              manPhase,
 		"from-dir":           "build: extension tree \\fID\\fR (incoming/<id>/<name>).",
 		"record":             "build: record.json \\fIF\\fR, a layer of \\fBcream resolve \\-\\-json\\fR.",
 		"remove-params-file": "build: delete \\fB\\-\\-params\\-file\\fR after reading it.",
 	},
 	"upgrade": {
+		"phase":       manPhase,
 		"all":         "Upgrade every installed extension that is not held.",
 		"dry-run":     "Print the plan and change nothing; the exit status is that of the plan (blocked extensions).",
 		"y":           "Do not ask for confirmation on a terminal; targets.live: confirm still needs \\fB\\-\\-accept\\-risk\\fR.",
@@ -140,6 +147,7 @@ var manFlags = map[string]map[string]string{
 		"purge":  "Also delete /etc/cream/<ext> and /var/lib/cream/ext/<ext>.",
 		"forget": "Skip the remove hook: drop only the registry entry, the tree and cream artifacts.",
 		"force":  "Remove even if installed extensions depend on it.",
+		"phase":  manPhase,
 	},
 	"get": {"secret": "Print the value of a secret (root only)."},
 	"set": {

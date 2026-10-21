@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 
 	"github.com/iamletenkov/cream/internal/cerr"
@@ -38,6 +39,24 @@ func newEngine(ctx *Context) *engine.Engine {
 		Stdout:    ctx.App.Stdout,
 		Stderr:    ctx.App.Stderr,
 	}
+}
+
+// phaseEngine is newEngine with the phase decided (§10.1): --phase (phase,
+// "" — not given), else CREAM_PHASE of a parent cream, else PID 1. The
+// decision goes to the --json envelope, and with -v to stderr.
+func phaseEngine(ctx *Context, phase string) (*engine.Engine, error) {
+	e := newEngine(ctx)
+	p, err := e.ResolvePhase(phase)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.Phase != nil {
+		*ctx.Phase = p
+	}
+	if ctx.Globals.Verbose {
+		_, _ = fmt.Fprintf(ctx.Stderr(), "cream: фаза %s (%s)\n", p.Phase, p.Reason)
+	}
+	return e, nil
 }
 
 // execCommand runs a command without a shell (systemd.ExecFunc): stdout and

@@ -18,7 +18,7 @@
 
 - [ ] Task 3: [cream-extensions] Аудит 14 хуков configure по А1–А6 и гейт `lint-hooks` в режиме warn (день 1)
 
-- [ ] Task 4: [cream] Автоопределение фазы
+- [x] Task 4: [cream] Автоопределение фазы
 
 - [ ] Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
 
