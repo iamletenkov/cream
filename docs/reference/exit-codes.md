@@ -77,7 +77,7 @@
 | `systemd.reload_failed`, `systemd.stop_failed` | `systemctl daemon-reload` или `stop` не удался |
 | `configure.no_block` | systemd ещё загружается — перезапуск configure поставлен в очередь без ожидания |
 | `configure.no_systemd` | `configure --again` без systemd — повтор не поставлен |
-| `configure.result` | юнит не смог записать или снять файл исхода `/run/cream/configure/<ext>.result` — `configure --wait` ответит без `status` |
+| `configure.result` | cream не смог записать или снять файл исхода `/run/cream/configure/<ext>.result` — `configure --wait` ответит без `status` |
 | `configure.mark` | отметку выполнения configure не удалось записать или удалить (операция выполнена; на загрузке хук пойдёт ещё раз) |
 | `labels.write_failed` | `/etc/image-labels.d/cream.json` не записан (операция выполнена) |
 | `labels.too_large` | `cream.extensions` в `cream.json` больше 8 КиБ — bisquite пропустит файл целиком, меток `cream.*` в образе не будет (раз за процесс; файл пишется полностью) |

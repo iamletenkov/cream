@@ -44,7 +44,7 @@
 
 - [ ] Task 16: [bisquite] Предсборочная проверка `cream_lint` и раздел `cream` в `bs image validate`
 
-- [x] Task 17: [cream] Документация cream 1.2.0 и выпуск 1.2.0
+- [ ] Task 17: [cream] Документация cream 1.2.0 и выпуск 1.2.0
 
 - [ ] Task 18: [bisquite] `bs image history`, `bs image diff` (метки + `--deep packages`), `bs extension ls`
 

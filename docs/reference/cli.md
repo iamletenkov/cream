@@ -235,7 +235,7 @@ cream system init
 - `--again` — повтор, который хук ставит себе сам: пишет причину `followup` в
   `/run/cream/<ext>.reason` и перезапускает юнит без ожидания (`--no-block`);
   следующий прогон идёт мимо отметки. Вызывать **отложенно**, когда хук уже
-  завершился: `systemd-run --on-active=60 --timer-property=AccuracySec=1s
+  завершился: `systemd-run --on-active=30 --timer-property=AccuracySec=1s
   cream configure --again <ext>` (без `AccuracySec` systemd вправе сдвинуть
   срабатывание таймера до минуты).
   Синхронный вызов из работающего хука перезапустит его же юнит и оборвёт
