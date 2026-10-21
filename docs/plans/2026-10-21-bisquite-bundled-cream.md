@@ -64,7 +64,7 @@
 
 - [ ] Task 26: [bisquite] Предвыпускная проверка и выпуск 3.0.0 (условие — инвариант Stvor)
 
-- [ ] Task 27: [cream] Фаза OpenWrt: семейство `openwrt`, `procd`, поставка `tar.gz` (по отдельной спеке)
+- [x] Task 27: [cream] Фаза OpenWrt: семейство `openwrt`, `procd`, поставка `tar.gz` (по отдельной спеке)
 
 - [ ] Task 28: [cream-extensions + bisquite] Фаза OpenWrt: корень `extensions/openwrt`, скрытый шаг в `OpenWrtBuilder`
 
@@ -404,6 +404,34 @@ cream = выпуск 1.2.0 через release-please (Task 17).
 По отдельной спеке (на основе `docs/specs/2026-10-20-openwrt.md`, PR #16; пишется перед фазой): семейство `openwrt`
 (`ID=openwrt`, 25.12, `apk`), `internal/initsys` с `procd`, автоопределение фазы по `procd`, отметки configure в
 `/opt/cream/var`, поставка `tar.gz`; минор cream.
+
+**Рулинги исполнителя (2026-10-21, развилки закрыты; решение — [ADR 0005](../adr/0005-openwrt-family-procd.md)).**
+Из спеки OpenWrt (PR #16) взята только часть «cream на OpenWrt» (§4.1, §4.3, §4.7, Р2, Р4); Teleport и Stvor
+отложены владельцем. Отдельная спека не писалась: решения владельца из задачи + ADR 0005 закрывают все развилки.
+- **РО1 — семейство по os-release, не флаг.** `paths.Layout.Family` читается из os-release под `--root`
+  (`ID`/`ID_LIKE`: `openwrt`, `lede`); манифест `platform.family: openwrt` требует `cream: ">=1.3.0"` (`checkSince`,
+  контрактная фикстура `testdata/contract/cream-1.3`). Отдельная спека не нужна: значение перечисления — минор.
+- **РО2 — init-скрипты rc.common, не USE_PROCD.** procd гоняет `rc.d` при загрузке по одному и ждёт каждый без
+  таймаута (`procd/rcS.c`: `max_running_tasks = 1`), экземпляр USE_PROCD только ставится в очередь — `early` не успел
+  бы до `S20network`. Два скрипта: `cream-configure-early` (`S19`, до `S19dnsmasq`/`firewall` по имени) и
+  `cream-configure` (`S95`, `system` затем `cloud-user`). Включение — пустой файл `/opt/cream/var/stages/<стадия>/<ext>`;
+  внутри стадии — по имени. `graphical` и `after`/`before`/`wants` на openwrt — 65 (манифест).
+- **РО3 — «apk-guard» = `IPKG_INSTROOT=/` в окружении хуков фазы build**, без обёрток `apk`: штатный режим
+  офлайн-сборки OpenWrt — `default_postinst` делает `enable` без `start`, `uci-defaults` ждут первой загрузки
+  (проверено на ВМ 25.12.6: `uhttpd` включён, не запущен). apk-tools 3 чистит окружение скриптов пакетов, поэтому
+  хук фазы build получает ещё `APK_CONFIG` — копию `/etc/apk/config` образа с `preserve-env` (по ревью; зонд в
+  `make test-openwrt`). `policy-rc.d` на OpenWrt не ставится. `TMPDIR` хуков очищает `S19` при загрузке.
+- **РО4 — без юнита configure идёт напрямую.** `cream configure`/`cream set` на живом OpenWrt — хук сразу под
+  `lock/<ext>`, `cream list` — `apply: hook`; `--again` — предупреждение, как без systemd.
+- **РО5 — `keep.d` cream не пишет** (Р4 спеки): после `sysupgrade` реестр без бинарей хуже пустого; «только
+  состояние» сохраняет само расширение своим `/lib/upgrade/keep.d/<ext>` (Task 28).
+- **РО6 — поставка `tar.gz` без установщика:** архив релиза уже есть; `tar -xzf` (busybox) + `cp` в `/usr/bin` +
+  `cream system init` — [guides/openwrt.md](../guides/openwrt.md). `.apk`/`.ipk` нет (В5).
+- **РО7 — тесты на musl/busybox:** `make test-openwrt` — корневая ФС openwrt-builder v0.3.0 x86-64 (`docker import`,
+  sha256 закреплён) и сценарий под busybox sh (CI-job `openwrt`); приёмка на ВМ PVE 990003/990004 (образ v0.3.0
+  x86-64): `tar.gz` → `system init` → `source add --archive file://` → `install` → перезагрузка → `S19` пропустил по
+  отметке, `S95` (`every_boot`) отработал, состояние в `/opt/cream/var` на месте; образ из `virt-customize` (фаза
+  build по PID 1, `IPKG_INSTROOT=/`) — configure на первой загрузке; ВМ удалены.
 
 ## Task 28: [cream-extensions + bisquite] Фаза OpenWrt (кратко)
 Каталог: корень `extensions/openwrt`, `amneziawg` (настройка `uci`), `podkop`, `luci-apps`. bisquite:

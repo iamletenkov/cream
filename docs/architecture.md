@@ -67,9 +67,11 @@ cream-extensions ──(архив каталога)──► cream ◄──(cr
 | `internal/state` | реестр установленного и журнал |
 | `internal/lock` | блокировки и их наследование вложенными вызовами |
 | `internal/runner` | запуск хуков и действий: окружение, таймауты, фильтр секретов |
+| `internal/initsys` | выбор init по семейству раскладки: systemd (Debian) или procd (OpenWrt) |
 | `internal/systemd` | юниты configure, drop-in стадий, `systemctl` |
+| `internal/procd` | init-скрипты configure на OpenWrt (`S19`/`S95`), отметки стадий |
 | `internal/place` | раскладка и снятие `files` |
-| `internal/paths` | пути на машине, `--root`, режим пользователя |
+| `internal/paths` | пути на машине, `--root`, режим пользователя, семейство (`openwrt` — `/opt/cream/var`) |
 | `internal/fsx`, `internal/semver`, `internal/cerr`, `internal/version` | файловые примитивы, SemVer, типизированные ошибки, версия |
 
 Тесты: модульные рядом с кодом; эталоны вывода CLI —

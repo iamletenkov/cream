@@ -24,6 +24,7 @@ make dist-release            # оба .deb, тарболы и SHA256SUMS
 make repro-check             # две сборки с одним SOURCE_DATE_EPOCH дают те же байты
 make test-integration        # .deb в контейнере с systemd; DISTRO=debian-12|ubuntu-24.04|debian-13|all
 make test-build              # фаза build настоящим virt-customize (вручную, не в ci)
+make test-openwrt            # cream на OpenWrt 25.12 (musl, busybox, init-скрипты procd) в контейнере из корневой ФС openwrt-builder
 make vuln                    # govulncheck
 ```
 

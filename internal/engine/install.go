@@ -10,6 +10,7 @@ import (
 	"github.com/iamletenkov/cream/internal/catalog"
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/initsys"
 	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
@@ -19,7 +20,6 @@ import (
 	"github.com/iamletenkov/cream/internal/semver"
 	"github.com/iamletenkov/cream/internal/source"
 	"github.com/iamletenkov/cream/internal/state"
-	"github.com/iamletenkov/cream/internal/systemd"
 )
 
 // InstallRequest is `cream install` from the sources, live or build (§6.5,
@@ -570,20 +570,21 @@ func (e *Engine) installLive(ctx context.Context, rec state.Record, m *manifest.
 	return e.Configure(ctx, rec.Name, reason, ConfigureOptions{Wait: true})
 }
 
-// installEnable enables cream-configure@<ext> for a configure hook (§6.4)
+// installEnable enables the configure of ext at boot for a configure hook
+// (§6.4: cream-configure@<ext> on systemd, the stage mark on procd)
 // or removes a configure the new version no longer has.
 func (e *Engine) installEnable(rec *state.Record, m *manifest.Manifest) error {
 	hk, ok := m.Hooks[manifest.HookConfigure]
 	if !ok {
 		if rec.Configure != nil {
-			if err := systemd.Disable(e.L, rec.Name); err != nil {
+			if err := initsys.For(e.L).Disable(e.L, rec.Name); err != nil {
 				return installSystemdErr(err, rec.Name)
 			}
 		}
 		rec.Configure = nil
 		return nil
 	}
-	target, err := systemd.Enable(e.L, rec.Name, systemd.StageSpec{Stage: string(hk.Stage),
+	target, err := initsys.For(e.L).Enable(e.L, rec.Name, initsys.StageSpec{Stage: string(hk.Stage),
 		After: hk.After, Before: hk.Before, Wants: hk.Wants})
 	if err != nil {
 		return installSystemdErr(err, rec.Name)

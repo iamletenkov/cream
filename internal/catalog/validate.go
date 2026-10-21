@@ -41,6 +41,7 @@ const (
 	warnUnitLock      = "validate.unit_lock"      // §7.3: Exec* юнита зовёт действие под блокировкой
 	warnApplyBlocking = "validate.apply_blocking" // §8.4: systemctl без --no-block в apply
 	warnCreamNewer    = "catalog.cream_newer"     // Р22: расширению нужен cream новее текущего
+	warnOpenWrtTmpfs  = "validate.openwrt_tmpfs"  // ADR-0005: /var на OpenWrt — tmpfs
 )
 
 // maxScript — сколько байт исполняемого файла читается для проверки UTF-8 и

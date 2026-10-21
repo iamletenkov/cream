@@ -21,6 +21,7 @@ func TestSinceTable(t *testing.T) {
 		"hooks.configure.stage: graphical":  "1.1.0",
 		"hooks.configure.every_boot":        "1.2.0",
 		"config.keys.*.scope: build":        "1.2.0",
+		"platform.family: openwrt":          "1.3.0",
 	}
 	got := map[string]string{}
 	for _, f := range sinceFields {
@@ -181,5 +182,64 @@ func TestParseRequiredBuildKey(t *testing.T) {
 		case !ok && (cerr.CodeOf(err) != "manifest.invalid" || !strings.Contains(err.Error(), "config.keys.A.default")):
 			t.Errorf("scope %s: err = %v, ждали manifest.invalid по default", scope, err)
 		}
+	}
+}
+
+// TestParseOpenWrt: семейство openwrt — с cream 1.3.0 (ADR-0005): без
+// cream: ">=1.3.0" — 65 с details.field platform.family; cream 1.2.0 отказывает
+// по cream: (68). У openwrt нет стадии graphical и порядка after/before/wants.
+func TestParseOpenWrt(t *testing.T) {
+	t.Parallel()
+	v13 := ParseCreamBuild("1.3.0")
+	const ow = "platform: {family: openwrt, arch: [amd64, arm64], os: [{id: openwrt, version: \">=25.12\"}]}\n"
+	tests := []struct {
+		name, rng, hooks string
+		cream            CreamBuild
+		wantExit         int
+		wantCode         string
+		wantField        string
+	}{
+		{name: "openwrt при 1.3.0", rng: ">=1.3.0", cream: v13},
+		{name: "openwrt с configure system", rng: ">=1.3.0", hooks: "hooks: {install: {}, configure: {stage: system}}", cream: v13},
+		{name: "openwrt с early и cloud-user", rng: ">=1.3.0", hooks: "hooks: {install: {}, configure: {stage: early}}", cream: v13},
+		{name: "openwrt при >=1.2.0", rng: ">=1.2.0", cream: v13, wantExit: 65, wantCode: "manifest.invalid", wantField: "platform.family"},
+		{name: "openwrt при >=1.3.0 на cream 1.2.0", rng: ">=1.3.0", cream: ParseCreamBuild("1.2.0"), wantExit: 68, wantCode: "platform.cream_version"},
+		{name: "graphical на openwrt", rng: ">=1.3.0", hooks: "hooks: {install: {}, configure: {stage: graphical}}", cream: v13,
+			wantExit: 65, wantCode: "manifest.invalid", wantField: "hooks.configure.stage"},
+		{name: "after на openwrt", rng: ">=1.3.0", hooks: "hooks: {install: {}, configure: {stage: system, after: [network.target]}}", cream: v13,
+			wantExit: 65, wantCode: "manifest.invalid", wantField: "hooks.configure.after"},
+		{name: "wants на openwrt", rng: ">=1.3.0", hooks: "hooks: {install: {}, configure: {stage: system, wants: [x.service]}}", cream: v13,
+			wantExit: 65, wantCode: "manifest.invalid", wantField: "hooks.configure.wants"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pairs := []string{`cream: ">=1.0.0"`, `cream: "` + tc.rng + `"`,
+				"platform: {family: deb, arch: [amd64, arm64]}\n", ow}
+			if tc.hooks != "" {
+				pairs = append(pairs, "hooks: {install: {}}", tc.hooks)
+			}
+			doc := mk(t, "", pairs...)
+			m, err := Parse([]byte(doc), tc.cream, &cerr.Warnings{})
+			if tc.wantExit == 0 {
+				if err != nil {
+					t.Fatalf("Parse: %v\n%s", err, doc)
+				}
+				if m.Platform.Family != FamilyOpenWrt {
+					t.Errorf("Family = %q", m.Platform.Family)
+				}
+				return
+			}
+			if cerr.ExitCode(err) != tc.wantExit || cerr.CodeOf(err) != tc.wantCode {
+				t.Fatalf("err = %v, ждали %d %s\n%s", err, tc.wantExit, tc.wantCode, doc)
+			}
+			if tc.wantField == "" {
+				return
+			}
+			var e *cerr.Error
+			if !errors.As(err, &e) || e.Details["field"] != tc.wantField {
+				t.Errorf("details = %v, ждали field=%s (%v)", e.Details, tc.wantField, err)
+			}
+		})
 	}
 }

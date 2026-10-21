@@ -15,6 +15,11 @@
 - Документация: README, [первые шаги](getting-started.md), [руководства](guides/), [справочник](reference/cli.md),
   [ADR 0001](adr/0001-contract-cream-v1.md), [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), карта `AGENTS.md`.
 
+- **OpenWrt** (план bisquite-bundled-cream Task 27, [ADR 0005](adr/0005-openwrt-family-procd.md), выйдет минором
+  1.3.0): `platform.family: openwrt`, раскладка `/opt/cream/var`, configure из init-скриптов procd (`S19`/`S95`),
+  `TMPDIR` на диске, `IPKG_INSTROOT=/` в фазе build, поставка `tar.gz`; `make test-openwrt` (корневая ФС
+  openwrt-builder v0.3.0 в контейнере) и приёмка на ВМ PVE — [руководство](guides/openwrt.md).
+
 ## В работе
 - `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
   `--accept-risk <ext>`, `-y`, `--fail-fast`, частичный исход с кодом худшего; `cream hold`/`unhold`.
@@ -23,6 +28,7 @@
 ## Дальше
 1. Проверить PR подъёма пина cream 1.1.4 в cream-extensions, bisquite и Stvor (dispatch выпуска).
 2. Интеграция bisquite: фаза build по [guides/build-phase.md](guides/build-phase.md).
+3. OpenWrt в каталоге и bisquite (Task 28): корень `extensions/openwrt`, скрытый шаг cream в `OpenWrtBuilder`.
 
 ## Бэклог
 - Drop-in стадии переписывает только `install`/`upgrade` расширения: у `early`, включённого cream 1.1.0, строки

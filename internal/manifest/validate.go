@@ -135,6 +135,9 @@ func validate(r *rawManifest) (*Manifest, error) {
 	if m.Hooks, err = validateHooks(m.Kind, r.Hooks); err != nil {
 		return nil, err
 	}
+	if err := checkFamilyHooks(m.Platform.Family, m.Hooks); err != nil {
+		return nil, err
+	}
 	if m.Config, err = validateKeys(r.Config.Keys); err != nil {
 		return nil, err
 	}
@@ -164,8 +167,8 @@ func validatePlatform(r *rawPlatform) (Platform, error) {
 		return Platform{}, invalid("platform", "обязательное поле")
 	}
 	p := Platform{Family: r.Family}
-	if r.Family != "deb" {
-		return p, invalid("platform.family", "%q: cream/v1 знает только deb", r.Family)
+	if r.Family != FamilyDeb && r.Family != FamilyOpenWrt {
+		return p, invalid("platform.family", "%q: cream/v1 знает deb и openwrt", r.Family)
 	}
 	if len(r.Arch) == 0 {
 		return p, invalid("platform.arch", "непустой список из amd64, arm64")
@@ -202,6 +205,28 @@ func validatePlatform(r *rawPlatform) (Platform, error) {
 	}
 	p.Commands = r.Commands
 	return p, nil
+}
+
+// checkFamilyHooks applies the limits of the openwrt family (ADR-0005):
+// configure runs from procd init scripts — no graphical stage, and no
+// after/before/wants (systemd unit names), the order is the stage only.
+func checkFamilyHooks(family string, hooks map[HookName]Hook) error {
+	hk, ok := hooks[HookConfigure]
+	if family != FamilyOpenWrt || !ok {
+		return nil
+	}
+	if hk.Stage == StageGraphical {
+		return invalid("hooks.configure.stage", "graphical: у семейства openwrt нет графической стадии (early, system, cloud-user)")
+	}
+	for _, l := range []struct {
+		name string
+		in   []string
+	}{{"after", hk.After}, {"before", hk.Before}, {"wants", hk.Wants}} {
+		if len(l.in) > 0 {
+			return invalid("hooks.configure."+l.name, "у семейства openwrt порядок configure задаёт только стадия: after, before, wants — имена юнитов systemd")
+		}
+	}
+	return nil
 }
 
 func validateTargets(r rawTargets) (Targets, error) {

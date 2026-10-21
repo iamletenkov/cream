@@ -1,0 +1,19 @@
+schema: cream/v1
+name: fixture-openwrt
+version: 1.0.0
+summary: фикстура семейства openwrt — configure на каждой загрузке
+cream: ">=1.3.0"
+platform:
+  family: openwrt
+  arch: [amd64, arm64]
+  os: [{id: openwrt, version: ">=25.12"}]
+# Хуки на busybox ash: install и configure считают вызовы и пишут окружение в
+# состояние (/opt/cream/var/ext/fixture-openwrt — вне tmpfs), configure стадии
+# system идёт на каждой загрузке (every_boot) из S95cream-configure.
+hooks:
+  install: {}
+  configure: {stage: system, every_boot: true}
+  remove: {}
+config:
+  keys:
+    MESSAGE: {type: str, default: "hello", description: "что configure пишет в состояние"}

@@ -1,0 +1,11 @@
+schema: cream/v1
+name: openwrt-family
+version: 1.0.0
+summary: расширение семейства openwrt (cream 1.3.0)
+cream: ">=1.3.0"
+platform: {family: openwrt, arch: [amd64, arm64], os: [{id: openwrt, version: ">=25.12"}]}
+# Контрактная фикстура ADR-0005: cream 1.3.0 принимает, cream 1.2.x и старше
+# отказывают по cream: (68 platform.cream_version), а не по platform.family
+# (make contract-old).
+hooks:
+  install: {}

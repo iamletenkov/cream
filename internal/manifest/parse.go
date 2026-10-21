@@ -259,6 +259,7 @@ type sinceField struct {
 var (
 	v11 = semver.Version{Major: 1, Minor: 1}
 	v12 = semver.Version{Major: 1, Minor: 2}
+	v13 = semver.Version{Major: 1, Minor: 3}
 )
 
 // sinceFields — таблица «поле → версия» checkSince. Поле cream 1.0 в ней не
@@ -269,6 +270,7 @@ var sinceFields = []sinceField{
 	{"hooks.configure.stage: graphical", v11},
 	{"hooks.configure.every_boot", v12},
 	{"config.keys.*.scope: build", v12},
+	{"platform.family: openwrt", v13},
 }
 
 // sinceOf — версия из таблицы; ok = false — поле есть с cream 1.0.
@@ -289,7 +291,7 @@ type sinceUse struct {
 }
 
 // usedSince перечисляет поля манифеста из sinceFields в порядке манифеста:
-// configure, затем ключи по имени. Сырые формы — потому что every_boot
+// семейство, configure, затем ключи по имени. Сырые формы — потому что every_boot
 // требует cream 1.2.0 при любом значении, в том числе false.
 func usedSince(r *rawManifest) []sinceUse {
 	var out []sinceUse
@@ -297,6 +299,9 @@ func usedSince(r *rawManifest) []sinceUse {
 		if v, ok := sinceOf(feature); ok {
 			out = append(out, sinceUse{field: field, what: what, since: v})
 		}
+	}
+	if r.Platform != nil {
+		add("platform.family: "+r.Platform.Family, "platform.family", "семейство "+r.Platform.Family)
 	}
 	if hk, ok := r.Hooks[string(HookConfigure)]; ok {
 		add("hooks.configure.stage: "+hk.Stage, "hooks.configure.stage", "стадия "+hk.Stage)

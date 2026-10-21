@@ -57,6 +57,8 @@ func validPhase(p string) bool { return p == PhaseBuild || p == PhaseLive }
 // chroot; a container without systemd is build too — services do not start
 // there; systemd without /run/systemd/system is a chroot with the host's
 // /proc — an image being built, reason pid1=systemd,no-run; ADR-0004 п.1).
+// On OpenWrt (spec OpenWrt §4.1) procd as PID 1 is live; anything else is
+// build: the libguestfs appliance init, or a chroot with the host's /proc.
 // Without a readable /proc/1/comm it refuses with 64 phase.undetermined
 // instead of guessing.
 func DetectPhase(l paths.Layout) (PhaseInfo, error) {
@@ -69,6 +71,12 @@ func DetectPhase(l paths.Layout) (PhaseInfo, error) {
 		return PhaseInfo{}, ce
 	}
 	reason := "pid1=" + comm
+	if l.OpenWrt() {
+		if comm == "procd" {
+			return PhaseInfo{Phase: PhaseLive, Reason: reason}, nil
+		}
+		return PhaseInfo{Phase: PhaseBuild, Reason: reason}, nil
+	}
 	if comm != "systemd" {
 		return PhaseInfo{Phase: PhaseBuild, Reason: reason}, nil
 	}

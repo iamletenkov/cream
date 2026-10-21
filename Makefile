@@ -32,6 +32,10 @@ INTEGRATION_DISTROS ?= debian-12 ubuntu-24.04
 # (кеш .cache/test-build/); TEST_BUILD_HOST=1 — virt-customize хоста вместо контейнера.
 TEST_BUILD_IMAGE_URL    ?= https://cloud.debian.org/images/cloud/bookworm/20261006-2623/debian-12-genericcloud-amd64-20261006-2623.qcow2
 TEST_BUILD_IMAGE_SHA512 ?= a09170d17e13af43da61774666f520e3bbec0f8bd96b4db37c15f3426fb327ccad950b80dbe78c09aa5ca90ce5015e99334b0ba5188fd4018736bc3fb5f0882c
+# OpenWrt (ADR-0005, make test-openwrt): корневая ФС OpenWrt 25.12 x86-64 из
+# релиза iamletenkov/openwrt-builder v0.3.0 (кеш .cache/test-openwrt/), сумма — из её sha256sums.
+OPENWRT_ROOTFS_URL    ?= https://github.com/iamletenkov/openwrt-builder/releases/download/v0.3.0/openwrt-25.12.6-custom-x86-64-generic-rootfs.tar.gz
+OPENWRT_ROOTFS_SHA256 ?= 1ce17fa84658cda7da34ff5b4eb588b720d1f0032b2872b1859bddad62ab9c37
 # Контракт ADR-0004 (make contract-old): релизный cream, которому фикстуры
 # testdata/contract обязаны дать 68 platform.cream_version; сумма — тарбола linux_amd64.
 OLD_CREAM_VERSION ?= 1.1.4
@@ -57,7 +61,7 @@ GO_FILES = find . \( -path ./.cache -o -path ./dist -o -path ./.scratchpad -o -p
 .PHONY: help build build-all test test-golden lint fmt tidy man ci ci-unlocked clean cache \
 	deb deb-unlocked deb-pkg dist-release dist-release-unlocked repro-check vuln \
 	test-integration test-integration-unlocked test-build test-build-unlocked envfile-refs \
-	contract-old
+	contract-old test-openwrt
 
 help: ## список целей
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -152,6 +156,12 @@ test-build-unlocked: deb-unlocked
 	TEST_BUILD_IMAGE_URL=$(TEST_BUILD_IMAGE_URL) TEST_BUILD_IMAGE_SHA512=$(TEST_BUILD_IMAGE_SHA512) \
 		bash test/build/run.sh $(RELEASE_DIR)/cream_$(DEB_VERSION)_amd64.deb \
 		.scratchpad/test-runs/build-$$(date +%Y%m%d-%H%M%S).log
+
+test-openwrt: ## cream на OpenWrt 25.12 (musl, busybox, procd-скрипты) в контейнере из корневой ФС openwrt-builder (amd64)
+	$(MAKE) --no-print-directory build-all ARCHES=amd64
+	OPENWRT_ROOTFS_URL=$(OPENWRT_ROOTFS_URL) OPENWRT_ROOTFS_SHA256=$(OPENWRT_ROOTFS_SHA256) \
+		bash test/openwrt/run.sh dist/cream-linux-amd64 .cache \
+		.scratchpad/test-runs/openwrt-$$(date +%Y%m%d-%H%M%S).log
 
 envfile-refs: ## переснять эталоны EnvironmentFile systemd 249/252/255/257 (internal/envfile/testdata; под замком)
 	$(HEAVY) bash test/integration/capture-envfile.sh

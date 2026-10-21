@@ -28,6 +28,17 @@
 | `/run/cream/configure/<ext>.result` | исход последнего прогона хука юнитом `{status: ok\|skipped\|failed, reboot_required}` — его читает `cream configure --wait` | 0644 |
 | `/run/reboot-required` | создаётся, если хук вернул 10 | |
 
+**OpenWrt** (семейство `openwrt`, cream 1.3, [ADR 0005](../adr/0005-openwrt-family-procd.md)): `/var` там —
+tmpfs, поэтому всё, что выше лежит в `/var/lib/cream`, лежит в **`/opt/cream/var`** (`installed/`, `configured/`,
+`history.jsonl`, `sources.lock`, `ext/<ext>/`, `lock/`, `incoming/`), кеш источников — в `/opt/cream/var/cache`,
+`TMPDIR` хуков — `/opt/cream/var/tmp` (очищается скриптом `S19` при загрузке), а `reason`, `result` и `reboot-required` — в `/var/run`. Юнитов systemd нет:
+
+| Путь | Что | Права |
+|---|---|---|
+| `/etc/init.d/cream-configure-early`, `/etc/rc.d/S19cream-configure-early` | configure стадии `early` (до `S20network`) | 0755 |
+| `/etc/init.d/cream-configure`, `/etc/rc.d/S95cream-configure` | configure стадий `system` и `cloud-user` | 0755 |
+| `/opt/cream/var/stages/<стадия>/<ext>` | configure расширения включён на стадии (пустой файл) | 0644 |
+
 **Режим пользователя.** Без root и без `--root` cream работает со своими файлами:
 источники — `$XDG_CONFIG_HOME/cream/sources.yaml` (`~/.config`), кеш —
 `$XDG_CACHE_HOME/cream/` (`~/.cache`), `sources.lock` — `$XDG_STATE_HOME/cream/`
@@ -71,11 +82,14 @@ cream запускает хук и действие напрямую, без о�
 | `CREAM_LOCK_FD`, `CREAM_LOCK_MODE` | дескриптор и режим удерживаемой блокировки |
 | ключи настроек | все **несекретные** ключи `config.keys` под своими именами |
 | ключи `scope: build` | только у `install`/`upgrade` текущей операции: переданные значения и умолчания, секретные тоже ([манифест](manifest.md#ключи-scope-build)) |
+| `TMPDIR` | только на OpenWrt: `/opt/cream/var/tmp` (на диске; `/tmp` там — ОЗУ) |
+| `IPKG_INSTROOT` | только на OpenWrt в фазе build: `/` — скрипты пакетов `apk add` включают службы без запуска, `uci-defaults` ждут первой загрузки (аналог `policy-rc.d`) |
+| `APK_CONFIG` | только на OpenWrt в фазе build: `/opt/cream/var/apk-build.conf` — `/etc/apk/config` образа плюс `preserve-env`, чтобы apk 3 передал `IPKG_INSTROOT` скриптам пакетов |
 
 Секреты в окружение не попадают: хук читает их из `$CREAM_SECRETS_FILE` или
 `cream config get --secret "$CREAM_EXT" KEY`. Вывод хука и действия проходит
 фильтр: известные значения секретов заменяются на `***`. Без `--json` он идёт в
-stderr cream, при запуске из юнита — в журнал systemd.
+stderr cream, при запуске из юнита — в журнал systemd, на OpenWrt при загрузке — в `logread`.
 
 ## Юниты systemd
 
@@ -104,6 +118,23 @@ cream включает его ссылкой в `*.wants` цели стадии 
 `after`, `before`, `wants` из манифеста дописываются к порядку стадии. На живой
 машине после `install`/`upgrade` cream запускает `configure` сразу; если systemd
 ещё загружается — ставит перезапуск в очередь (`configure.no_block`).
+
+## Init-скрипты procd (OpenWrt)
+
+`cream system init` на OpenWrt пишет два скрипта `#!/bin/sh /etc/rc.common` и
+ссылки на них в `/etc/rc.d` (как `enable`). Скрипт стадии при загрузке проходит
+`/opt/cream/var/stages/<стадия>/*` по именам и для каждого расширения с записью
+реестра вызывает `cream configure --from-unit <ext>`. Скрипты синхронные (не
+`USE_PROCD`): procd выполняет `rc.d` по одному и ждёт каждый, поэтому `early`
+заканчивается до сети. `after`, `before`, `wants` и стадия `graphical` у
+семейства `openwrt` запрещены манифестом. `cream configure` и `cream set` на
+живом OpenWrt запускают хук configure сразу (`apply: hook` в `cream list`).
+
+| Стадия | Скрипт | Когда |
+|---|---|---|
+| `early` | `S19cream-configure-early` | до `S20network` |
+| `system` | `S95cream-configure` | после сети и `wrt.cloudinit` (`S47`) |
+| `cloud-user` | `S95cream-configure`, после `system` | там же |
 
 ## Блокировки
 

@@ -100,7 +100,7 @@ var manCommands = map[string]manCommand{
 			"everything after the action name is passed to the action verbatim. " +
 			"The exit code is the code of the action (0\\(en63)."},
 	"actions":   {"list the actions of an extension", "Prints the actions declared by an installed extension with their parameters."},
-	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical) and skips the hook when the configure mark /var/lib/cream/configured/<ext>.json matches the registry (version, tree, settings, secrets_rev, machine\\-id), unless the manifest sets configure.every_boot. Hook code 20 is status skipped, not an error: the mark is removed and the hook runs again at the next boot. With \\fB\\-\\-wait\\fR the answer carries the outcome the unit wrote to /run/cream/configure/<ext>.result (status ok or skipped, reboot_required); \\fB\\-\\-force\\fR removes the mark first; \\fB\\-\\-again\\fR is a follow\\-up run a hook schedules for itself, called deferred (systemd\\-run \\-\\-on\\-active=30 \\-\\-timer\\-property=AccuracySec=1s cream configure \\-\\-again <ext>). Its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
+	"configure": {"run the configure hook", "Runs the configure hook of an installed extension now, with \\fBCREAM_REASON=apply\\fR: restarts the unit cream\\-configure@<ext>.service, or runs the hook directly without systemd. At boot the unit runs by itself at the stage of the extension (early, system, cloud\\-user, graphical) and skips the hook when the configure mark /var/lib/cream/configured/<ext>.json matches the registry (version, tree, settings, secrets_rev, machine\\-id), unless the manifest sets configure.every_boot. Hook code 20 is status skipped, not an error: the mark is removed and the hook runs again at the next boot. With \\fB\\-\\-wait\\fR the answer carries the outcome the unit wrote to /run/cream/configure/<ext>.result (status ok or skipped, reboot_required); \\fB\\-\\-force\\fR removes the mark first; \\fB\\-\\-again\\fR is a follow\\-up run a hook schedules for itself, called deferred (systemd\\-run \\-\\-on\\-active=30 \\-\\-timer\\-property=AccuracySec=1s cream configure \\-\\-again <ext>). Its output is in \\fBjournalctl \\-u cream\\-configure@<ext>.service\\fR. On OpenWrt the hooks run directly and at boot from the procd init scripts /etc/init.d/cream\\-configure\\-early (S19, stage early) and /etc/init.d/cream\\-configure (S95, system and cloud\\-user); their output is in \\fBlogread\\fR. \\fB\\-\\-from\\-unit\\fR is used by the unit itself."},
 	"system":    {"initialise the system layout", "\\fBsystem init\\fR creates cream directories, installs the configure unit template and the configure targets."},
 }
 
@@ -145,7 +145,7 @@ var manFlags = map[string]map[string]string{
 		"phase":       "Phase: \\fBbuild\\fR or \\fBlive\\fR.",
 		"target-arch": "Target architecture (default: this machine).",
 		"host-arch":   "Build host architecture (default: this machine).",
-		"family":      "Package family of the target (deb); without it the family is not checked in the build phase.",
+		"family":      "Package family of the target (deb, openwrt); without it the family is not checked in the build phase.",
 		"installed":   "build: JSON array of extensions already in the base image ([{name, version, provides?}]).",
 	},
 	"install": {
@@ -461,7 +461,7 @@ Required, range of cream versions, for example ">=1.0.0".
 \fBextension\fR (default) or \fBlibrary\fR (files only, no hooks).
 .TP
 .B platform
-\fBfamily\fR (deb), \fBarch\fR (amd64, arm64), \fBos\fR (list of {id, version}
+\fBfamily\fR (deb; openwrt since cream 1.3: OpenWrt 25.12+, procd, state in /opt/cream/var), \fBarch\fR (amd64, arm64), \fBos\fR (list of {id, version}
 from /etc/os\-release), \fBcommands\fR (required in PATH before install).
 .TP
 .B targets

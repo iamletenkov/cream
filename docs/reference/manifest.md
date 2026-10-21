@@ -34,7 +34,7 @@
 | `summary` | строка, обязателен | одна строка, не длиннее 120 знаков |
 | `cream` | диапазон, обязателен | версии cream, например `">=1.1.0"`; мажор диапазона — 1. Сборка cream не с тега считается подходящей (предупреждение `platform.dev_build`) |
 | `kind` | `extension` \| `library`, `extension` | `library` — только файлы, без хуков; ставится как зависимость |
-| `platform.family` | `deb`, обязателен | семейство пакетов |
+| `platform.family` | `deb` или `openwrt` (cream 1.3, `cream: ">=1.3.0"`), обязателен | семейство: `deb` — Debian/Ubuntu с systemd; `openwrt` — OpenWrt 25.12+ (procd, состояние в `/opt/cream/var`; без стадии `graphical` и без `after`/`before`/`wants` у configure; [ADR 0005](../adr/0005-openwrt-family-procd.md)) |
 | `platform.arch` | список, обязателен | `amd64`, `arm64` (`x86_64`, `aarch64` приводятся к ним) |
 | `platform.os` | список `{id, version?}`, любой | `ID` и `VERSION_ID` из `/etc/os-release`; `version` — диапазон: `{id: ubuntu, version: ">=22.04"}` |
 | `platform.commands` | список, `[]` | команды, которые должны быть в `PATH` до хука `install` |
