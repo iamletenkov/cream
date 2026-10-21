@@ -43,13 +43,20 @@ const ReasonFollowup = "followup"
 // the configure mark matches the registry (§10.7).
 const ConfigureUpToDate = "up-to-date"
 
+// ConfigureSkipped is ConfigureResult.Status when the hook ran here and
+// exited with code 20 (§10.8): not an error, the configure mark is neither
+// written nor removed, and the hook runs again at the next boot.
+const ConfigureSkipped = "skipped"
+
 // ConfigureResult is the result of `cream configure` (golden: configure*.json).
 // Mode is ApplyHook (the hook ran here), ApplyRestart, ApplyQueued or
-// ApplyNone (the extension has no configure hook).
+// ApplyNone (the extension has no configure hook). Status is
+// ConfigureSkipped after hook code 20 and empty otherwise.
 type ConfigureResult struct {
 	Ext            string `json:"ext"`
 	Reason         string `json:"reason"`
 	Mode           string `json:"mode"`
+	Status         string `json:"status,omitempty"`
 	RebootRequired bool   `json:"reboot_required"`
 }
 
@@ -76,8 +83,10 @@ func (e *Engine) Configure(ctx context.Context, ext, reason string, o ConfigureO
 // The caller must not hold lock/<ext> (it may hold lock/global): both the
 // direct run and the unit take it. A successful run in the live phase writes
 // the configure mark; a failed hook is 79, removes the mark and appends a
-// configure entry with status failed to history.jsonl; the registry is not
-// changed (§6.4).
+// configure entry with status failed to history.jsonl; hook code 20 is not
+// an error but status skipped (§10.8): the mark is left as it is, a
+// configure entry with status skipped goes to history.jsonl, and at boot the
+// hook runs again unless an older mark still matches. The registry is not changed (§6.4).
 func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o ConfigureOptions) (ConfigureResult, error) {
 	res := ConfigureResult{Ext: ext, Reason: reason, Mode: ApplyNone}
 	if err := checkConfigureFlags(o); err != nil {
@@ -150,13 +159,27 @@ func (e *Engine) ConfigureReport(ctx context.Context, ext, reason string, o Conf
 	if live {
 		e.updateMark(ext, out, err)
 	}
-	if err != nil && out == runner.Failed {
-		if herr := e.Store.Append(state.HistoryEntry{Op: "configure", Ext: ext, From: in.Record.Version,
-			To: in.Record.Version, Status: state.StatusFailed, Phase: e.Phase()}); herr != nil {
-			e.warn("state.history", "%s: журнал операций: %v", ext, herr)
-		}
+	switch {
+	case out == runner.NotApplicable:
+		// Code 20 of configure is "not yet" (no device, no driver), not a
+		// failure: the unit succeeds, no mark is written, so the next boot
+		// tries again unless an older mark still matches (§10.8).
+		res.Status, err = ConfigureSkipped, nil
+		_, _ = fmt.Fprintf(e.stderr(), "configure %s: пропущено (код 20), отметка не записана\n", ext)
+		e.configureHistory(ext, in.Record.Version, state.StatusSkipped)
+	case err != nil && out == runner.Failed:
+		e.configureHistory(ext, in.Record.Version, state.StatusFailed)
 	}
 	return res, err
+}
+
+// configureHistory appends a configure entry of ext at version with status
+// to history.jsonl; a write error is a state.history warning.
+func (e *Engine) configureHistory(ext, version, status string) {
+	if err := e.Store.Append(state.HistoryEntry{Op: "configure", Ext: ext, From: version,
+		To: version, Status: status, Phase: e.Phase()}); err != nil {
+		e.warn("state.history", "%s: журнал операций: %v", ext, err)
+	}
 }
 
 // checkConfigureFlags refuses combinations of the configure flags: the unit's

@@ -55,7 +55,7 @@ JSON-объект; сообщения cream и вывод хуков уходя�
 | `get`, `config get` | `{ext, key, value}` | [get.json](../../internal/cli/testdata/golden/get.json) |
 | `set` | `{ext, changed, changed_keys, apply: none\|hook\|restart\|skipped, reboot_required}` | [set.json](../../internal/cli/testdata/golden/set.json) |
 | `config export` | `{ext, format, text}` | [config-export.json](../../internal/cli/testdata/golden/config-export.json) |
-| `configure` | `{ext, reason, mode, reboot_required}` | [configure.json](../../internal/cli/testdata/golden/configure.json) |
+| `configure` | `{ext, reason, mode, status?, reboot_required}`; `status: "skipped"` — хук, запущенный самим cream (без systemd), вернул 20; без поля — иначе | [configure.json](../../internal/cli/testdata/golden/configure.json) |
 | `system init` | `{unit, daemon_reload}` | [system-init.json](../../internal/cli/testdata/golden/system-init.json) |
 | `run` | `{action, exit_code, output}` — ниже | [run-json.json](../../internal/cli/testdata/golden/run-json.json) |
 | `actions` | `{ext, version, actions: [ActionInfo…]}` — ниже | [actions.json](../../internal/cli/testdata/golden/actions.json) |

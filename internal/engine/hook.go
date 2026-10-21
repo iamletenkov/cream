@@ -24,7 +24,8 @@ import (
 // Outcomes: OK — nil error; Reboot — nil error, /run/reboot-required is
 // created in the live phase and an existing registry record gets
 // reboot_required; NotApplicable — 68 hook.not_applicable (a caller with
-// --allow-skip ignores it); Failed — 79 hook.failed, details.hook_exit and
+// --allow-skip ignores it, configure always does: status skipped, §10.8);
+// Failed — 79 hook.failed, details.hook_exit and
 // details.timed_out. A hook the manifest does not declare is a bug of the
 // caller (70).
 func (e *Engine) RunHook(ctx context.Context, in Installed, hook manifest.HookName, env runner.EnvInput) (runner.Outcome, error) {

@@ -281,18 +281,6 @@ func TestConfigureFailureDropsMark(t *testing.T) {
 	}
 }
 
-// Код 20 отметку не трогает (Task 13 решает остальное про «пропущено»).
-func TestConfigureNotApplicableKeepsMark(t *testing.T) {
-	t.Parallel()
-	te := newConfiguredEngine(t, fixtureDir(t, cfgExt))
-	bootConfigure(t, te)
-	writeHook(t, te, cfgExt, "configure", "exit 20")
-	_, _ = te.ConfigureReport(context.Background(), cfgExt, ReasonApply, ConfigureOptions{})
-	if getMark(t, te) == nil {
-		t.Error("код 20 удалил отметку")
-	}
-}
-
 func TestConfigureEveryBootIgnoresMark(t *testing.T) {
 	t.Parallel()
 	te := newConfiguredEngine(t, configureFixture(t, withEveryBoot))

@@ -36,7 +36,7 @@
 
 - [ ] Task 12: [bisquite] Скрытый шаг cream, `--no-cream`, `CREAM off`, метки `bisquite.cream.*` и `bisquite.os-release`
 
-- [ ] Task 13: [cream] Код `20` хука configure — «пропущено»
+- [x] Task 13: [cream] Код `20` хука configure — «пропущено»
 
 - [ ] Task 14: [bisquite] Сбор `/etc/image-labels.d/*.json` в метки OCI
 
