@@ -236,3 +236,48 @@ func TestLabelsDevVersion(t *testing.T) {
 		t.Errorf("cream.version = %q, want dev", got)
 	}
 }
+
+// TestLabelsTooLargeWarns: cream.extensions longer than 8 KiB — the limit of
+// one label value bisquite reads (spec §8.1) — is the labels.too_large
+// warning, once per process; the file is still written in full (bisquite
+// skips it, a truncated JSON would be worse).
+func TestLabelsTooLargeWarns(t *testing.T) {
+	t.Parallel()
+	s, l := newTestStore(t, t0)
+	w := &cerr.Warnings{}
+	s.Warn = w
+	for i := range 80 {
+		r := teleportRecord()
+		r.Name = "extension-with-a-rather-long-name-" + strings.Repeat("x", 20) + "-" + string(rune('a'+i/26)) + string(rune('a'+i%26))
+		if err := s.Put(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := readLabels(t, l)
+	if n := len(got["cream.extensions"]); n <= MaxLabelValue {
+		t.Fatalf("cream.extensions = %d bytes, the test needs > %d", n, MaxLabelValue)
+	}
+	var large int
+	for _, x := range w.List() {
+		if x.Code == CodeLabelsTooLarge {
+			large++
+		}
+	}
+	if large != 1 {
+		t.Errorf("labels.too_large warnings = %d, want 1: %+v", large, w.List())
+	}
+}
+
+// TestLabelsSmallNoWarning: a usual registry gives no labels.too_large.
+func TestLabelsSmallNoWarning(t *testing.T) {
+	t.Parallel()
+	s, _ := newTestStore(t, t0)
+	w := &cerr.Warnings{}
+	s.Warn = w
+	if err := s.Put(teleportRecord()); err != nil {
+		t.Fatal(err)
+	}
+	if list := w.List(); len(list) != 0 {
+		t.Errorf("warnings = %+v", list)
+	}
+}
