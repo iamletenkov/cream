@@ -372,3 +372,11 @@ func TestRealCommands(t *testing.T) {
 		t.Errorf("Run(version extra) = %d, want 64", code)
 	}
 }
+
+func TestErrorLineOneLineWithCode(t *testing.T) {
+	t.Parallel()
+	err := cerr.New(cerr.ExitData, "hook.failed", "хук упал:\nстрока 1\r\nстрока 2")
+	if got, want := errorLine(err), "хук упал: строка 1 строка 2 (hook.failed)"; got != want {
+		t.Errorf("errorLine = %q, ждали %q", got, want)
+	}
+}

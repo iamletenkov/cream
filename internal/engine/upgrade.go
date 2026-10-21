@@ -330,8 +330,8 @@ func (e *Engine) Upgrade(ctx context.Context, r UpgradeRequest) (*UpgradeReport,
 	if err != nil {
 		return nil, err
 	}
+	defer drop()
 	e.upgradeRun(ctx, r, layers, cands, byName, installed, rep)
-	drop()
 	return finish()
 }
 
