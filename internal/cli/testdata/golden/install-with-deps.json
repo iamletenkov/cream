@@ -1,0 +1,72 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "phase": "live",
+  "reason": "env",
+  "ok": true,
+  "result": {
+    "extensions": [
+      {
+        "schema": "cream-state/v1",
+        "name": "lib-fixture",
+        "version": "1.0.0",
+        "kind": "library",
+        "status": "installed",
+        "source": {
+          "name": "fixtures",
+          "type": "path",
+          "origin": "<ROOT>/srv/catalog",
+          "resolved": "sha256:6881750cd249812d20377d7490051b9dcc0e44a29a92b1df70289e862b3d8a0c",
+          "catalog_version": "1.0.0"
+        },
+        "ext_digest": "sha256:4e96fd879eee051f4edb8750b9a7edc758f6cde9f6c9a2ba7cab33443f5ed2e3",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "phase": "live",
+        "installed_at": "2026-10-18T10:00:00Z",
+        "updated_at": "2026-10-18T10:00:00Z",
+        "cream_version": "dev",
+        "files": [],
+        "bin": [],
+        "configure": null,
+        "reboot_required": false,
+        "changed": true
+      },
+      {
+        "schema": "cream-state/v1",
+        "name": "depends-lib",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "source": {
+          "name": "fixtures",
+          "type": "path",
+          "origin": "<ROOT>/srv/catalog",
+          "resolved": "sha256:6881750cd249812d20377d7490051b9dcc0e44a29a92b1df70289e862b3d8a0c",
+          "catalog_version": "1.0.0"
+        },
+        "ext_digest": "sha256:81a2a340e55102bdab33cdfac8eb2ca963bf0746dd88ef30ec6d3409c53843a6",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "phase": "live",
+        "installed_at": "2026-10-18T10:00:00Z",
+        "updated_at": "2026-10-18T10:00:00Z",
+        "cream_version": "dev",
+        "files": [],
+        "bin": [],
+        "configure": null,
+        "reboot_required": false,
+        "changed": true
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "depends-lib: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    },
+    {
+      "code": "platform.dev_build",
+      "message": "lib-fixture: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": null
+}

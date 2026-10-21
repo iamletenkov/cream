@@ -58,6 +58,8 @@ const (
 // one is kept as <dst>.cream-modified with a warning, ruling Р11 for missing
 // ones), the tree, with Purge the domain and the state directory, and the
 // registry record; writes history. A failed hook leaves everything as it was.
+// In the build phase the hook runs under policy-rc.d and systemd is not
+// touched.
 func (e *Engine) Remove(ctx context.Context, ext string, o RemoveOptions) (*RemoveResult, error) {
 	if o.Purge && o.Forget {
 		return nil, cerr.New(cerr.ExitUsage, "usage.flag", "--purge и --forget несовместимы")
@@ -101,6 +103,11 @@ func (e *Engine) Remove(ctx context.Context, ext string, o RemoveOptions) (*Remo
 		}
 	}
 
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
 	if !o.Forget {
 		if err := e.removeHook(WithLock(ctx, h, lock.Exclusive), in, res); err != nil {
 			return nil, err
@@ -206,7 +213,11 @@ func (e *Engine) removeHook(ctx context.Context, in Installed, res *RemoveResult
 // .new/.prev leftovers and, with purge, the domain and the state directory.
 func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) error {
 	ext := in.Record.Name
-	_, up := e.Systemctl.Running(ctx)
+	// The build phase does not touch systemd (§10.2): only the links go.
+	up := false
+	if e.Phase() == PhaseLive {
+		_, up = e.Systemctl.Running(ctx)
+	}
 	if up && (in.Record.Configure != nil || (in.Manifest != nil && hasHook(in.Manifest, manifest.HookConfigure))) {
 		// A running configure instance would outlive its unit file.
 		if err := e.Systemctl.Stop(ctx, systemd.UnitName(ext)); err != nil {

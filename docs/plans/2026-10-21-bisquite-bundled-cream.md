@@ -20,7 +20,7 @@
 
 - [x] Task 4: [cream] Автоопределение фазы
 
-- [ ] Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
+- [x] Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
 
 - [ ] Task 6: [bisquite] Пакет `bisquite-cream-bundle`, `make bundle-deb`, self-check
 
