@@ -1,0 +1,23 @@
+{
+  "cream": "dev",
+  "command": "hold",
+  "ok": true,
+  "result": {
+    "extensions": [
+      {
+        "name": "upgrade-fixture",
+        "version": "1.0.0",
+        "held": true,
+        "changed": true
+      },
+      {
+        "name": "noop",
+        "version": "1.0.0",
+        "held": true,
+        "changed": true
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

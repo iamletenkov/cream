@@ -1,0 +1,68 @@
+{
+  "cream": "dev",
+  "command": "upgrade",
+  "ok": false,
+  "result": {
+    "dry_run": true,
+    "plan": [
+      {
+        "name": "upgrade-fixture",
+        "from": "1.0.0",
+        "to": "2.0.0",
+        "action": "upgrade",
+        "reason": "",
+        "status": "planned",
+        "error": null
+      },
+      {
+        "name": "live-confirm",
+        "from": "1.0.0",
+        "to": "1.1.0",
+        "action": "blocked",
+        "reason": "risk",
+        "status": "blocked",
+        "error": {
+          "exit": 68,
+          "code": "target.confirm",
+          "message": "live-confirm: targets.live: confirm (фикстура: на живой машине нужен --accept-risk) — обновление только с --accept-risk live-confirm",
+          "details": {
+            "ext": "live-confirm",
+            "note": "фикстура: на живой машине нужен --accept-risk"
+          }
+        }
+      },
+      {
+        "name": "noop",
+        "from": "1.0.0",
+        "to": "1.0.0",
+        "action": "up-to-date",
+        "reason": "",
+        "status": "unchanged",
+        "error": null
+      }
+    ],
+    "extensions": [],
+    "summary": {
+      "upgraded": 0,
+      "unchanged": 1,
+      "skipped": 1,
+      "failed": 0,
+      "exit_code": 68
+    }
+  },
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "live-confirm: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    },
+    {
+      "code": "platform.dev_build",
+      "message": "noop: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    },
+    {
+      "code": "platform.dev_build",
+      "message": "upgrade-fixture: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": null
+}

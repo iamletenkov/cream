@@ -44,9 +44,11 @@ JSON-объект; сообщения cream и вывод хуков уходя�
 | `source sync` | `{synced: [{name, type, origin, resolved, synced_at, catalog_version}…]}` | [source-sync.json](../../internal/cli/testdata/golden/source-sync.json) |
 | `validate` | `{reports: [{target, kind, catalog?, catalog_version?, extensions, not_applicable, errors}]}` | [validate-catalog.json](../../internal/cli/testdata/golden/validate-catalog.json) |
 | `resolve` | `{phase, layers: [{name, version, source, source_resolved, catalog_version, ext_digest, params_digest, deps, mode, token, pinned, secret_params, dir}]}` | [resolve-params.json](../../internal/cli/testdata/golden/resolve-params.json) |
-| `install`, `upgrade` | запись реестра (`cream-state/v1`) и `changed`; несколько расширений — `{extensions: […]}` | [install-noop.json](../../internal/cli/testdata/golden/install-noop.json), [install-several.json](../../internal/cli/testdata/golden/install-several.json) |
+| `install`, `upgrade <ext>` | запись реестра (`cream-state/v1`) и `changed`; `install` нескольких — `{extensions: […]}` | [install-noop.json](../../internal/cli/testdata/golden/install-noop.json), [install-several.json](../../internal/cli/testdata/golden/install-several.json), [upgrade.json](../../internal/cli/testdata/golden/upgrade.json) |
+| `upgrade --all`, несколько имён, `--dry-run` | `{dry_run, plan, extensions, summary}` — [ниже](#upgrade) | [upgrade-partial.json](../../internal/cli/testdata/golden/upgrade-partial.json), [upgrade-dry-run.json](../../internal/cli/testdata/golden/upgrade-dry-run.json) |
+| `hold`, `unhold` | `{extensions: [{name, version, held, changed}]}` | [hold.json](../../internal/cli/testdata/golden/hold.json) |
 | `remove` | `{ext, version, hook, purged, forgotten, dependents, reboot_required}` | [remove.json](../../internal/cli/testdata/golden/remove.json) |
-| `list` | `{extensions: [{name, version, kind, status, domain, apply, secret, actions, reboot_required}]}` | [list.json](../../internal/cli/testdata/golden/list.json) |
+| `list` | `{extensions: [{name, version, kind, status, domain, apply, secret, actions, reboot_required, held}]}` | [list.json](../../internal/cli/testdata/golden/list.json) |
 | `show` | `{ext, keys: [{key, value, origin, type, secret, invalid}]}` | [show.json](../../internal/cli/testdata/golden/show.json) |
 | `get`, `config get` | `{ext, key, value}` | [get.json](../../internal/cli/testdata/golden/get.json) |
 | `set` | `{ext, changed, changed_keys, apply: none\|hook\|restart\|skipped, reboot_required}` | [set.json](../../internal/cli/testdata/golden/set.json) |
@@ -59,6 +61,39 @@ JSON-объект; сообщения cream и вывод хуков уходя�
 Ошибка — `result: null` и заполненный `error`, например
 [install-deps-missing.json](../../internal/cli/testdata/golden/install-deps-missing.json)
 (`details.missing`, `details.candidates`).
+
+## upgrade
+
+`cream upgrade --all --json` (и несколько имён, и `--dry-run`):
+
+```json
+{"dry_run": false,
+ "plan": [{"name": "agent", "from": "1.0.0", "to": "1.1.0", "action": "upgrade", "reason": "", "status": "upgraded", "error": null},
+          {"name": "firewall", "from": "1.0.0", "to": "1.1.0", "action": "blocked", "reason": "risk", "status": "blocked",
+           "error": {"exit": 68, "code": "target.confirm", "message": "…", "details": {"ext": "firewall", "note": "…"}}}],
+ "extensions": [<запись реестра + changed>…],
+ "summary": {"upgraded": 1, "unchanged": 0, "skipped": 1, "failed": 0, "exit_code": 68}}
+```
+
+- `plan` — в порядке обновления (поставщики раньше потребителей), затем расширения,
+  которым нечего делать. `to` — версия в источнике (для `held` и не найденных —
+  установленная).
+- `action` — решение плана: `upgrade`, `retry`, `up-to-date`, `held`, `skipped`,
+  `blocked`. `reason` — `risk`, `platform`, `dependency`, `held`, `source`,
+  `version`, `data`, `no_source`, `error` или `""`.
+- `status` — итог: `upgraded`, `unchanged`, `failed`, `blocked`, `held`, `skipped`,
+  `not_run` (`--fail-fast`); с `--dry-run` у обновляемых — `planned`. Обновляемое,
+  которое пропущено из-за упавшего поставщика, — `action: upgrade`,
+  `status: blocked`, `reason: dependency`, `error.code: deps.failed`.
+- `error` — причина пропуска или сбоя: код выхода `exit`, `code`, `message`, `details`
+  как у [ошибки конверта](#конверт).
+- `extensions` — записи реестра обновлённых (и упавших: `failed-upgrade`) и актуальных,
+  форма 1.1; с `--dry-run` пусто.
+- `summary.exit_code` — код выхода процесса; `ok` конверта — `exit_code == 0`,
+  `error` конверта — `null` (причины — в `plan`).
+
+С одним именем без `--dry-run` форма прежняя: запись реестра или ошибка этого
+расширения ([upgrade-held.json](../../internal/cli/testdata/golden/upgrade-held.json)).
 
 ## Контракт для агентов: `run` и `actions`
 

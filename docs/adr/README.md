@@ -7,3 +7,4 @@
 |---|---|---|---|
 | [0001](0001-contract-cream-v1.md) | контракт cream/v1: формат расширения, пути на машине, CLI, коды выхода, `--json` | Accepted | 2026-10-18 |
 | [0002](0002-single-dependency-stdlib-cli.md) | одна внешняя зависимость (yaml), CLI на stdlib `flag`, `.deb` через nfpm без goreleaser | Accepted | 2026-10-18 |
+| [0003](0003-upgrade-plan-hold.md) | `upgrade`: план до действий, частичный исход с кодом худшего, `hold` в записи реестра, `--accept-risk <ext>` | Accepted | 2026-10-21 |

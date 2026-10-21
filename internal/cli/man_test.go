@@ -98,8 +98,12 @@ func TestManPageListsHelp(t *testing.T) {
 		fs := newFlagSet("")
 		c.Flags(fs)
 		fs.VisitAll(func(f *flag.Flag) {
-			if !strings.Contains(page, "\\fB\\-\\-"+roffEscape(f.Name)+"\\fR") {
-				t.Errorf("cream.1: %s has no flag --%s", c.Name, f.Name)
+			dash := "\\-\\-"
+			if len(f.Name) == 1 {
+				dash = "\\-"
+			}
+			if !strings.Contains(page, "\\fB"+dash+roffEscape(f.Name)+"\\fR") {
+				t.Errorf("cream.1: %s has no flag %s%s", c.Name, strings.ReplaceAll(dash, "\\", ""), f.Name)
 			}
 		})
 	}

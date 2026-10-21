@@ -77,7 +77,9 @@ cream catalog pack DIR --out FILE
 
 ```
 cream install [--source S] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]
-cream upgrade <ext>… | cream upgrade --all
+cream upgrade [--dry-run] [-y] [--accept-risk <ext>|all]… [--fail-fast] <ext>… | --all
+cream hold <ext>…
+cream unhold <ext>…
 cream remove [--purge|--forget] [--force] <ext>
 ```
 
@@ -98,8 +100,28 @@ cream remove [--purge|--forget] [--force] <ext>
   запись и применение; новое значение ключа `scope: install`, статус `failed` или
   `--reinstall` — снова хук `install`.
 - `upgrade` берёт новую версию из кеша того источника, откуда расширение
-  поставлено; понижение — код 65 `version.downgrade`. `--all` пропускает
-  расширения, поставленные не из источника.
+  поставлено. Сначала строится план по каждому расширению — `upgrade`, `retry`,
+  `up-to-date`, `held`, `skipped`, `blocked:<причина>` (`risk`, `platform`,
+  `dependency`, `held`, `source`, `version`), — потом обновления идут в порядке
+  зависимостей. Без новой версии — `up-to-date`: ни хука, ни проверок платформы и
+  риска. Пропуск или сбой одного не останавливает остальные (кроме зависимых от
+  него); код выхода — по худшему исходу. Подробно —
+  [обновить расширения](../guides/upgrade-extensions.md).
+
+| Флаг `upgrade` | Смысл |
+|---|---|
+| `--all` | все установленные, кроме закреплённых (`held`) и поставленных не из источника (`skipped`) |
+| `--dry-run` | только план; код выхода — как у плана |
+| `-y`, `--yes` | не спрашивать в терминале; риск не снимает |
+| `--accept-risk <ext>` | обновлять `<ext>` с `targets.live: confirm`; повторяется или через запятую; `all` — все |
+| `--fail-fast` | пропуск в плане — ничего не делать; первая ошибка — остальное `not_run` |
+
+- В терминале (stdin и stderr — tty) без `-y`, `--dry-run`, `--json` cream
+  спрашивает y/N про каждое `targets.live: confirm` и про план; «нет» плану —
+  код 1 `upgrade.declined`.
+- `hold` закрепляет версию (поле `held` записи реестра): `upgrade --all` пропускает,
+  `upgrade <ext>` и `install` другой версии — код 68 `hold.held`; `unhold` снимает.
+  Без изменений — `changed: false`; неустановленное — 66.
 
 | Флаг `remove` | Смысл |
 |---|---|
@@ -122,7 +144,8 @@ cream config export --shell <ext>
 ```
 
 - `list` — установленные расширения: версия, статус (`installed`, `failed`,
-  `failed-upgrade`, `skipped`), способ применения настроек, нужна ли перезагрузка.
+  `failed-upgrade`, `skipped`), способ применения настроек, нужна ли перезагрузка,
+  закреплено ли (`cream hold`).
 - `show` — ключи: значение, откуда (`default` или `file`), тип; секреты — `***`,
   `(задан)` или `(пусто)`; битое значение в файле помечено `invalid`.
 - `get` — одно значение; секрет — только с `--secret` и только root.

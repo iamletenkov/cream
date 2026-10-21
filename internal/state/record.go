@@ -68,4 +68,7 @@ type Record struct {
 	RebootRequired bool          `json:"reboot_required"`
 	// PrevVersion is the version an unfinished upgrade started from (status failed-upgrade).
 	PrevVersion string `json:"prev_version,omitempty"`
+	// Held is `cream hold`: upgrade --all skips the extension, an explicit
+	// upgrade or install of another version is refused (68 hold.held).
+	Held bool `json:"held,omitempty"`
 }

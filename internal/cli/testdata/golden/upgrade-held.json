@@ -1,0 +1,15 @@
+{
+  "cream": "dev",
+  "command": "upgrade",
+  "ok": false,
+  "result": null,
+  "warnings": [],
+  "error": {
+    "code": "hold.held",
+    "message": "upgrade-fixture закреплено (cream hold) на 1.0.0 — версия не меняется; снять: cream unhold upgrade-fixture",
+    "details": {
+      "ext": "upgrade-fixture",
+      "installed": "1.0.0"
+    }
+  }
+}

@@ -159,20 +159,10 @@ func (e *Engine) installSourceDirs() ([]source.SourceDir, error) {
 func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, changes map[string][]config.Change,
 	all []Installed, dirs []source.SourceDir, o installOpts) ([]InstallResult, error) {
 	prev := make(map[string]*Installed, len(all))
-	nodes := make([]resolve.Node, 0, len(all))
 	for i := range all {
-		in := &all[i]
-		prev[in.Record.Name] = in
-		if in.Manifest == nil {
-			continue
-		}
-		files := make([]string, 0, len(in.Record.Files))
-		for _, f := range in.Record.Files {
-			files = append(files, f.Dst)
-		}
-		nodes = append(nodes, resolve.Node{Manifest: in.Manifest, Installed: true, Files: files,
-			Source: in.Record.Source, Digest: in.Record.ExtDigest})
+		prev[all[i].Record.Name] = &all[i]
 	}
+	nodes := installNodes(all)
 	byName := make(map[string]catalog.Entry, len(entries))
 	ops := make(map[string]string, len(entries))
 	req := make([]resolve.Node, 0, len(entries))
@@ -182,6 +172,9 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 		op, err := installDecide(prev[name], en)
 		if err != nil {
 			return nil, err
+		}
+		if p := prev[name]; op == installOpUpgrade && p.Record.Held {
+			return nil, heldError(name, p.Record.Version, en.Manifest.Version.String())
 		}
 		byName[name], ops[name] = en, op
 		req = append(req, resolve.Node{Manifest: en.Manifest, Source: installSourceRef(en.Source), Digest: en.Digest})
@@ -409,6 +402,7 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 	if j.prev != nil {
 		from = j.prev.Record.Version
 		rec.Phase, rec.InstalledAt, rec.Configure = j.prev.Record.Phase, j.prev.Record.InstalledAt, j.prev.Record.Configure
+		rec.Held = j.prev.Record.Held
 	}
 	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase}
 	if upgrade {

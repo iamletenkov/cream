@@ -18,7 +18,8 @@
           "join",
           "status"
         ],
-        "reboot_required": false
+        "reboot_required": false,
+        "held": false
       },
       {
         "name": "apply-hook",
@@ -29,7 +30,8 @@
         "apply": "hook",
         "secret": false,
         "actions": [],
-        "reboot_required": false
+        "reboot_required": false,
+        "held": false
       },
       {
         "name": "configure-system",
@@ -40,7 +42,8 @@
         "apply": "restart",
         "secret": false,
         "actions": [],
-        "reboot_required": false
+        "reboot_required": false,
+        "held": false
       },
       {
         "name": "with-config",
@@ -51,7 +54,8 @@
         "apply": "none",
         "secret": true,
         "actions": [],
-        "reboot_required": false
+        "reboot_required": false,
+        "held": false
       }
     ]
   },

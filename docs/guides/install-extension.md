@@ -122,7 +122,9 @@ sudo cream upgrade --all
 
 Отката нет: при сбое хука `upgrade` расширение получает статус `failed-upgrade`,
 прежнее дерево сохраняется, повтор — та же команда. Понизить версию нельзя
-(код 65 `version.downgrade`).
+(код 65 `version.downgrade`). План (`--dry-run`), закрепление версии
+(`cream hold`), риск (`--accept-risk`) и коды частичного исхода —
+[обновить расширения](upgrade-extensions.md).
 
 ## Удаление
 

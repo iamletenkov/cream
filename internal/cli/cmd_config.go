@@ -74,6 +74,9 @@ func (r listResult) WriteText(w io.Writer) error {
 		if e.RebootRequired {
 			reboot = "  нужна перезагрузка"
 		}
+		if e.Held {
+			reboot += "  закреплено"
+		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\tapply: %s%s\n", e.Name, e.Version, e.Status, e.Apply, reboot)
 	}
 	return tw.Flush()

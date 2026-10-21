@@ -15,6 +15,11 @@
 - Документация: README, [первые шаги](getting-started.md), [руководства](guides/), [справочник](reference/cli.md),
   [ADR 0001](adr/0001-contract-cream-v1.md), [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), карта `AGENTS.md`.
 
+## В работе
+- `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
+  `--accept-risk <ext>`, `-y`, `--fail-fast`, частичный исход с кодом худшего; `cream hold`/`unhold`.
+  Исправляет падение `upgrade --all` кодом 68 из-за `targets.live: confirm` без новой версии.
+
 ## Дальше
 1. Проверить PR подъёма пина cream 1.1.4 в cream-extensions, bisquite и Stvor (dispatch выпуска).
 2. Интеграция bisquite: фаза build по [guides/build-phase.md](guides/build-phase.md).

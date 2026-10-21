@@ -11,7 +11,7 @@ import (
 	"github.com/iamletenkov/cream/internal/engine"
 )
 
-// installCommands are install and upgrade on a live machine (Task 13) and
+// installCommands are install, upgrade, hold and unhold on a live machine (Task 13) and
 // install in the build phase inside the guest (Task 16, §12.2):
 // install --phase build --from-dir D --record F --params-file P
 // [--remove-params-file], without references and KEY=VALUE. The result of one extension is its
@@ -20,7 +20,7 @@ import (
 // {"extensions": [...]} in install order.
 func (App) installCommands() []Command {
 	var src, paramsFile, phase, fromDir, record string
-	var reinstall, acceptRisk, allowSkip, upAll, removeParams bool
+	var reinstall, acceptRisk, allowSkip, removeParams bool
 	return []Command{
 		{Name: "install",
 			Usage: "install [--source S] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка\n" +
@@ -48,11 +48,9 @@ func (App) installCommands() []Command {
 					AcceptRisk: acceptRisk, AllowSkip: allowSkip,
 					Params: config.AssignInput{ParamsFile: paramsFile}})
 			}},
-		{Name: "upgrade", Usage: "upgrade <ext>… | upgrade --all  — обновление до версии в кеше источника",
-			Flags: func(fs *flag.FlagSet) {
-				fs.BoolVar(&upAll, "all", false, "обновить все установленные")
-			},
-			Run: func(ctx *Context, args []string) (any, error) { return runUpgrade(ctx, args, upAll) }},
+		upgradeCommand(),
+		holdCommand("hold", true),
+		holdCommand("unhold", false),
 	}
 }
 
@@ -121,17 +119,6 @@ func runInstall(ctx *Context, args []string, r engine.InstallRequest) (any, erro
 		return nil, err
 	}
 	return installOutput(res, len(r.Refs) == 1), nil
-}
-
-func runUpgrade(ctx *Context, args []string, all bool) (any, error) {
-	if err := requireRoot(ctx, "upgrade"); err != nil {
-		return nil, err
-	}
-	res, err := newEngine(ctx).Upgrade(ctx.Ctx, args, all)
-	if err != nil {
-		return nil, err
-	}
-	return installOutput(res, !all && len(args) == 1), nil
 }
 
 // installBuildFlags are the install flags the build phase refuses or checks.
