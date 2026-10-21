@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/iamletenkov/cream/compare/v1.2.0...v1.3.0) (2026-10-21)
+
+
+### Добавлено
+
+* **openwrt:** семейство openwrt — раскладка /opt/cream/var, configure из init-скриптов procd ([#37](https://github.com/iamletenkov/cream/issues/37)) ([dc9023c](https://github.com/iamletenkov/cream/commit/dc9023c1cdeefb859b30751710142b2468867c0f))
+
 ## [1.2.0](https://github.com/iamletenkov/cream/compare/v1.1.4...v1.2.0) (2026-10-21)
 
 
