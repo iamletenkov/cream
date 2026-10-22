@@ -28,7 +28,7 @@
 
 - [ ] Task 6: [cream-extensions] Расширение `openwrt/stvor-agent-openwrt`
 
-- [ ] Task 7: [cream-extensions] Регресс `debian/teleport` (живой прогон) и выпуск каталога
+- [x] Task 7: [cream-extensions] Регресс `debian/teleport` (живой прогон) и выпуск каталога
 
 - [x] Task 8: [Stvor] Набор Teleport `openwrt-<arch>` на стенде: `build-teleport-openwrt.sh`, пины glibc и patchelf, `TELEPORT_OPENWRT_SHA256_<ARCH>`, FAIL в preflight/smoke
 
