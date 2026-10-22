@@ -24,7 +24,7 @@
 
 - [ ] Task 4: [stvor-agent] Ассет `stvor-agent_<v>_linux_<arch>.tar.gz`, e2e на корневой ФС OpenWrt, `SECURITY.md`, выпуск
 
-- [ ] Task 5: [cream-extensions] Расширение `openwrt/teleport-openwrt`
+- [x] Task 5: [cream-extensions] Расширение `openwrt/teleport-openwrt`
 
 - [ ] Task 6: [cream-extensions] Расширение `openwrt/stvor-agent-openwrt`
 
