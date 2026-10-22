@@ -12,61 +12,61 @@
 ## Progress Tracker
 <!-- Пункты разделены пустой строкой: параллельные отметки сливаются без конфликта. -->
 
-- [ ] Task 1: [bisquite] Секрет-монтирование и тест «секрет не в qcow2» (риск №1, день 1)
+- [x] Task 1: [bisquite] Секрет-монтирование и тест «секрет не в qcow2» (риск №1, день 1)
 
 - [x] Task 2: [cream] ADR-0004 и манифест 1.2.0: `every_boot`, `scope: build`, обобщённый `checkSince` (день 1, гейт контракта)
 
-- [ ] Task 3: [cream-extensions] Аудит 14 хуков configure по А1–А6 и гейт `lint-hooks` в режиме warn (день 1)
+- [x] Task 3: [cream-extensions] Аудит 14 хуков configure по А1–А6 и гейт `lint-hooks` в режиме warn (день 1)
 
 - [x] Task 4: [cream] Автоопределение фазы
 
 - [x] Task 5: [cream] `install`/`upgrade`/`remove` в фазе build из источника
 
-- [ ] Task 6: [bisquite] Пакет `bisquite-cream-bundle`, `make bundle-deb`, self-check
+- [x] Task 6: [bisquite] Пакет `bisquite-cream-bundle`, `make bundle-deb`, self-check
 
 - [x] Task 7: [cream] `cream check` (обобщение `resolve`)
 
 - [x] Task 8: [cream] `/etc/image-labels.d/cream.json`
 
-- [ ] Task 9: [bisquite] Удаление слоя `EXTENSION`, адаптера и источников на хосте; отказ парсера с подсказкой
+- [x] Task 9: [bisquite] Удаление слоя `EXTENSION`, адаптера и источников на хосте; отказ парсера с подсказкой
 
 - [x] Task 10: [cream] `scope: build` в движке: значение только в окружении хука
 
 - [x] Task 11: [cream] Отметка выполнения configure, `secrets_rev`, `--force`, `--again`, `every_boot`
 
-- [ ] Task 12: [bisquite] Скрытый шаг cream, `--no-cream`, `CREAM off`, метки `bisquite.cream.*` и `bisquite.os-release`
+- [x] Task 12: [bisquite] Скрытый шаг cream, `--no-cream`, `CREAM off`, метки `bisquite.cream.*` и `bisquite.os-release`
 
 - [x] Task 13: [cream] Код `20` хука configure — «пропущено»
 
-- [ ] Task 14: [bisquite] Сбор `/etc/image-labels.d/*.json` в метки OCI
+- [x] Task 14: [bisquite] Сбор `/etc/image-labels.d/*.json` в метки OCI
 
 - [x] Task 15: [cream] e2e (`make test-build`) и integration (две перезагрузки) для 1.2.0
 
-- [ ] Task 16: [bisquite] Предсборочная проверка `cream_lint` и раздел `cream` в `bs image validate`
+- [x] Task 16: [bisquite] Предсборочная проверка `cream_lint` и раздел `cream` в `bs image validate`
 
 - [x] Task 17: [cream] Документация cream 1.2.0 и выпуск 1.2.0
 
-- [ ] Task 18: [bisquite] `bs image history`, `bs image diff` (метки + `--deep packages`), `bs extension ls`
+- [x] Task 18: [bisquite] `bs image history`, `bs image diff` (метки + `--deep packages`), `bs extension ls`
 
-- [ ] Task 19: [cream-extensions] Каталог под cream 1.2.0: `every_boot`, `cream: ">=1.2.0"`, гейт → error, `scope: build`, CI `cream check`; выпуск минора
+- [x] Task 19: [cream-extensions] Каталог под cream 1.2.0: `every_boot`, `cream: ">=1.2.0"`, гейт → error, `scope: build`, CI `cream check`; выпуск минора
 
-- [ ] Task 20: [bisquite] Ключи шагов по содержимому; секреты + `scope: build` сквозь `cream install`
+- [x] Task 20: [bisquite] Ключи шагов по содержимому; секреты + `scope: build` сквозь `cream install`
 
 - [ ] Task 21: [Stvor] Пин cream 1.2.0 и каталога: PR, выкладка на каждый экземпляр, `robots-gate`
 
-- [ ] Task 22: [bisquite] Подъём пина бандла до cream 1.2.0 и каталога нового минора
+- [x] Task 22: [bisquite] Подъём пина бандла до cream 1.2.0 и каталога нового минора
 
-- [ ] Task 23: [cream-extensions] Документация: README и `docs/` в стиле популярных проектов под новую схему
+- [x] Task 23: [cream-extensions] Документация: README и `docs/` в стиле популярных проектов под новую схему
 
-- [ ] Task 24: [bisquite] Переписывание 32 VMFILE примеров и их README; `validate --strict` в CI с замером
+- [x] Task 24: [bisquite] Переписывание 32 VMFILE примеров и их README; `validate --strict` в CI с замером
 
-- [ ] Task 25: [bisquite] Документация: README и `docs/` под новую схему, guide миграции 3.0, ADR bisquite
+- [x] Task 25: [bisquite] Документация: README и `docs/` под новую схему, guide миграции 3.0, ADR bisquite
 
 - [ ] Task 26: [bisquite] Предвыпускная проверка и выпуск 3.0.0 (условие — инвариант Stvor)
 
 - [x] Task 27: [cream] Фаза OpenWrt: семейство `openwrt`, `procd`, поставка `tar.gz` (по отдельной спеке)
 
-- [ ] Task 28: [cream-extensions + bisquite] Фаза OpenWrt: корень `extensions/openwrt`, скрытый шаг в `OpenWrtBuilder`
+- [x] Task 28: [cream-extensions + bisquite] Фаза OpenWrt: корень `extensions/openwrt`, скрытый шаг в `OpenWrtBuilder`
 
 - [ ] Task 29: Финальная интеграция: сборки примеров на PVE, `make ci` во всех репозиториях
 
