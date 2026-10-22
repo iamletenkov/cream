@@ -11,7 +11,7 @@
 часть «cream на OpenWrt» без Teleport и Stvor). Вводные владельца: только **OpenWrt 25.12+** (`apk`), x86-64 и arm64
 (ВМ, Raspberry Pi 4/5, мощный arm64; роутеров нет); cream ставится из **`tar.gz`**; состояние — в `/opt` (на OpenWrt
 `/var` — ссылка на `/tmp`, это tmpfs); этапы configure — через **procd** (`rc.d`), systemd нет; временные каталоги —
-на диске, не в `/tmp` (это ОЗУ); базовый образ — `iamletenkov/openwrt-builder` v0.3.0.
+на диске, не в `/tmp` (это ОЗУ); базовый образ — `iamletenkov/openwrt-builder` v0.3.1.
 
 cream 1.2 привязан к Debian и systemd: `platform.family: deb` — единственное значение, реестр и состояние —
 `/var/lib/cream`, configure — юнит `cream-configure@.service`, фаза по PID 1 — `systemd` или «сборка», `policy-rc.d`
