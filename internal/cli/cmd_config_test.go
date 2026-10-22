@@ -30,6 +30,8 @@ func TestGoldenConfig(t *testing.T) {
 		{name: "set-secret-in-argv", args: []string{"set", "--json", "with-config", "TOKEN=x"}, wantExit: 64},
 		{name: "config-export", args: []string{"config", "export", "--shell", "--json", "with-config"}},
 		{name: "configure", args: []string{"configure", "--json", "configure-system"}},
+		{name: "configure-force-all", args: []string{"configure", "--force", "--all", "--json"}},
+		{name: "show-configure", args: []string{"show", "--json", "configure-system"}},
 		{name: "system-init", args: []string{"system", "init", "--json"}},
 	}
 	for _, tc := range tests {
@@ -141,6 +143,10 @@ func TestConfigCommandsCodes(t *testing.T) {
 		{name: "export-no-shell", args: []string{"config", "export", "with-config"}, wantExit: 64, wantCode: "usage.format"},
 		{name: "configure-not-root", root: "/", euid: 1000, args: []string{"configure", "configure-system"}, wantExit: 77, wantCode: "perm.root"},
 		{name: "configure-from-unit-wait", args: []string{"configure", "--from-unit", "--wait", "with-config"}, wantExit: 64, wantCode: "usage.flag"},
+		{name: "configure-from-unit-force", args: []string{"configure", "--from-unit", "--force", "with-config"}, wantExit: 64, wantCode: "usage.flag"},
+		{name: "configure-again-force", args: []string{"configure", "--again", "--force", "with-config"}, wantExit: 64, wantCode: "usage.flag"},
+		{name: "configure-all-no-force", args: []string{"configure", "--all"}, wantExit: 64, wantCode: "usage.flag"},
+		{name: "configure-all-with-ext", args: []string{"configure", "--force", "--all", "with-config"}, wantExit: 64, wantCode: "usage.args"},
 		{name: "system-no-sub", args: []string{"system"}, wantExit: 64, wantCode: "usage.args"},
 		{name: "system-not-root", root: "/", euid: 1000, args: []string{"system", "init"}, wantExit: 77, wantCode: "perm.root"},
 	}
@@ -176,6 +182,43 @@ func TestConfigureFromUnitCLI(t *testing.T) {
 	if err != nil || !strings.Contains(string(log), "reason=apply ") {
 		t.Errorf("configure.log: %q, %v", log, err)
 	}
+}
+
+// TestConfigureMarkCLI — отметка configure через CLI (§10.7): загрузка после
+// успешного configure пропускает хук, show показывает configured.
+func TestConfigureMarkCLI(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	seedRoot(t, root, "configure-system")
+	writeRootFile(t, root, "/etc/machine-id", "machine-of-the-test-host\n", 0o644)
+	in := cliIn{Root: root}
+	for i := range 2 {
+		if out := runCLI(t, in, "configure", "--from-unit", "configure-system"); out.Code != 0 {
+			t.Fatalf("загрузка %d: %+v", i+1, out)
+		}
+	}
+	count, err := os.ReadFile(filepath.Join(root, "var/lib/cream/ext/configure-system/configure.count"))
+	if err != nil || strings.TrimSpace(string(count)) != "1" {
+		t.Errorf("хук на двух загрузках: %q, %v", count, err)
+	}
+	out := runCLI(t, in, "show", "--json", "configure-system")
+	golden(t, "show-configured", normRoot(out.Stdout, root))
+	out = runCLI(t, in, "configure", "--force", "configure-system")
+	if out.Code != 0 || out.Stdout != "configure-system: configure (apply): hook, ok\n" {
+		t.Errorf("--force: %+v", out)
+	}
+	if strings.TrimSpace(readRoot(t, root, "var/lib/cream/ext/configure-system/configure.count")) != "2" {
+		t.Error("--force не запустил хук")
+	}
+}
+
+func readRoot(t *testing.T, root, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 // TestCommandFlagsDoNotShadowGlobals — Р14: флаги команд не повторяют

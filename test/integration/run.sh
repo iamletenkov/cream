@@ -54,6 +54,9 @@ boot() {
 	for cat in pilot catalog catalog-next; do
 		docker cp "$ROOT/testdata/$cat" "$IT_NAME:/it/src/$cat"
 	done
+	# Фикстуры cream 1.2 (отметка configure, every_boot, scope: build) — только
+	# для e2e и integration, не для unit: test/fixtures.
+	docker cp "$ROOT/test/fixtures/catalog-1.2" "$IT_NAME:/it/src/catalog-1.2"
 	docker cp "$deb" "$IT_NAME:/it/cream.deb"
 	# docker cp сохраняет uid владельца с хоста: дерево каталогов — root, как
 	# у источника на машине (§13: кеш и источники принадлежат root).

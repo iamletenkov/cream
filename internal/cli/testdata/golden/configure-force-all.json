@@ -1,0 +1,18 @@
+{
+  "cream": "dev",
+  "command": "configure",
+  "ok": true,
+  "result": {
+    "extensions": [
+      {
+        "ext": "configure-system",
+        "reason": "apply",
+        "mode": "hook",
+        "status": "ok",
+        "reboot_required": false
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null
+}

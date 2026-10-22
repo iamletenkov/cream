@@ -1,0 +1,13 @@
+schema: cream/v1
+name: scope-build-cream-too-low
+version: 1.0.0
+summary: scope build при cream ниже 1.2.0
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# Дефект манифеста: scope: build появился в cream 1.2.0, а cream: его не
+# требует (ADR-0004) — 65 manifest.invalid.
+hooks:
+  install: {}
+config:
+  keys:
+    MIRROR_TOKEN: {type: str, default: "", empty: true, secret: file, scope: build, description: токен зеркала}

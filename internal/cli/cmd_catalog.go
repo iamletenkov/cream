@@ -41,12 +41,12 @@ func catalogCommandsWith(d catalogDeps) []Command {
 			},
 			Run: func(ctx *Context, args []string) (any, error) { return runCatalog(ctx, d, packOut, args) }},
 		{Name: "resolve",
-			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…]…  — офлайн-разрешение слоёв (§12.4)",
+			Usage: "resolve [--phase build|live] [--target-arch A] [--host-arch A] [--family F] [--installed FILE] <ref> [K=V…]…  — устарело (cream 2.0 уберёт; сборка образа — check): офлайн-разрешение слоёв (§12.4)",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&h.phase, "phase", resolve.PhaseLive, "фаза `P`: build или live")
 				fs.StringVar(&h.targetArch, "target-arch", "", "архитектура цели `A` (по умолчанию — этой машины)")
 				fs.StringVar(&h.hostArch, "host-arch", "", "архитектура хоста сборки `A` (по умолчанию — этой машины)")
-				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb); без него не проверяется в build")
+				fs.StringVar(&h.family, "family", "", "семейство пакетов цели `F` (deb, openwrt); без него не проверяется в build")
 				fs.StringVar(&h.installed, "installed", "", "build: `FILE` — JSON-массив расширений базы FROM [{name, version, provides?}] (cream 1.1.0)")
 				reserveFlags(fs, "require-pinned")
 			},

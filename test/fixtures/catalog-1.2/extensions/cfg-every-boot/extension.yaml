@@ -1,0 +1,11 @@
+schema: cream/v1
+name: cfg-every-boot
+version: 1.0.0
+summary: configure на каждой загрузке
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# every_boot: true — configure на каждой загрузке мимо отметки (§10.7).
+hooks:
+  install: {}
+  configure: {stage: system, every_boot: true}
+  remove: {}

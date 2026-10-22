@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/engine"
 	"github.com/iamletenkov/cream/internal/paths"
 )
 
@@ -52,6 +53,9 @@ type Context struct {
 	// Ctx is the invocation's context (App.Context): every engine call and
 	// lock wait gets it, so a signal stops them.
 	Ctx context.Context
+	// Phase receives the phase install, upgrade and remove decided
+	// (phaseEngine): the --json envelope names it (§10.1). Nil — not kept.
+	Phase *engine.PhaseInfo
 }
 
 // Stderr is the diagnostics stream.

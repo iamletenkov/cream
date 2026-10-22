@@ -80,8 +80,8 @@ else
 fi
 
 # Значения параметров не попали в лог прогона.
-read -r s1 s2 <"$work/values"
-if grep -qF -e "$s1" -e "$s2" "$log"; then
+read -r s1 s2 s3 <"$work/values"
+if grep -qF -e "$s1" -e "$s2" -e "$s3" "$log"; then
 	echo "FAIL: значение секрета в логе прогона" >&2
 	exit 1
 fi

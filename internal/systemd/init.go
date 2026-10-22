@@ -23,24 +23,12 @@ import (
 // The source cache is not created here: its place depends on --cache and
 // user mode, and the sync creates it.
 func Init(l paths.Layout) error {
-	dirs := []struct {
-		path string
-		mode fs.FileMode
-	}{
-		{filepath.Dir(l.UnitTemplate()), 0o755},
-		{filepath.Dir(l.ExtTree("x")), 0o755},
-		{filepath.Dir(l.EtcDir("x")), 0o755},
-		{filepath.Dir(l.InstalledDir()), 0o755},
-		{l.InstalledDir(), 0o755},
-		{filepath.Dir(l.StateDir("x")), 0o755},
-		{l.LockDir(), 0o700},
-		{filepath.Dir(l.Incoming("x")), 0o700},
-	}
+	dirs := append([]paths.Dir{{Path: filepath.Dir(l.UnitTemplate()), Mode: 0o755}}, l.InitDirs()...)
 	for _, d := range dirs {
-		if err := os.MkdirAll(d.path, 0o755); err != nil {
+		if err := os.MkdirAll(d.Path, 0o755); err != nil {
 			return fmt.Errorf("system init: %w", err)
 		}
-		if err := os.Chmod(d.path, d.mode); err != nil {
+		if err := os.Chmod(d.Path, d.Mode); err != nil {
 			return fmt.Errorf("system init: %w", err)
 		}
 	}

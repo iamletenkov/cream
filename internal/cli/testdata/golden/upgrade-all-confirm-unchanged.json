@@ -1,0 +1,138 @@
+{
+  "cream": "dev",
+  "command": "upgrade",
+  "phase": "live",
+  "reason": "env",
+  "ok": true,
+  "result": {
+    "dry_run": false,
+    "plan": [
+      {
+        "name": "upgrade-fixture",
+        "from": "1.0.0",
+        "to": "2.0.0",
+        "action": "upgrade",
+        "reason": "",
+        "status": "upgraded",
+        "error": null
+      },
+      {
+        "name": "live-confirm",
+        "from": "1.0.0",
+        "to": "1.0.0",
+        "action": "up-to-date",
+        "reason": "",
+        "status": "unchanged",
+        "error": null
+      },
+      {
+        "name": "noop",
+        "from": "1.0.0",
+        "to": "1.0.0",
+        "action": "up-to-date",
+        "reason": "",
+        "status": "unchanged",
+        "error": null
+      }
+    ],
+    "extensions": [
+      {
+        "schema": "cream-state/v1",
+        "name": "upgrade-fixture",
+        "version": "2.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "source": {
+          "name": "fixtures",
+          "type": "path",
+          "origin": "<ROOT>/srv/next",
+          "resolved": "sha256:4734a79c8ee0f887657a2e60ff3c879b84eaf8259e64ecc783c410cc84c13d14",
+          "catalog_version": "1.1.0"
+        },
+        "ext_digest": "sha256:4685ff513527097c4b254ca4442518ce18080476af58e6b8b412829da6f999f5",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "phase": "live",
+        "installed_at": "2026-10-18T10:00:00Z",
+        "updated_at": "2026-10-18T10:00:00Z",
+        "cream_version": "dev",
+        "files": [],
+        "bin": [],
+        "configure": null,
+        "reboot_required": false,
+        "changed": true
+      },
+      {
+        "schema": "cream-state/v1",
+        "name": "live-confirm",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "source": {
+          "name": "fixtures",
+          "type": "path",
+          "origin": "<ROOT>/srv/catalog",
+          "resolved": "sha256:00153684b34804a2ef15ed1c2b85e31d49829584ce907f2c328a9efcf60e2331",
+          "catalog_version": "1.0.0"
+        },
+        "ext_digest": "sha256:fc22967a4e9bfc9c1c79a08ec464284495bc795fb79dcb0ba4ee1010e0423cf2",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "phase": "live",
+        "installed_at": "2026-10-18T10:00:00Z",
+        "updated_at": "2026-10-18T10:00:00Z",
+        "cream_version": "dev",
+        "files": [],
+        "bin": [],
+        "configure": null,
+        "reboot_required": false,
+        "changed": false
+      },
+      {
+        "schema": "cream-state/v1",
+        "name": "noop",
+        "version": "1.0.0",
+        "kind": "extension",
+        "status": "installed",
+        "source": {
+          "name": "fixtures",
+          "type": "path",
+          "origin": "<ROOT>/srv/catalog",
+          "resolved": "sha256:00153684b34804a2ef15ed1c2b85e31d49829584ce907f2c328a9efcf60e2331",
+          "catalog_version": "1.0.0"
+        },
+        "ext_digest": "sha256:b59f6dd02fb38c0c7bfc2149f948485fbccc7aab422d7a3ea488c6c6e451b296",
+        "params_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "phase": "live",
+        "installed_at": "2026-10-18T10:00:00Z",
+        "updated_at": "2026-10-18T10:00:00Z",
+        "cream_version": "dev",
+        "files": [],
+        "bin": [],
+        "configure": null,
+        "reboot_required": false,
+        "changed": false
+      }
+    ],
+    "summary": {
+      "upgraded": 1,
+      "unchanged": 2,
+      "skipped": 0,
+      "failed": 0,
+      "exit_code": 0
+    }
+  },
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "live-confirm: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    },
+    {
+      "code": "platform.dev_build",
+      "message": "noop: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    },
+    {
+      "code": "platform.dev_build",
+      "message": "upgrade-fixture: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": null
+}

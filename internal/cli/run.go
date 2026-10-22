@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/engine"
 	"github.com/iamletenkov/cream/internal/paths"
 )
 
@@ -33,6 +34,9 @@ type App struct {
 	// lock waits stop, hooks and actions get their process group killed.
 	// nil — context.Background().
 	Context context.Context
+	// Interactive reports that stdin and stderr are a terminal (isatty):
+	// upgrade then asks y/N. nil — never interactive.
+	Interactive func() bool
 }
 
 // Run executes one cream invocation and returns the process exit code.
@@ -51,6 +55,8 @@ type invocation struct {
 	json    bool
 	// usage is appended to the error message in text mode for usage errors.
 	usage string
+	// phase is what install, upgrade and remove decided (Context.Phase).
+	phase engine.PhaseInfo
 }
 
 func run(args []string, app App, cmds []Command) int {
@@ -133,7 +139,7 @@ func (inv *invocation) dispatch(args []string) (result any, err error) {
 	}
 	inv.usage = ""
 	ctx := &Context{App: inv.app, Command: name, Globals: inv.globals, Layout: layout, Warn: inv.warn,
-		Out: inv.app.Stdout, Ctx: inv.app.Context}
+		Out: inv.app.Stdout, Ctx: inv.app.Context, Phase: &inv.phase}
 	if ctx.Ctx == nil {
 		ctx.Ctx = context.Background()
 	}
@@ -191,6 +197,7 @@ func (inv *invocation) finish(result any, err error) int {
 func (inv *invocation) finishJSON(result any, err error, code int) int {
 	var buf bytes.Buffer
 	env := newEnvelope(inv.command, err == nil && code == 0, result, inv.warn.List(), err)
+	env.Phase, env.Reason = inv.phase.Phase, inv.phase.Reason
 	if mErr := writeJSON(&buf, env); mErr != nil {
 		// The result itself is not serialisable: a bug in the command.
 		err = cerr.Wrap(mErr, cerr.ExitInternal, cerr.CodeInternal, "результат %s не сериализуется", inv.command)
@@ -213,7 +220,7 @@ func (inv *invocation) finishText(result any, err error, code int) int {
 		}
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(inv.app.Stderr, "cream: %s\n", err.Error())
+		_, _ = fmt.Fprintf(inv.app.Stderr, "cream: %s\n", errorLine(err))
 		if inv.usage != "" {
 			_, _ = fmt.Fprintf(inv.app.Stderr, "\n%s", inv.usage)
 		}
@@ -225,6 +232,18 @@ func (inv *invocation) finishText(result any, err error, code int) int {
 		}
 	}
 	return code
+}
+
+// errorLine is the error as one line of stderr with its error.code: the
+// build log of an image (virt-customize) carries only stderr and the exit
+// code, so the refusal must be readable there without --json (spec
+// 2026-10-21 §17 р. 4).
+func errorLine(err error) string {
+	msg := strings.Join(strings.FieldsFunc(err.Error(), func(r rune) bool { return r == '\n' || r == '\r' }), " ")
+	if code := cerr.CodeOf(err); code != "" {
+		msg += " (" + code + ")"
+	}
+	return msg
 }
 
 // stdoutFailed reports a failed write to stdout (closed pipe, full disk): 74.

@@ -97,6 +97,9 @@ func (d *Domain) validate(ch Change, o SetOpts) (keytype.Spec, error) {
 		return sp, errDetails(cerr.New(cerr.ExitData, "config.unknown_key",
 			"%s: ключа %s нет в config.keys", d.ext, ch.Key), ch.Key)
 	}
+	if isBuild(sp) {
+		return sp, errScopeBuild(d.ext, ch.Key)
+	}
 	if sp.Secret == keytype.SecretHook {
 		return sp, errDetails(cerr.New(cerr.ExitData, "config.reserved",
 			"%s: %s: secret: hook зарезервирован в cream/v1, не реализован в cream 1.0", d.ext, ch.Key), ch.Key)
@@ -228,6 +231,9 @@ func (d *Domain) Show() ([]Entry, error) {
 	out := make([]Entry, 0, len(keys))
 	for _, k := range keys {
 		sp, known := d.lookup(k)
+		if known && isBuild(sp) {
+			continue // never stored: nothing to show (§10.9)
+		}
 		e := Entry{Key: k, Origin: OriginDefault, Type: sp.Type.Raw, Secret: known && isSecret(sp)}
 		v, inFile := cfg.Get(k)
 		if sv, ok := sec.Get(k); ok {
@@ -285,6 +291,9 @@ func (d *Domain) Get(key string, secret bool) (string, error) {
 		return "", errDetails(cerr.New(cerr.ExitNotFound, "not_found.key",
 			"%s: ключа %s нет в config.keys", d.ext, key), key)
 	}
+	if isBuild(sp) {
+		return "", errScopeBuild(d.ext, key)
+	}
 	cfg, err := d.readConfig()
 	if err != nil {
 		return "", err
@@ -313,7 +322,8 @@ func (d *Domain) Get(key string, secret bool) (string, error) {
 
 // Values returns the effective non-secret values: the default of every
 // non-pattern schema key, overridden by config; config keys matching a
-// pattern are included, keys unknown to the schema are not.
+// pattern are included, keys unknown to the schema and `scope: build` keys
+// (never stored, §10.9) are not.
 func (d *Domain) Values() (map[string]string, error) {
 	cfg, err := d.readConfig()
 	if err != nil {
@@ -321,12 +331,12 @@ func (d *Domain) Values() (map[string]string, error) {
 	}
 	out := map[string]string{}
 	for k, sp := range d.schema {
-		if !sp.Pattern && !isSecret(sp) && envfile.ValidName(k) {
+		if !sp.Pattern && !isSecret(sp) && !isBuild(sp) && envfile.ValidName(k) {
 			out[k] = sp.Default
 		}
 	}
 	for _, k := range cfg.Keys() {
-		if sp, ok := d.lookup(k); ok && !isSecret(sp) {
+		if sp, ok := d.lookup(k); ok && !isSecret(sp) && !isBuild(sp) {
 			out[k], _ = cfg.Get(k)
 		}
 	}

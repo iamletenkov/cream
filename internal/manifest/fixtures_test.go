@@ -245,6 +245,8 @@ func TestFixturesInvalid(t *testing.T) {
 		{dir: "unknown-field", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
 		{dir: "reserved-bin", wantExit: cerr.ExitData, wantCode: "manifest.reserved"},
 		{dir: "stage-cream-too-low", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
+		{dir: "every-boot-cream-too-low", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
+		{dir: "scope-build-cream-too-low", wantExit: cerr.ExitData, wantCode: "manifest.invalid"},
 		{dir: "too-new-cream", wantExit: cerr.ExitNotApplicable, wantCode: "platform.cream_version"},
 	}
 	entries, err := os.ReadDir(filepath.Join(fixturesRoot, "invalid"))
@@ -286,6 +288,30 @@ func TestFixturesInvalid(t *testing.T) {
 	}
 }
 
+// TestFixturesContract: контрактная фикстура ADR-0004 (testdata/contract/cream-1.2)
+// валидна в cream 1.2.0, а cream 1.1.x отказывает ей по cream: — 68
+// platform.cream_version, а не «неизвестное поле». Тот же отказ настоящего
+// выпуска 1.1.4 проверяет make contract-old.
+func TestFixturesContract(t *testing.T) {
+	t.Parallel()
+	exts := catalogExts(t, filepath.Join(fixturesRoot, "contract", "cream-1.2"))
+	if got := sortedKeys(exts); !slices.Equal(got, []string{"every-boot", "scope-build"}) {
+		t.Fatalf("расширения %v", got)
+	}
+	for name, dir := range exts {
+		m, err := Load(dir, ParseCreamBuild("1.2.0"), nil)
+		if err != nil {
+			t.Errorf("Load(%s) на 1.2.0: %v", name, err)
+			continue
+		}
+		checkTree(t, dir, m)
+		_, err = Load(dir, ParseCreamBuild("1.1.4"), nil)
+		if cerr.ExitCode(err) != cerr.ExitNotApplicable || cerr.CodeOf(err) != "platform.cream_version" {
+			t.Errorf("Load(%s) на 1.1.4 = %v, ждали 68 platform.cream_version", name, err)
+		}
+	}
+}
+
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
 	cream := creamV1(t)
@@ -307,5 +333,28 @@ func TestLoadErrors(t *testing.T) {
 	}
 	if _, err := LoadCatalog(dir); cerr.ExitCode(err) != cerr.ExitNotFound || cerr.CodeOf(err) != "not_found.catalog" {
 		t.Errorf("нет cream-catalog.yaml: %v", err)
+	}
+}
+
+// TestFixturesContract13: контрактная фикстура ADR-0005 (testdata/contract/cream-1.3)
+// валидна в cream 1.3.0, а cream 1.2.0 отказывает ей по cream: — 68
+// platform.cream_version, а не по platform.family.
+func TestFixturesContract13(t *testing.T) {
+	t.Parallel()
+	exts := catalogExts(t, filepath.Join(fixturesRoot, "contract", "cream-1.3"))
+	if got := sortedKeys(exts); !slices.Equal(got, []string{"openwrt-family"}) {
+		t.Fatalf("расширения %v", got)
+	}
+	for name, dir := range exts {
+		m, err := Load(dir, ParseCreamBuild("1.3.0"), nil)
+		if err != nil {
+			t.Errorf("Load(%s) на 1.3.0: %v", name, err)
+			continue
+		}
+		checkTree(t, dir, m)
+		_, err = Load(dir, ParseCreamBuild("1.2.0"), nil)
+		if cerr.ExitCode(err) != cerr.ExitNotApplicable || cerr.CodeOf(err) != "platform.cream_version" {
+			t.Errorf("Load(%s) на 1.2.0 = %v, ждали 68 platform.cream_version", name, err)
+		}
 	}
 }

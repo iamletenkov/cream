@@ -1,0 +1,10 @@
+schema: cream/v1
+name: needs-ghost
+version: 1.0.0
+summary: фикстура cream check needs-ghost
+cream: ">=1.0.0"
+platform: {family: deb, arch: [amd64, arm64]}
+depends: [{name: ghost}]
+hooks:
+  install: {}
+  remove: {}

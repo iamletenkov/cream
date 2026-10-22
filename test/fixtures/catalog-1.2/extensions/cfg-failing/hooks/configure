@@ -1,0 +1,11 @@
+#!/bin/sh
+# Фикстура cream 1.2 (cfg-failing): считает вызовы configure.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+f="$CREAM_STATE_DIR/configure.count"
+n=0
+if [ -f "$f" ]; then n=$(cat "$f"); fi
+echo $((n + 1)) > "$f"
+printf 'reason=%s phase=%s\n' "${CREAM_REASON:-}" "${CREAM_PHASE:-}" >> "$CREAM_STATE_DIR/configure.log"
+echo "cfg-failing: сбой configure" >&2
+exit 3

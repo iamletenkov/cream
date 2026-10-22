@@ -91,6 +91,8 @@ type rawHook struct {
 	After   []string `yaml:"after"`
 	Before  []string `yaml:"before"`
 	Wants   []string `yaml:"wants"`
+	// EveryBoot — указатель: cream 1.2.0 требуется при любом значении поля.
+	EveryBoot *bool `yaml:"every_boot"`
 }
 
 type rawConfig struct {
@@ -162,16 +164,56 @@ func Parse(data []byte, cream CreamBuild, w *cerr.Warnings) (*Manifest, error) {
 	if err := decodeStrict(root, &raw, codeInvalid); err != nil {
 		return nil, err
 	}
+	if err := checkNullEveryBoot(root); err != nil {
+		return nil, err
+	}
 	m, err := validate(&raw)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSince(m, creamRange); err != nil {
+	if err := checkSince(&raw, creamRange); err != nil {
 		return nil, err
 	}
 	checkEarly(m, w)
 	m.Cream = creamRange
 	return m, nil
+}
+
+// checkNullEveryBoot отвергает every_boot без значения (null, ~, пусто): yaml.v3
+// декодирует его в *bool как nil, и поле прошло бы мимо checkSince и проверки
+// «только у configure» (ADR-0004: требование cream 1.2.0 — при любом значении).
+func checkNullEveryBoot(root *yaml.Node) error {
+	hooks := mapValue(root, "hooks")
+	if hooks == nil || hooks.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(hooks.Content); i += 2 {
+		v := mapValue(hooks.Content[i+1], "every_boot")
+		if v != nil && v.Kind == yaml.ScalarNode && v.ShortTag() == "!!null" {
+			return invalid("hooks."+hooks.Content[i].Value+".every_boot", "ожидается true или false")
+		}
+	}
+	return nil
+}
+
+// mapValue — значение ключа отображения n (алиасы раскрываются) или nil.
+func mapValue(n *yaml.Node, key string) *yaml.Node {
+	for n != nil && n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			v := n.Content[i+1]
+			for v != nil && v.Kind == yaml.AliasNode {
+				v = v.Alias
+			}
+			return v
+		}
+	}
+	return nil
 }
 
 // earlyCycleUnit reports a unit an early configure cannot be ordered after:
@@ -206,32 +248,96 @@ func checkEarly(m *Manifest, w *cerr.Warnings) {
 	}
 }
 
-// stageSince — версия cream, с которой есть стадия configure; ok = false для
-// стадий cream 1.0.
-func stageSince(st Stage) (semver.Version, bool) {
-	switch st {
-	case StageEarly, StageCloudUser, StageGraphical:
-		return semver.Version{Major: 1, Minor: 1}, true
+// sinceField — совместимое добавление внутри cream/v1 и версия cream, с
+// которой оно есть (§4.2, ADR-0004). feature — запись таблицы: путь поля и,
+// для значения перечисления, само значение.
+type sinceField struct {
+	feature string
+	since   semver.Version
+}
+
+var (
+	v11 = semver.Version{Major: 1, Minor: 1}
+	v12 = semver.Version{Major: 1, Minor: 2}
+	v13 = semver.Version{Major: 1, Minor: 3}
+)
+
+// sinceFields — таблица «поле → версия» checkSince. Поле cream 1.0 в ней не
+// бывает; новое совместимое поле добавляется сюда и в usedSince.
+var sinceFields = []sinceField{
+	{"hooks.configure.stage: early", v11},
+	{"hooks.configure.stage: cloud-user", v11},
+	{"hooks.configure.stage: graphical", v11},
+	{"hooks.configure.every_boot", v12},
+	{"config.keys.*.scope: build", v12},
+	{"platform.family: openwrt", v13},
+}
+
+// sinceOf — версия из таблицы; ok = false — поле есть с cream 1.0.
+func sinceOf(feature string) (semver.Version, bool) {
+	for _, f := range sinceFields {
+		if f.feature == feature {
+			return f.since, true
+		}
 	}
 	return semver.Version{}, false
 }
 
+// sinceUse — употребление поля из sinceFields в манифесте: field — конкретный
+// путь для details.field, what — что назвать в сообщении.
+type sinceUse struct {
+	field, what string
+	since       semver.Version
+}
+
+// usedSince перечисляет поля манифеста из sinceFields в порядке манифеста:
+// семейство, configure, затем ключи по имени. Сырые формы — потому что every_boot
+// требует cream 1.2.0 при любом значении, в том числе false.
+func usedSince(r *rawManifest) []sinceUse {
+	var out []sinceUse
+	add := func(feature, field, what string) {
+		if v, ok := sinceOf(feature); ok {
+			out = append(out, sinceUse{field: field, what: what, since: v})
+		}
+	}
+	if r.Platform != nil {
+		add("platform.family: "+r.Platform.Family, "platform.family", "семейство "+r.Platform.Family)
+	}
+	if hk, ok := r.Hooks[string(HookConfigure)]; ok {
+		add("hooks.configure.stage: "+hk.Stage, "hooks.configure.stage", "стадия "+hk.Stage)
+		if hk.EveryBoot != nil {
+			add("hooks.configure.every_boot", "hooks.configure.every_boot", "every_boot")
+		}
+	}
+	for _, name := range sortedNames(r.Config.Keys) {
+		if sc := r.Config.Keys[name].Scope; sc != "" {
+			add("config.keys.*.scope: "+sc, "config.keys."+name+".scope", "scope: "+sc)
+		}
+	}
+	return out
+}
+
 // checkSince — совместимые добавления внутри cream/v1 требуют поднять cream:
-// манифеста до своей версии (§4.2): иначе cream 1.0 отказал бы по полю, а не
-// по cream:. Проверка не зависит от версии исполнителя (и у dev-сборки тоже).
-func checkSince(m *Manifest, cream semver.Range) error {
-	hk, ok := m.Hooks[HookConfigure]
-	if !ok {
+// манифеста до своей версии (§4.2, ADR-0004): иначе старый cream отказал бы по
+// полю, а не по cream:. Из нарушений называется самое новое — его cream:
+// закрывает и остальные. Проверка не зависит от версии исполнителя (и у
+// dev-сборки тоже) и идёт после validate: значения уже проверены.
+func checkSince(r *rawManifest, cream semver.Range) error {
+	var worst *sinceUse
+	for _, u := range usedSince(r) {
+		if cream.AtLeast(u.since) {
+			continue
+		}
+		if worst == nil || semver.Compare(worst.since, u.since) < 0 {
+			worst = &u
+		}
+	}
+	if worst == nil {
 		return nil
 	}
-	since, ok := stageSince(hk.Stage)
-	if !ok || cream.AtLeast(since) {
-		return nil
-	}
-	field := "hooks.configure.stage"
-	e := cerr.New(cerr.ExitData, codeInvalid, "%s: %s появилась в cream %s — нужен cream: \">=%s\" (сейчас %q)",
-		field, hk.Stage, since, since, cream.String())
-	e.Details = map[string]any{"field": field, "since": since.String()}
+	e := cerr.New(cerr.ExitData, codeInvalid, "%s: %s — есть с cream %s, нужен cream: \">=%s\" (сейчас %q)",
+		worst.field, worst.what, worst.since, worst.since, cream.String())
+	e.Details = map[string]any{"field": worst.field, "since": worst.since.String()}
 	return e
 }
 

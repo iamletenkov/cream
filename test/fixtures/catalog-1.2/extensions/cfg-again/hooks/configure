@@ -1,0 +1,15 @@
+#!/bin/sh
+# Фикстура cream 1.2 (cfg-again): считает вызовы configure.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+f="$CREAM_STATE_DIR/configure.count"
+n=0
+if [ -f "$f" ]; then n=$(cat "$f"); fi
+echo $((n + 1)) > "$f"
+printf 'reason=%s phase=%s\n' "${CREAM_REASON:-}" "${CREAM_PHASE:-}" >> "$CREAM_STATE_DIR/configure.log"
+# Точность таймера по умолчанию — минута (AccuracySec=1min): без своей
+# повтор придёт с задержкой до минуты.
+if [ "${CREAM_REASON:-}" != followup ]; then
+	systemd-run --quiet --collect --on-active=1 --timer-property=AccuracySec=100ms \
+		/usr/bin/cream configure --again cfg-again
+fi

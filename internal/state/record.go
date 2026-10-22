@@ -68,4 +68,12 @@ type Record struct {
 	RebootRequired bool          `json:"reboot_required"`
 	// PrevVersion is the version an unfinished upgrade started from (status failed-upgrade).
 	PrevVersion string `json:"prev_version,omitempty"`
+	// Held is `cream hold`: upgrade --all skips the extension, an explicit
+	// upgrade or install of another version is refused (68 hold.held).
+	Held bool `json:"held,omitempty"`
+	// SecretsRev counts writes of secret keys (cream set): params_digest
+	// carries only the names of secrets, so the configure mark compares this
+	// counter to see a rotated secret (spec bisquite-bundled-cream §10.7).
+	// Absent (records of cream 1.1) is 0.
+	SecretsRev int `json:"secrets_rev,omitempty"`
 }

@@ -1,6 +1,10 @@
 package paths
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
@@ -134,11 +138,17 @@ func TestLayoutMethodsUnderRoot(t *testing.T) {
 		{"WantsDir", l.WantsDir("multi-user.target"), "/tmp/x/etc/systemd/system/multi-user.target.wants"},
 		{"RunDir", l.RunDir(), "/tmp/x/run/cream"},
 		{"RunReason", l.RunReason("teleport"), "/tmp/x/run/cream/teleport.reason"},
+		{"RunResult", l.RunResult("teleport"), "/tmp/x/run/cream/configure/teleport.result"},
 		{"RebootRequired", l.RebootRequired(), "/tmp/x/run/reboot-required"},
 		{"PolicyRcD", l.PolicyRcD(), "/tmp/x/usr/sbin/policy-rc.d"},
 		{"OSRelease", l.OSRelease(), "/tmp/x/etc/os-release"},
 		{"SystemdRunning", l.SystemdRunning(), "/tmp/x/run/systemd/system"},
+		{"PID1Comm", l.PID1Comm(), "/tmp/x/proc/1/comm"},
 		{"CloudUserUnit", l.CloudUserUnit(), "/tmp/x/usr/lib/systemd/system/cream-configure-cloud-user.service"},
+		{"ImageLabels", l.ImageLabels(), "/tmp/x/etc/image-labels.d/cream.json"},
+		{"ConfiguredFile", l.ConfiguredFile("teleport"), "/tmp/x/var/lib/cream/configured/teleport.json"},
+		{"ConfiguredDir", l.ConfiguredDir(), "/tmp/x/var/lib/cream/configured"},
+		{"MachineID", l.MachineID(), "/tmp/x/etc/machine-id"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -182,5 +192,102 @@ func TestLayoutSystemRoot(t *testing.T) {
 	}
 	if !(Layout{}).NeedsRoot() {
 		t.Errorf("zero Layout NeedsRoot() = false, want true")
+	}
+}
+
+func TestLayoutOpenWrt(t *testing.T) {
+	t.Parallel()
+	l := Layout{Root: "/tmp/x", Family: FamilyOpenWrt}
+	if !l.OpenWrt() || (Layout{}).OpenWrt() {
+		t.Fatalf("OpenWrt(): openwrt = %v, zero = %v", l.OpenWrt(), (Layout{}).OpenWrt())
+	}
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		// Состояние — вне tmpfs (/var на OpenWrt — ссылка на /tmp), спека OpenWrt §4.1 п.4.
+		{"StateDir", l.StateDir("demo"), "/tmp/x/opt/cream/var/ext/demo"},
+		{"SourcesLock", l.SourcesLock(), "/tmp/x/opt/cream/var/sources.lock"},
+		{"CacheRoot", l.CacheRoot(), "/tmp/x/opt/cream/var/cache"},
+		{"InstalledFile", l.InstalledFile("demo"), "/tmp/x/opt/cream/var/installed/demo.json"},
+		{"ConfiguredFile", l.ConfiguredFile("demo"), "/tmp/x/opt/cream/var/configured/demo.json"},
+		{"History", l.History(), "/tmp/x/opt/cream/var/history.jsonl"},
+		{"GlobalLock", l.GlobalLock(), "/tmp/x/opt/cream/var/lock/global"},
+		{"Incoming", l.Incoming("abc"), "/tmp/x/opt/cream/var/incoming/abc"},
+		{"HookTmp", l.HookTmp(), "/tmp/x/opt/cream/var/tmp"},
+		// Метки одного запуска — в tmpfs: после перезагрузки их быть не должно.
+		{"RunReason", l.RunReason("demo"), "/tmp/x/var/run/cream/demo.reason"},
+		{"RunResult", l.RunResult("demo"), "/tmp/x/var/run/cream/configure/demo.result"},
+		{"RebootRequired", l.RebootRequired(), "/tmp/x/var/run/reboot-required"},
+		// procd: init-скрипты, ссылки rc.d и списки стадий.
+		{"InitScript", l.InitScript("cream-configure"), "/tmp/x/etc/init.d/cream-configure"},
+		{"RcLink", l.RcLink("S95cream-configure"), "/tmp/x/etc/rc.d/S95cream-configure"},
+		{"StageMark", l.StageMark("system", "demo"), "/tmp/x/opt/cream/var/stages/system/demo"},
+		// Не меняются.
+		{"ExtTree", l.ExtTree("demo"), "/tmp/x/opt/cream/ext/demo"},
+		{"ConfigFile", l.ConfigFile("demo"), "/tmp/x/etc/cream/demo/config"},
+		{"Sources", l.Sources(), "/tmp/x/etc/cream/sources.yaml"},
+		{"ImageLabels", l.ImageLabels(), "/tmp/x/etc/image-labels.d/cream.json"},
+	}
+	for _, tc := range tests {
+		if tc.got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.name, tc.got, tc.want)
+		}
+	}
+	// Debian: HookTmp не задаётся (хуки получают TMPDIR только на openwrt), стадий procd нет.
+	if got := (Layout{Root: "/tmp/x"}).StateDir("demo"); got != "/tmp/x/var/lib/cream/ext/demo" {
+		t.Errorf("deb StateDir = %q", got)
+	}
+}
+
+func TestDetectFamily(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, file, body, want string
+	}{
+		{"openwrt by ID", "etc/os-release", "NAME=\"OpenWrt\"\nID=\"openwrt\"\nID_LIKE=\"lede openwrt\"\nVERSION_ID=\"25.12.6\"\n", FamilyOpenWrt},
+		{"lede in ID_LIKE", "etc/os-release", "ID=mywrt\nID_LIKE=\"lede\"\n", FamilyOpenWrt},
+		{"usr/lib fallback", "usr/lib/os-release", "ID=openwrt\n", FamilyOpenWrt},
+		{"debian", "etc/os-release", "ID=debian\nVERSION_ID=\"12\"\n", ""},
+		{"ubuntu like debian", "etc/os-release", "ID=ubuntu\nID_LIKE=debian\n", ""},
+		{"no os-release", "", "", ""},
+		{"garbage", "etc/os-release", "this is = not \"closed\n", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.file != "" {
+				writeFile(t, root, tc.file, tc.body)
+			}
+			if got := DetectFamily(root); got != tc.want {
+				t.Errorf("DetectFamily = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDetectSetsFamily(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "etc/os-release", "ID=openwrt\n")
+	l := Detect(envOf(nil), 0, root, "", "")
+	if l.Family != FamilyOpenWrt {
+		t.Fatalf("Family = %q, want openwrt", l.Family)
+	}
+	if got := l.InstalledDir(); got != root+"/opt/cream/var/installed" {
+		t.Errorf("InstalledDir = %q", got)
+	}
+}
+
+func writeFile(t *testing.T, root, rel, body string) {
+	t.Helper()
+	p := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

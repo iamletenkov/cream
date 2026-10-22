@@ -48,7 +48,7 @@ func sourceCommandsWith(d catalogDeps) []Command {
 		Name: "source",
 		Usage: "source add|remove|list|show|sync …  — источники каталогов (§9)\n" +
 			"  source add <name> --archive <https://…|file:///…> --sha256 <hex> [--replace] [--sync]\n" +
-			"  source add <name> --path <абсолютный путь> [--replace] [--sync]\n" +
+			"  source add <name> --path DIR [--replace] [--sync]\n" +
 			"  source remove <name>\n" +
 			"  source list\n" +
 			"  source show <name>\n" +

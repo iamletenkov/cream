@@ -74,6 +74,9 @@ func (r listResult) WriteText(w io.Writer) error {
 		if e.RebootRequired {
 			reboot = "  нужна перезагрузка"
 		}
+		if e.Held {
+			reboot += "  закреплено"
+		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\tapply: %s%s\n", e.Name, e.Version, e.Status, e.Apply, reboot)
 	}
 	return tw.Flush()
@@ -94,6 +97,8 @@ func runList(ctx *Context, args []string) (any, error) {
 type showResult struct {
 	Ext  string             `json:"ext"`
 	Keys []engine.ShowEntry `json:"keys"`
+	// Configured is the configure mark (§10.7); null without a configure hook.
+	Configured *engine.ConfiguredInfo `json:"configured"`
 }
 
 func (r showResult) WriteText(w io.Writer) error {
@@ -115,11 +120,16 @@ func runShow(ctx *Context, args []string) (any, error) {
 	if len(args) != 1 {
 		return nil, ctx.Usagef("show: нужно одно имя расширения")
 	}
-	keys, err := newEngine(ctx).Show(args[0])
+	e := newEngine(ctx)
+	keys, err := e.Show(args[0])
 	if err != nil {
 		return nil, err
 	}
-	return showResult{Ext: args[0], Keys: keys}, nil
+	info, err := e.ConfiguredStatus(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return showResult{Ext: args[0], Keys: keys, Configured: info}, nil
 }
 
 // getResult is the result of `cream get` and `cream config get` (golden: get.json).

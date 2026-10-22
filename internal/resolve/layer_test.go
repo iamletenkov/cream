@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/state"
 )
 
@@ -135,5 +136,25 @@ func TestLayerDeps(t *testing.T) {
 	want := []string{"apply-hook@1.0.0", "lib-fixture@1.0.0", "other-rt@2.1.0"}
 	if !slices.Equal(ls[0].Deps, want) {
 		t.Fatalf("deps = %v, ждали %v", ls[0].Deps, want)
+	}
+}
+
+// TestLayerParamsDigestSkipsScopeBuild: ключи scope: build не входят ни в
+// params_digest, ни в secret_params (спека 2026-10-21 §10.9).
+func TestLayerParamsDigestSkipsScopeBuild(t *testing.T) {
+	t.Parallel()
+	n := fixture(t, "with-config")
+	n.Manifest.Config["MIRROR_TOKEN"] = keytype.Spec{Empty: true, Secret: keytype.SecretFile, Scope: keytype.ScopeBuild}
+	n.Manifest.Config["MIRROR_URL"] = keytype.Spec{Empty: true, Scope: keytype.ScopeBuild}
+	params := map[string]map[string]string{n.Manifest.Name: {"COUNT": "1", "MIRROR_TOKEN": "t", "MIRROR_URL": "u"}}
+	ls, err := Resolve(nil, []Node{n}, params, liveHost(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := state.ParamsDigest(map[string]string{"COUNT": "1"}, nil); ls[0].ParamsDigest != want {
+		t.Errorf("params_digest = %s, ждали %s", ls[0].ParamsDigest, want)
+	}
+	if len(ls[0].SecretParams) != 0 {
+		t.Errorf("secret_params = %v", ls[0].SecretParams)
 	}
 }

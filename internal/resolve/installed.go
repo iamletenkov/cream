@@ -14,6 +14,7 @@ import (
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/semver"
+	"github.com/iamletenkov/cream/internal/state"
 )
 
 // CodeInstalledInvalid is a malformed --installed file (65).
@@ -29,18 +30,22 @@ var reCapability = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 var reLineageToken = regexp.MustCompile(`^(?:[a-z0-9][a-z0-9._-]{0,63}/)?([a-z0-9][a-z0-9._-]{0,63})@([^#@/\s]+)(?:#[0-9a-f]+)?$`)
 
 // installedItem is one element of the --installed file: name and version, or
-// a lineage token instead of both; provides is optional. Other fields (the
-// rest of a lineage entry) are ignored.
+// a lineage token instead of both; provides and source are optional. Other
+// fields (the rest of a lineage entry, digest of the cream.extensions label)
+// are ignored.
 type installedItem struct {
 	Name     string   `json:"name"`
 	Version  string   `json:"version"`
 	Token    string   `json:"token"`
+	Source   string   `json:"source"`
 	Provides []string `json:"provides"`
 }
 
 // ReadInstalled reads the extensions already installed in the base image of
-// a build layer (`cream resolve --installed`, from the lineage of FROM): a
-// JSON array of {name, version, provides?} or {token, provides?}. They join
+// a build layer (`cream resolve --installed`, from the lineage of FROM; `cream
+// check --installed`, the cream.extensions label of the base, §8.2): a JSON
+// array of {name, version, source?, provides?} or {token, provides?}. source
+// is where the base got the extension (upgrade looks there). They join
 // the graph as installed nodes, so depends and requires of the layer are
 // closed by them. A later element of the same name replaces an earlier one
 // (lineage accumulates base first).
@@ -69,6 +74,7 @@ func ReadInstalled(path string) ([]Node, error) {
 	}
 	var order []string
 	byName := map[string]*manifest.Manifest{}
+	sourceOf := map[string]string{}
 	for i, it := range items {
 		name, ver := it.Name, it.Version
 		if it.Token != "" {
@@ -93,6 +99,10 @@ func ReadInstalled(path string) ([]Node, error) {
 				return nil, bad("[%d].provides %q: ожидается [a-z0-9][a-z0-9._-]{0,63}", i, c)
 			}
 		}
+		if it.Source != "" && !reCapability.MatchString(it.Source) {
+			return nil, bad("[%d].source %q: ожидается [a-z0-9][a-z0-9._-]{0,63}", i, it.Source)
+		}
+		sourceOf[name] = it.Source
 		if _, seen := byName[name]; !seen {
 			order = append(order, name)
 		}
@@ -101,7 +111,8 @@ func ReadInstalled(path string) ([]Node, error) {
 	}
 	out := make([]Node, 0, len(order))
 	for _, name := range order {
-		out = append(out, Node{Manifest: byName[name], Installed: true, Files: []string{}})
+		out = append(out, Node{Manifest: byName[name], Installed: true, Files: []string{},
+			Source: state.SourceRef{Name: sourceOf[name]}})
 	}
 	return out, nil
 }

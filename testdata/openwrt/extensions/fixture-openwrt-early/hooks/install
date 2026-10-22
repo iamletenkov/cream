@@ -1,0 +1,16 @@
+#!/bin/sh
+# Фикстура cream (OpenWrt, busybox ash): хук install считает вызовы в
+# $CREAM_STATE_DIR/install.count и дописывает окружение вызова в install.log;
+# TMPDIR должен быть каталогом на диске, куда можно писать.
+set -eu
+mkdir -p "$CREAM_STATE_DIR"
+f="$CREAM_STATE_DIR/install.count"
+n=0
+if [ -f "$f" ]; then n=$(cat "$f"); fi
+echo $((n + 1)) > "$f"
+tmp=$(mktemp)
+echo ok > "$tmp"
+rm -f "$tmp"
+printf 'phase=%s reason=%s tmpdir=%s instroot=%s version=%s\n' \
+    "${CREAM_PHASE:-}" "${CREAM_REASON:-}" "${TMPDIR:-}" "${IPKG_INSTROOT-unset}" \
+    "${CREAM_EXT_VERSION:-}" >> "$CREAM_STATE_DIR/install.log"

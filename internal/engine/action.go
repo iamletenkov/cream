@@ -141,6 +141,9 @@ func (e *Engine) RunAction(ctx context.Context, r ActionRequest) (ActionResult, 
 		spec.ExtraFiles = []*os.File{held.File()}
 		env.LockFD, env.LockMode = runner.FirstExtraFD, heldMode.String()
 	}
+	if err := e.familyEnv(&env); err != nil {
+		return res, err
+	}
 	spec.Env = runner.BuildEnv(env)
 
 	stderr := runner.NewSecretFilter(e.stderr(), secrets)

@@ -6,6 +6,7 @@
     "ext": "configure-system",
     "reason": "apply",
     "mode": "hook",
+    "status": "ok",
     "reboot_required": false
   },
   "warnings": [],

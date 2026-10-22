@@ -104,12 +104,14 @@ func TestValidateInvalidFixtures(t *testing.T) {
 	}{
 		{dir: "dir-name-mismatch", exit: cerr.ExitData, code: "manifest.dir_name"},
 		{dir: "duplicate-name-roots", exit: cerr.ExitData, code: "catalog.duplicate_name"},
+		{dir: "every-boot-cream-too-low", exit: cerr.ExitData, code: "manifest.invalid"},
 		{dir: "hook-declared-missing", exit: cerr.ExitData, code: "manifest.hook_missing"},
 		{dir: "hook-not-executable", exit: cerr.ExitData, code: "manifest.not_executable"},
 		{dir: "hook-undeclared", exit: cerr.ExitData, code: "manifest.hook_undeclared"},
 		{dir: "link-outside", exit: cerr.ExitData, code: "manifest.link_outside"},
 		{dir: "not-elf-no-shebang", exit: cerr.ExitData, code: "manifest.bad_executable"},
 		{dir: "reserved-bin", exit: cerr.ExitData, code: "manifest.reserved"},
+		{dir: "scope-build-cream-too-low", exit: cerr.ExitData, code: "manifest.invalid"},
 		{dir: "stage-cream-too-low", exit: cerr.ExitData, code: "manifest.invalid"},
 		{dir: "too-new-cream"}, // Р22: каталог валиден, расширение — в предупреждениях (TestValidateCreamNewer)
 		{dir: "unknown-field", exit: cerr.ExitData, code: "manifest.invalid"},
@@ -628,5 +630,43 @@ func TestValidateCreamNewerKeepsOtherErrors(t *testing.T) {
 	}
 	if !slices.Equal(warningCodes(r), []string{"catalog.cream_newer"}) {
 		t.Errorf("предупреждения %v", warningCodes(r))
+	}
+}
+
+// TestValidateOpenWrtWarnings (ADR-0005): у семейства openwrt хук apply не
+// перезапускает службу procd на переднем плане, а состояние не кладётся в
+// /var (tmpfs) — предупреждения, не ошибки; фоновый перезапуск и /var/run — без них.
+func TestValidateOpenWrtWarnings(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "ow")
+	manifestBody := `schema: cream/v1
+name: ow
+version: 1.0.0
+summary: openwrt
+cream: ">=1.3.0"
+platform: {family: openwrt, arch: [amd64]}
+hooks: {install: {}, apply: {}}
+files:
+  - {src: files/a, dst: /var/lib/ow/a}
+  - {src: files/b, dst: /var/run/ow.pid}
+  - {src: files/c, dst: /etc/init.d/ow}
+`
+	writeTree(t, dir, map[string]string{
+		"extension.yaml": manifestBody,
+		"hooks/install":  "#!/bin/sh\n# /var/lib/ в комментарии не считается\nmkdir -p /var/lib/ow\n",
+		"hooks/apply":    "#!/bin/sh\n/etc/init.d/ow restart &\n/etc/init.d/ow reload\nservice ow restart >/dev/null &\n",
+		"files/a":        "a", "files/b": "b", "files/c": "#!/bin/sh /etc/rc.common\n",
+	}, "hooks/install", "hooks/apply", "files/c")
+	r, err := ValidateDir(dir, manifest.ParseCreamBuild("1.3.0"))
+	if err != nil {
+		t.Fatalf("ValidateDir: %v (%+v)", err, r.Errors)
+	}
+	want := []string{"validate.apply_blocking", "validate.openwrt_tmpfs", "validate.openwrt_tmpfs"}
+	if got := warningCodes(r); !slices.Equal(got, want) {
+		t.Fatalf("предупреждения %v, ждали %v: %+v", got, want, r.Warnings)
+	}
+	if !strings.Contains(r.Warnings[0].Message, "hooks/apply:3") || !strings.Contains(r.Warnings[1].Message, "/var/lib/ow/a") ||
+		!strings.Contains(r.Warnings[2].Message, "hooks/install:3") {
+		t.Errorf("тексты: %+v", r.Warnings)
 	}
 }

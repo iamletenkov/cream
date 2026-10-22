@@ -32,8 +32,11 @@ const (
 	PhaseLive  = string(manifest.PhaseLive)
 )
 
-// FamilyDeb is the only package family cream/v1 knows.
-const FamilyDeb = "deb"
+// Package families cream/v1 installs: deb, and openwrt since cream 1.3 (ADR-0005).
+const (
+	FamilyDeb     = manifest.FamilyDeb
+	FamilyOpenWrt = manifest.FamilyOpenWrt
+)
 
 // Host is what an extension is checked against. An empty Family, OSID or
 // TargetArch means "unknown here" and that check is skipped (cream resolve on
@@ -99,14 +102,14 @@ func (p Probe) Detect(phase string) (Host, error) {
 
 // familyLike maps an os-release ID (or an ID_LIKE word) to its package family.
 var familyLike = map[string]string{
-	"debian": FamilyDeb,
+	"debian": FamilyDeb, "ubuntu": FamilyDeb,
 	"fedora": "rpm", "rhel": "rpm", "centos": "rpm", "suse": "rpm", "opensuse": "rpm",
-	"alpine": "apk", "openwrt": "openwrt",
+	"alpine": "apk", "openwrt": FamilyOpenWrt, "lede": FamilyOpenWrt,
 }
 
 // familyOf is the package family of an os-release: by ID, then by ID_LIKE,
 // else the ID itself ("linux" when ID is absent, as os-release(5) says).
-// Only "deb" is a family cream/v1 installs; the rest are named for the 68.
+// Only deb and openwrt are families cream/v1 installs; the rest are named for the 68.
 func familyOf(id, like string) string {
 	for _, w := range append([]string{id}, strings.Fields(like)...) {
 		if f, ok := familyLike[w]; ok {

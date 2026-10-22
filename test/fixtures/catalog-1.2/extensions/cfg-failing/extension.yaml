@@ -1,0 +1,11 @@
+schema: cream/v1
+name: cfg-failing
+version: 1.0.0
+summary: configure падает
+cream: ">=1.2.0"
+platform: {family: deb, arch: [amd64, arm64]}
+# configure всегда падает: отметки нет, повтор на каждой загрузке (§10.7).
+hooks:
+  install: {}
+  configure: {stage: system}
+  remove: {}

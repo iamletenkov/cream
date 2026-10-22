@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/initsys"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/place"
@@ -58,6 +59,8 @@ const (
 // one is kept as <dst>.cream-modified with a warning, ruling Р11 for missing
 // ones), the tree, with Purge the domain and the state directory, and the
 // registry record; writes history. A failed hook leaves everything as it was.
+// In the build phase the hook runs under policy-rc.d and systemd is not
+// touched.
 func (e *Engine) Remove(ctx context.Context, ext string, o RemoveOptions) (*RemoveResult, error) {
 	if o.Purge && o.Forget {
 		return nil, cerr.New(cerr.ExitUsage, "usage.flag", "--purge и --forget несовместимы")
@@ -101,6 +104,11 @@ func (e *Engine) Remove(ctx context.Context, ext string, o RemoveOptions) (*Remo
 		}
 	}
 
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
 	if !o.Forget {
 		if err := e.removeHook(WithLock(ctx, h, lock.Exclusive), in, res); err != nil {
 			return nil, err
@@ -202,18 +210,23 @@ func (e *Engine) removeHook(ctx context.Context, in Installed, res *RemoveResult
 
 // removeArtifacts removes what cream put on the machine for in: the
 // configure instance (stopped with a running systemd) and its drop-in
-// (daemon-reload with a running systemd), the reason marker, the files of the registry, the tree with its
+// (daemon-reload with a running systemd), the reason marker, the configure
+// mark, the files of the registry, the tree with its
 // .new/.prev leftovers and, with purge, the domain and the state directory.
 func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) error {
 	ext := in.Record.Name
-	_, up := e.Systemctl.Running(ctx)
+	// The build phase does not touch systemd (§10.2): only the links go.
+	up := false
+	if e.Phase() == PhaseLive {
+		_, up = e.Systemctl.Running(ctx)
+	}
 	if up && (in.Record.Configure != nil || (in.Manifest != nil && hasHook(in.Manifest, manifest.HookConfigure))) {
 		// A running configure instance would outlive its unit file.
 		if err := e.Systemctl.Stop(ctx, systemd.UnitName(ext)); err != nil {
 			e.warn("systemd.stop_failed", "%s: systemctl stop %s: %v", ext, systemd.UnitName(ext), err)
 		}
 	}
-	if err := systemd.Disable(e.L, ext); err != nil {
+	if err := initsys.For(e.L).Disable(e.L, ext); err != nil {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: снятие configure", ext)
 	}
 	if err := place.Unplace(e.L, in.Record.Files, e.Warn); err != nil {
@@ -236,7 +249,8 @@ func (e *Engine) removeArtifacts(ctx context.Context, in Installed, purge bool) 
 	if err := os.Remove(e.L.RunReason(ext)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "%s: маркер причины", ext)
 	}
-	return nil
+	// The configure mark goes with the record (§10.7).
+	return e.Store.DeleteConfigured(ext)
 }
 
 // removeJournal appends a remove entry to history.jsonl; a journal that

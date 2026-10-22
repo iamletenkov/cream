@@ -49,6 +49,9 @@ type Engine struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+
+	// phase is the phase decided by ResolvePhase ("" — not decided).
+	phase string
 }
 
 // Installed is one registry record with the manifest of its installed tree.
@@ -73,9 +76,14 @@ const (
 	ReasonApply   = "apply"
 )
 
-// Phase is the phase of this invocation: CREAM_PHASE of a parent cream
-// (a nested call from a build hook), otherwise live (ruling Р5).
+// Phase is the phase of this invocation. install, upgrade and remove decide
+// it first with ResolvePhase (--phase → CREAM_PHASE → PID 1, §10.1); other
+// commands keep CREAM_PHASE of a parent cream (a nested call from a build
+// hook), otherwise live.
 func (e *Engine) Phase() string {
+	if e.phase != "" {
+		return e.phase
+	}
 	if e.Env != nil && e.Env("CREAM_PHASE") == PhaseBuild {
 		return PhaseBuild
 	}

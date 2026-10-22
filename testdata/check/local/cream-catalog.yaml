@@ -1,0 +1,4 @@
+schema: cream/v1
+name: cream-check-local
+version: 0.1.0
+roots: [extensions]

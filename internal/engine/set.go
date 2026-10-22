@@ -3,10 +3,12 @@ package engine
 import (
 	"context"
 	"os"
+	"slices"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
 	"github.com/iamletenkov/cream/internal/fsx"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/runner"
@@ -66,6 +68,9 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 		return res, nil
 	}
 	res.Changed, res.ChangedKeys = true, changed
+	if err := e.bumpSecretsRev(in, changed); err != nil {
+		return res, err
+	}
 	switch {
 	case o.NoApply:
 		res.Apply = ApplySkipped
@@ -79,6 +84,13 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 	case hasHook(in.Manifest, manifest.HookConfigure):
 		h.Release()
 		st, up := e.Systemctl.Running(ctx)
+		if !up && e.L.OpenWrt() && e.Phase() == PhaseLive {
+			// OpenWrt has no unit to restart (ADR-0005): the hook runs
+			// here, as `cream configure` does there.
+			cr, err := e.ConfigureReport(ctx, ext, ReasonApply, ConfigureOptions{Wait: o.Wait})
+			res.Apply, res.RebootRequired = cr.Mode, cr.RebootRequired
+			return res, err
+		}
 		if !up {
 			return res, nil
 		}
@@ -86,6 +98,30 @@ func (e *Engine) Set(ctx context.Context, ext string, ch []config.Change, o SetO
 		return res, err
 	}
 	return res, nil
+}
+
+// bumpSecretsRev raises secrets_rev of the record of in when a changed key is
+// a secret (§10.7): params_digest has only the name of a secret, so the
+// counter is what tells the configure mark that a secret was rotated. The
+// caller holds lock/<ext>; the record is re-read right before the write.
+func (e *Engine) bumpSecretsRev(in Installed, changed []string) error {
+	if !secretChanged(in.Manifest, changed) {
+		return nil
+	}
+	rec, ok, err := e.Store.Get(in.Record.Name)
+	if err != nil || !ok {
+		return err
+	}
+	rec.SecretsRev++
+	return e.Store.Put(*rec)
+}
+
+// secretChanged reports whether one of the changed keys is a secret of m.
+func secretChanged(m *manifest.Manifest, changed []string) bool {
+	return slices.ContainsFunc(changed, func(k string) bool {
+		sp, ok := m.Config.Lookup(k)
+		return ok && sp.Secret != keytype.SecretNone
+	})
 }
 
 func hasHook(m *manifest.Manifest, h manifest.HookName) bool {

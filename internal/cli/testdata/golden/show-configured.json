@@ -1,0 +1,25 @@
+{
+  "cream": "dev",
+  "command": "show",
+  "ok": true,
+  "result": {
+    "ext": "configure-system",
+    "keys": [
+      {
+        "key": "MESSAGE",
+        "value": "hello",
+        "origin": "default",
+        "type": "str",
+        "secret": false,
+        "invalid": false
+      }
+    ],
+    "configured": {
+      "at": "2026-10-18T10:00:00Z",
+      "matches": true,
+      "every_boot": false
+    }
+  },
+  "warnings": [],
+  "error": null
+}

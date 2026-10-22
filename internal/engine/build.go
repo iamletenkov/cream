@@ -12,6 +12,7 @@ import (
 	"github.com/iamletenkov/cream/internal/catalog"
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/resolve"
 	"github.com/iamletenkov/cream/internal/source"
@@ -147,10 +148,21 @@ func (e *Engine) InstallFromDir(ctx context.Context, r BuildRequest) (*InstallRe
 	return &res[0], err
 }
 
+// buildGuard puts cream's policy-rc.d for the hooks of install, upgrade and
+// remove in the build phase (§10.2) and returns what takes it away; in live
+// it does nothing.
+func (e *Engine) buildGuard() (func(), error) {
+	if e.Phase() != PhaseBuild {
+		return func() {}, nil
+	}
+	return e.policyRcDPut()
+}
+
 // buildPhase is a copy of the engine whose Phase() is build: hooks get
 // CREAM_PHASE=build, configure is only enabled, systemd is not touched.
 func (e *Engine) buildPhase() *Engine {
 	b := *e
+	b.phase = PhaseBuild
 	env := e.Env
 	b.Env = func(k string) string {
 		if k == "CREAM_PHASE" {
@@ -198,10 +210,14 @@ func buildCompare(ext, field, want, found string) error {
 }
 
 // buildParamsDigest is params_digest of the layer's parameters, as resolve
-// computes it on the host: a secret enters only as "<secret>".
+// computes it on the host: a secret enters only as "<secret>", a scope: build
+// key not at all (§10.9).
 func buildParamsDigest(m *manifest.Manifest, changes []config.Change) string {
 	vals := make(map[string]string, len(changes))
 	for _, c := range changes {
+		if sp, ok := m.Config.Lookup(c.Key); ok && sp.Scope == keytype.ScopeBuild {
+			continue
+		}
 		vals[c.Key] = c.Value
 	}
 	return state.ParamsDigest(vals, func(k string) bool {

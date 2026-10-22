@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 
 	"github.com/iamletenkov/cream/internal/cerr"
@@ -23,9 +24,11 @@ import (
 func newEngine(ctx *Context) *engine.Engine {
 	l := ctx.Layout
 	now := ctx.App.Now
+	store := state.NewStore(l, now)
+	store.Warn = ctx.Warn // labels.write_failed (cream.json)
 	return &engine.Engine{
 		L:         l,
-		Store:     state.NewStore(l, now),
+		Store:     store,
 		Locks:     lock.NewLocker(l, ctx.Globals.LockTimeout, ctx.App.Env),
 		Run:       runner.Exec{},
 		Systemctl: systemd.NewSystemctl(l, execCommand),
@@ -38,6 +41,25 @@ func newEngine(ctx *Context) *engine.Engine {
 		Stdout:    ctx.App.Stdout,
 		Stderr:    ctx.App.Stderr,
 	}
+}
+
+// phaseEngine is newEngine with the phase decided (§10.1): --phase (phase,
+// "" — not given), else CREAM_PHASE of a parent cream, else PID 1. The
+// decision goes to the --json envelope and, unless -q, to stderr as one line
+// (the build log of an image names the phase and why, §10.1).
+func phaseEngine(ctx *Context, phase string) (*engine.Engine, error) {
+	e := newEngine(ctx)
+	p, err := e.ResolvePhase(phase)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.Phase != nil {
+		*ctx.Phase = p
+	}
+	if !ctx.Globals.Quiet {
+		_, _ = fmt.Fprintf(ctx.Stderr(), "cream: фаза %s (%s)\n", p.Phase, p.Reason)
+	}
+	return e, nil
 }
 
 // execCommand runs a command without a shell (systemd.ExecFunc): stdout and

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/manifest"
 	"github.com/iamletenkov/cream/internal/semver"
 	"github.com/iamletenkov/cream/internal/state"
@@ -41,6 +42,22 @@ type Layer struct {
 	Token          string   `json:"token"`
 	Pinned         bool     `json:"pinned"`
 	SecretParams   []string `json:"secret_params"`
+}
+
+// CheckPlatform runs steps 2–3 of §9.4 for one extension against the host:
+// family, arch, OS, commands and targets (68 platform.*, target.*), the same
+// check Resolve makes for every requested extension. upgrade uses it per
+// extension to block one (blocked:platform, blocked:risk) without failing
+// the others.
+func CheckPlatform(m *manifest.Manifest, h Host, w *cerr.Warnings) error {
+	if w == nil {
+		w = &cerr.Warnings{}
+	}
+	if err := checkPhase(h.Phase); err != nil {
+		return err
+	}
+	_, err := checkPlatform(m, h, w)
+	return err
 }
 
 // checkPlatform runs steps 2–3 of §9.4 for m and returns the layer mode.
@@ -129,8 +146,15 @@ func newLayer(g *gnode, set map[string]*gnode, params map[string]string) Layer {
 		sp, ok := m.Config.Lookup(k)
 		return ok && sp.Secret != ""
 	}
+	// scope: build values are never part of params_digest (spec 2026-10-21
+	// §10.9): they live only in the hook environment.
+	stored := make(map[string]string, len(params))
 	secrets := []string{}
-	for k := range params {
+	for k, v := range params {
+		if sp, ok := m.Config.Lookup(k); ok && sp.Scope == keytype.ScopeBuild {
+			continue
+		}
+		stored[k] = v
 		if secret(k) {
 			secrets = append(secrets, k)
 		}
@@ -144,7 +168,7 @@ func newLayer(g *gnode, set map[string]*gnode, params map[string]string) Layer {
 		SourceResolved: src.Resolved,
 		CatalogVersion: src.CatalogVersion,
 		ExtDigest:      g.Digest,
-		ParamsDigest:   state.ParamsDigest(params, secret),
+		ParamsDigest:   state.ParamsDigest(stored, secret),
 		Deps:           layerDeps(g, set),
 		Mode:           g.mode,
 		Token:          token(src, m),

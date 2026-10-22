@@ -31,8 +31,12 @@ type cliIn struct {
 	Stdin string
 	// Euid — эффективный uid (0 — root).
 	Euid int
-	// Env — окружение cream.
+	// Env — окружение cream. CREAM_PHASE по умолчанию live: на временном
+	// корне нет /proc, и автоопределение фазы (§10.1) отказало бы 64;
+	// {"CREAM_PHASE": ""} включает автоопределение.
 	Env map[string]string
+	// TTY — stdin и stderr — терминал (App.Interactive).
+	TTY bool
 }
 
 // cliOut — итог вызова: код выхода и потоки.
@@ -48,10 +52,15 @@ type cliOut struct {
 func runCLI(t *testing.T, in cliIn, args ...string) cliOut {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
+	env := map[string]string{"CREAM_PHASE": "live"}
+	for k, v := range in.Env {
+		env[k] = v
+	}
 	app := App{Stdin: strings.NewReader(in.Stdin), Stdout: &stdout, Stderr: &stderr,
-		Env:  func(k string) string { return in.Env[k] },
-		Euid: func() int { return in.Euid },
-		Now:  func() time.Time { return cliNow }}
+		Env:         func(k string) string { return env[k] },
+		Euid:        func() int { return in.Euid },
+		Now:         func() time.Time { return cliNow },
+		Interactive: func() bool { return in.TTY }}
 	if in.Root != "" {
 		args = append([]string{"--root", in.Root}, args...)
 	}

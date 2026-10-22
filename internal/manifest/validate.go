@@ -135,6 +135,9 @@ func validate(r *rawManifest) (*Manifest, error) {
 	if m.Hooks, err = validateHooks(m.Kind, r.Hooks); err != nil {
 		return nil, err
 	}
+	if err := checkFamilyHooks(m.Platform.Family, m.Hooks); err != nil {
+		return nil, err
+	}
 	if m.Config, err = validateKeys(r.Config.Keys); err != nil {
 		return nil, err
 	}
@@ -164,8 +167,8 @@ func validatePlatform(r *rawPlatform) (Platform, error) {
 		return Platform{}, invalid("platform", "обязательное поле")
 	}
 	p := Platform{Family: r.Family}
-	if r.Family != "deb" {
-		return p, invalid("platform.family", "%q: cream/v1 знает только deb", r.Family)
+	if r.Family != FamilyDeb && r.Family != FamilyOpenWrt {
+		return p, invalid("platform.family", "%q: cream/v1 знает deb и openwrt", r.Family)
 	}
 	if len(r.Arch) == 0 {
 		return p, invalid("platform.arch", "непустой список из amd64, arm64")
@@ -202,6 +205,28 @@ func validatePlatform(r *rawPlatform) (Platform, error) {
 	}
 	p.Commands = r.Commands
 	return p, nil
+}
+
+// checkFamilyHooks applies the limits of the openwrt family (ADR-0005):
+// configure runs from procd init scripts — no graphical stage, and no
+// after/before/wants (systemd unit names), the order is the stage only.
+func checkFamilyHooks(family string, hooks map[HookName]Hook) error {
+	hk, ok := hooks[HookConfigure]
+	if family != FamilyOpenWrt || !ok {
+		return nil
+	}
+	if hk.Stage == StageGraphical {
+		return invalid("hooks.configure.stage", "graphical: у семейства openwrt нет графической стадии (early, system, cloud-user)")
+	}
+	for _, l := range []struct {
+		name string
+		in   []string
+	}{{"after", hk.After}, {"before", hk.Before}, {"wants", hk.Wants}} {
+		if len(l.in) > 0 {
+			return invalid("hooks.configure."+l.name, "у семейства openwrt порядок configure задаёт только стадия: after, before, wants — имена юнитов systemd")
+		}
+	}
+	return nil
 }
 
 func validateTargets(r rawTargets) (Targets, error) {
@@ -316,8 +341,8 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 			hk.Timeout = d
 		}
 		if h != HookConfigure {
-			if r.Stage != "" || r.After != nil || r.Before != nil || r.Wants != nil {
-				return nil, invalid(field, "stage, after, before, wants — только у configure")
+			if r.Stage != "" || r.After != nil || r.Before != nil || r.Wants != nil || r.EveryBoot != nil {
+				return nil, invalid(field, "stage, after, before, wants, every_boot — только у configure")
 			}
 		} else {
 			switch st := Stage(r.Stage); st {
@@ -340,6 +365,7 @@ func validateHooks(kind Kind, in map[string]rawHook) (map[HookName]Hook, error) 
 				}
 				*l.out = l.in
 			}
+			hk.EveryBoot = r.EveryBoot != nil && *r.EveryBoot
 		}
 		out[h] = hk
 	}
@@ -421,19 +447,22 @@ func validateKeys(in map[string]rawKey) (keytype.Schema, error) {
 		switch keytype.Scope(r.Scope) {
 		case "", keytype.ScopeConfig:
 			sp.Scope = keytype.ScopeConfig
-		case keytype.ScopeInstall:
-			sp.Scope = keytype.ScopeInstall
+		case keytype.ScopeInstall, keytype.ScopeBuild:
+			sp.Scope = keytype.Scope(r.Scope)
 		default:
-			return nil, invalid(field+".scope", "%q: допустимо config или install", r.Scope)
+			return nil, invalid(field+".scope", "%q: допустимо config, install или build", r.Scope)
 		}
 		if r.Default != nil {
 			sp.Default = *r.Default
 		}
+		// A scope: build key with empty: false and no default is required: its
+		// value comes with every install (spec 2026-10-21 §10.9).
+		requiredBuild := sp.Scope == keytype.ScopeBuild && r.Default == nil && !sp.Empty
 		if r.Pattern {
 			if sp.Default != "" {
 				return nil, invalid(field+".default", "у шаблона умолчания нет")
 			}
-		} else if err := sp.CheckValue(sp.Default); err != nil {
+		} else if err := sp.CheckValue(sp.Default); err != nil && !requiredBuild {
 			hint := ""
 			if typ.Kind == keytype.KindBool {
 				hint = " (bool в cream — строка 0 или 1, не true/false)"

@@ -10,6 +10,7 @@ import (
 	"github.com/iamletenkov/cream/internal/catalog"
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/config"
+	"github.com/iamletenkov/cream/internal/initsys"
 	"github.com/iamletenkov/cream/internal/keytype"
 	"github.com/iamletenkov/cream/internal/lock"
 	"github.com/iamletenkov/cream/internal/manifest"
@@ -19,10 +20,10 @@ import (
 	"github.com/iamletenkov/cream/internal/semver"
 	"github.com/iamletenkov/cream/internal/source"
 	"github.com/iamletenkov/cream/internal/state"
-	"github.com/iamletenkov/cream/internal/systemd"
 )
 
-// InstallRequest is `cream install` on a live machine (§6.5, §11.2).
+// InstallRequest is `cream install` from the sources, live or build (§6.5,
+// §11.2; build phase — spec 2026-10-21 §10.2).
 type InstallRequest struct {
 	// Refs are [source/]name[@version]; several only without parameters.
 	Refs []string
@@ -37,6 +38,9 @@ type InstallRequest struct {
 	AcceptRisk bool
 	// AllowSkip turns hook code 20 into status skipped without an error.
 	AllowSkip bool
+	// WithDeps adds the missing depends of the requested extensions from the
+	// source each was found in (§9.4).
+	WithDeps bool
 }
 
 // InstallResult is the result of install/upgrade for one extension: the
@@ -81,6 +85,10 @@ func (e *Engine) Install(ctx context.Context, r InstallRequest) (*InstallResult,
 // lower one 65 version.downgrade, the same version with another digest
 // 65 version.same_digest. The results come in install order; on an error
 // they hold the extensions done before it.
+//
+// In the build phase (Phase()) the same path applies the build rules
+// (§10.2): targets.build, hooks under policy-rc.d, configure only enabled,
+// systemd untouched. WithDeps adds missing depends first.
 func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallResult, error) {
 	if len(r.Refs) == 0 {
 		return nil, cerr.New(cerr.ExitUsage, "usage.args", "install: нужна ссылка на расширение")
@@ -135,8 +143,54 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 	if err != nil {
 		return nil, err
 	}
+	if r.WithDeps {
+		if entries, err = e.installWithDeps(dirs, entries, all); err != nil {
+			return nil, err
+		}
+	}
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
 	return e.installEntries(ctx, entries, changes, all, dirs,
 		installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip})
+}
+
+// installWithDeps adds to entries the depends (by name, transitively) that
+// neither the registry nor the request has, each from the source of the
+// extension that needs it (--with-deps, §9.4). A dependency that source
+// lacks stays missing: the graph refuses with 67 deps.missing and its
+// candidates. The range is not checked here: a wrong version is 67
+// deps.version of the graph. requires are not added.
+func (e *Engine) installWithDeps(dirs []source.SourceDir, entries []catalog.Entry, all []Installed) ([]catalog.Entry, error) {
+	have := make(map[string]bool, len(all)+len(entries))
+	for _, in := range all {
+		if in.Manifest != nil {
+			have[in.Record.Name] = true
+		}
+	}
+	for _, en := range entries {
+		have[en.Manifest.Name] = true
+	}
+	for i := 0; i < len(entries); i++ {
+		en := entries[i]
+		for _, d := range en.Manifest.Depends {
+			if have[d.Name] {
+				continue
+			}
+			dep, err := catalog.Lookup(dirs, catalog.Ref{Source: en.Source.Source.Name, Name: d.Name}, e.Cream, e.Warn)
+			switch {
+			case cerr.CodeOf(err) == "not_found.extension":
+				continue
+			case err != nil:
+				return nil, err
+			}
+			have[d.Name] = true
+			entries = append(entries, dep)
+		}
+	}
+	return entries, nil
 }
 
 // installSourceDirs reads sources.yaml and sources.lock and returns the
@@ -159,33 +213,35 @@ func (e *Engine) installSourceDirs() ([]source.SourceDir, error) {
 func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, changes map[string][]config.Change,
 	all []Installed, dirs []source.SourceDir, o installOpts) ([]InstallResult, error) {
 	prev := make(map[string]*Installed, len(all))
-	nodes := make([]resolve.Node, 0, len(all))
 	for i := range all {
-		in := &all[i]
-		prev[in.Record.Name] = in
-		if in.Manifest == nil {
-			continue
-		}
-		files := make([]string, 0, len(in.Record.Files))
-		for _, f := range in.Record.Files {
-			files = append(files, f.Dst)
-		}
-		nodes = append(nodes, resolve.Node{Manifest: in.Manifest, Installed: true, Files: files,
-			Source: in.Record.Source, Digest: in.Record.ExtDigest})
+		prev[all[i].Record.Name] = &all[i]
 	}
+	nodes := installNodes(all)
 	byName := make(map[string]catalog.Entry, len(entries))
 	ops := make(map[string]string, len(entries))
 	req := make([]resolve.Node, 0, len(entries))
 	params := map[string]map[string]string{}
+	stored := make(map[string][]config.Change, len(changes))
+	build := map[string][]config.Change{}
 	for _, en := range entries {
 		name := en.Manifest.Name
+		// scope: build values leave the stored parameters here: they reach only
+		// the hook environment, never the domain or params_digest (§10.9).
+		st, b, err := config.SplitBuild(changes[name], en.Manifest.Config)
+		if err != nil {
+			return nil, err
+		}
+		stored[name], build[name] = st, b
 		op, err := installDecide(prev[name], en)
 		if err != nil {
 			return nil, err
 		}
+		if p := prev[name]; op == installOpUpgrade && p.Record.Held {
+			return nil, heldError(name, p.Record.Version, en.Manifest.Version.String())
+		}
 		byName[name], ops[name] = en, op
 		req = append(req, resolve.Node{Manifest: en.Manifest, Source: installSourceRef(en.Source), Digest: en.Digest})
-		if ch := changes[name]; len(ch) > 0 {
+		if ch := stored[name]; len(ch) > 0 {
 			p := make(map[string]string, len(ch))
 			for _, c := range ch {
 				p[c.Key] = c.Value
@@ -213,8 +269,8 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 			e.warn("install.build_none", "%s: targets.build: none — в фазе build не ставится", layer.Name)
 			continue
 		}
-		job := installJob{entry: byName[layer.Name], layer: layer, changes: changes[layer.Name],
-			prev: prev[layer.Name], op: ops[layer.Name], phase: phase, registry: recs}
+		job := installJob{entry: byName[layer.Name], layer: layer, changes: stored[layer.Name],
+			build: build[layer.Name], prev: prev[layer.Name], op: ops[layer.Name], phase: phase, registry: recs}
 		res, err := e.installOne(ctx, job, o)
 		if res != nil {
 			out = append(out, *res)
@@ -334,9 +390,11 @@ func (e *Engine) installCandidates(err error, dirs []source.SourceDir) error {
 
 // installJob is one extension to install or upgrade.
 type installJob struct {
-	entry    catalog.Entry
-	layer    resolve.Layer
-	changes  []config.Change
+	entry   catalog.Entry
+	layer   resolve.Layer
+	changes []config.Change
+	// build are the scope: build assignments: only the hook environment.
+	build    []config.Change
 	prev     *Installed
 	op       string
 	phase    string
@@ -364,6 +422,10 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 		if !scoped {
 			h.Release()
+			if len(j.build) > 0 {
+				e.warn("install.build_unused",
+					"%s: установлено и параметры установки не менялись — хук install не запускался, значения ключей только для сборки не применены (--reinstall)", name)
+			}
 			res := &InstallResult{Record: j.prev.Record}
 			if rest := installNonScope(m, j.changes); len(rest) > 0 {
 				if _, err := e.Set(ctx, name, rest, SetOptions{}); err != nil {
@@ -374,6 +436,13 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 	}
 
+	// scope: build values: the environment of this operation's hook only; a
+	// required one is required for the install hook (§10.9). Checked, like
+	// the parameters, before the tree.
+	buildEnv, err := config.BuildValues(m.Config, j.build, j.op == installOpInstall)
+	if err != nil {
+		return nil, err
+	}
 	// Parameters are checked before the tree and written after files (§6.5,
 	// steps 3–4): a refusal of files (67) leaves the domain untouched.
 	if len(j.changes) > 0 {
@@ -409,8 +478,10 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 	if j.prev != nil {
 		from = j.prev.Record.Version
 		rec.Phase, rec.InstalledAt, rec.Configure = j.prev.Record.Phase, j.prev.Record.InstalledAt, j.prev.Record.Configure
+		rec.Held = j.prev.Record.Held
+		rec.SecretsRev = j.prev.Record.SecretsRev
 	}
-	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase}
+	hook, env := manifest.HookInstall, runner.EnvInput{Phase: j.phase, Build: buildEnv}
 	if upgrade {
 		env.PrevVersion = from
 		if hasHook(m, manifest.HookUpgrade) {
@@ -426,7 +497,12 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		}
 		// A write that fails after the tree and files are in place is a failed
 		// operation in the registry, like a failed hook: the retry repeats it.
-		_, herr = dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only})
+		var written []string
+		written, herr = dom.Set(j.changes, config.SetOpts{AllowInstallScope: true, Only: only})
+		// A secret written by install/upgrade counts like cream set (§10.7).
+		if secretChanged(m, written) {
+			rec.SecretsRev++
+		}
 	}
 	if herr == nil && hasHook(m, hook) {
 		outcome, herr = e.RunHook(WithLock(ctx, h, lock.Exclusive), Installed{Record: rec, Manifest: m}, hook, env)
@@ -441,6 +517,7 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 		// The old version stays in the registry and in .prev (§6.5).
 		failed := j.prev.Record
 		failed.Status, failed.PrevVersion, failed.Files = state.StatusFailedUpgrade, from, files
+		failed.SecretsRev = rec.SecretsRev
 		rec = failed
 	case herr != nil:
 		rec.Status = state.StatusFailed
@@ -493,20 +570,21 @@ func (e *Engine) installLive(ctx context.Context, rec state.Record, m *manifest.
 	return e.Configure(ctx, rec.Name, reason, ConfigureOptions{Wait: true})
 }
 
-// installEnable enables cream-configure@<ext> for a configure hook (§6.4)
+// installEnable enables the configure of ext at boot for a configure hook
+// (§6.4: cream-configure@<ext> on systemd, the stage mark on procd)
 // or removes a configure the new version no longer has.
 func (e *Engine) installEnable(rec *state.Record, m *manifest.Manifest) error {
 	hk, ok := m.Hooks[manifest.HookConfigure]
 	if !ok {
 		if rec.Configure != nil {
-			if err := systemd.Disable(e.L, rec.Name); err != nil {
+			if err := initsys.For(e.L).Disable(e.L, rec.Name); err != nil {
 				return installSystemdErr(err, rec.Name)
 			}
 		}
 		rec.Configure = nil
 		return nil
 	}
-	target, err := systemd.Enable(e.L, rec.Name, systemd.StageSpec{Stage: string(hk.Stage),
+	target, err := initsys.For(e.L).Enable(e.L, rec.Name, initsys.StageSpec{Stage: string(hk.Stage),
 		After: hk.After, Before: hk.Before, Wants: hk.Wants})
 	if err != nil {
 		return installSystemdErr(err, rec.Name)

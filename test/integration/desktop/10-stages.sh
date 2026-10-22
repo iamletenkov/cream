@@ -80,3 +80,11 @@ for u in cream-configure@configure-cloud-user.service cream-configure@configure-
 	systemd-analyze verify "$u" >/tmp/verify.txt 2>&1 || true
 	hasnt /tmp/verify.txt 'cycle' "systemd-analyze verify $u: без цикла"
 done
+
+step "отметки configure сняты — загрузка выполнит configure, как первая из образа"
+# Прогон configure до перезагрузки записал отметки выполнения (§10.7): без
+# них следующая загрузка проверяет порядок и запуск configure стадий.
+for e in configure-cloud-user configure-graphical desktop-like; do
+	rm -f "/var/lib/cream/configured/$e.json"
+	absent "/var/lib/cream/configured/$e.json" "$e: отметки нет"
+done

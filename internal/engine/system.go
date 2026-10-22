@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/iamletenkov/cream/internal/cerr"
+	"github.com/iamletenkov/cream/internal/initsys"
 	"github.com/iamletenkov/cream/internal/state"
-	"github.com/iamletenkov/cream/internal/systemd"
 )
 
 // SystemInitResult is the result of `cream system init` (golden: system-init.json).
@@ -20,8 +20,8 @@ type SystemInitResult struct {
 // running systemd a daemon-reload follows — its failure is a
 // systemd.reload_failed warning, not an error.
 func (e *Engine) SystemInit(ctx context.Context) (SystemInitResult, error) {
-	res := SystemInitResult{Unit: "cream-configure@.service"}
-	if err := systemd.Init(e.L); err != nil {
+	res := SystemInitResult{Unit: initsys.For(e.L).Unit()}
+	if err := initsys.For(e.L).Init(e.L); err != nil {
 		return res, cerr.Wrap(err, cerr.ExitState, cerr.CodeIOWrite, "system init")
 	}
 	if err := e.systemInitTargets(ctx); err != nil {
@@ -54,7 +54,7 @@ func (e *Engine) systemInitTargets(ctx context.Context) error {
 		if rec.Configure == nil {
 			continue
 		}
-		target, err := systemd.Target(e.L, rec.Configure.Stage)
+		target, err := initsys.For(e.L).Target(e.L, rec.Configure.Stage)
 		if err != nil {
 			return fmt.Errorf("system init: %s: %w", rec.Name, err)
 		}
@@ -92,7 +92,7 @@ func (e *Engine) applyTargets(recs []state.Record) error {
 		if !ok || rec.Configure == nil {
 			continue
 		}
-		target, err := systemd.Target(e.L, rec.Configure.Stage)
+		target, err := initsys.For(e.L).Target(e.L, rec.Configure.Stage)
 		if err != nil {
 			return fmt.Errorf("system init: %s: %w", rec.Name, err)
 		}
