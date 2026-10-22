@@ -18,7 +18,7 @@
 
 - [x] Task 1: [контроллер] `tsh ssh` на PoC-узле OpenWrt (срез 0, день 1; провал — стоп, решение по варианту B)
 
-- [ ] Task 2: [cream-extensions] Ядро `lib/teleport-core.sh` (одна копия в git), снимок кладёт его в оба расширения, `debian/teleport` 4.2.0 без изменения поведения
+- [x] Task 2: [cream-extensions] Ядро `lib/teleport-core.sh` (одна копия в git), снимок кладёт его в оба расширения, `debian/teleport` 4.2.0 без изменения поведения
 
 - [ ] Task 3: [stvor-agent] `initsys` (systemd/procd), пути и имя расширения по семейству, свой `machine-id`, телеметрия без PSI — поверх телеметрии
 
@@ -167,7 +167,7 @@ Stvor (T11). Провал T1 останавливает T5, T8 и всё пос�
   `files/keep.d` → `/lib/upgrade/keep.d/teleport`, хуки `install/apply/upgrade/remove`, README. `files/teleport-core.sh`
   объявлен в `files`, в git его нет — кладёт снимок/staged-дерево (T2); строка в `lib/teleport-core.consumers`.
 - Решения PoC (спека §3) — тестами: в init нет `stdout`/`stderr`; `TMPDIR=/opt/teleport/tmp` в `procd_set_param env`;
-  `teleport.yaml` с `log.output: syslog`, `pam.enabled: false`, `enhanced_recording.enabled: false`, `data_dir: /opt/teleport/data`;
+  `teleport.yaml` с `log.output: /opt/teleport/log/teleport.log` (файл 0700/0600, `logcap` 1 МиБ, не syslog), `pam.enabled: false`, `enhanced_recording.enabled: false`, `data_dir: /opt/teleport/data`;
   маркер `/opt/teleport/.cream-owned`; `remove` снимает всё, кроме того, что снимать запрещает контракт; `apply` перезапускает
   фоном (`validate.apply_blocking` молчит); `validate.openwrt_tmpfs` молчит; подсказки называют `teleport-openwrt`.
 - Тесты: H-тесты слоя + сценарий на корневой ФС OpenWrt в docker (install из локального набора → render → `managed-status`).
