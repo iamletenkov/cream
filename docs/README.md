@@ -17,3 +17,4 @@
 | [runbooks/03_upgrade-cream.md](runbooks/03_upgrade-cream.md) | обновление cream на роботе: `.deb`, сверка `SHA256SUMS`, проверка и откат |
 | [plans/2026-10-18-cream-core.md](plans/2026-10-18-cream-core.md) | план MVP cream: 23 задачи, 9 волн, Progress Tracker |
 | [research/2026-10-18-bisquite-extension-system-inventory.md](research/2026-10-18-bisquite-extension-system-inventory.md) | опись системы расширений bisquite на 2026-10-18 — вход спеки |
+| [research/2026-10-22-openwrt-teleport-glibc-poc.md](research/2026-10-22-openwrt-teleport-glibc-poc.md) | PoC варианта A спеки OpenWrt: Teleport 18.10 с glibc-рантаймом на OpenWrt 25.12 — размеры, камни, вывод |
