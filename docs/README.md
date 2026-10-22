@@ -53,6 +53,9 @@
 | [specs/2026-10-18-cream-core.md](specs/2026-10-18-cream-core.md) | исходная спека `cream/v1` с обоснованиями и отвергнутыми вариантами |
 | [specs/2026-10-21-bisquite-bundled-cream.md](specs/2026-10-21-bisquite-bundled-cream.md) | спека (редакция 4, вопросы закрыты): bisquite везёт cream и каталог бандлом, скрытый шаг cream, VMFILE с `RUN_COMMAND cream install`, проверка как hadolint, метки из `/etc/image-labels.d`, `bs image diff`, configure по отметке выполнения и признаки `every_boot` |
 | [plans/2026-10-21-bisquite-bundled-cream.md](plans/2026-10-21-bisquite-bundled-cream.md) | план к ней: 29 задач по дорожкам cream / cream-extensions / bisquite / Stvor, порядок выпусков cream 1.2.0 → каталог → пин Stvor → bisquite 3.0.0 |
+| [specs/2026-10-20-openwrt.md](specs/2026-10-20-openwrt.md) | спека (принята, возобновлена 2026-10-22): машины на OpenWrt 25.12+ (amd64, arm64) роботами Stvor — Teleport с glibc-рантаймом, `openwrt/teleport` и `openwrt/stvor-agent`, отдельный снимок каталога, `POST`-команда для `wget`, `sysupgrade` |
+| [plans/2026-10-22-openwrt-robots.md](plans/2026-10-22-openwrt-robots.md) | план к ней: 16 задач по дорожкам cream-extensions / stvor-agent / Stvor / bisquite, первая — `tsh ssh` на PoC-узле, приёмка на ВМ PVE |
+| [research/2026-10-22-openwrt-teleport-glibc-poc.md](research/2026-10-22-openwrt-teleport-glibc-poc.md) | PoC варианта A спеки OpenWrt: Teleport 18.10 с glibc-рантаймом на OpenWrt 25.12 — размеры, камни, вывод |
 | [plans/2026-10-18-cream-core.md](plans/2026-10-18-cream-core.md) | план MVP (закрыт) |
 | [research/2026-10-18-bisquite-extension-system-inventory.md](research/2026-10-18-bisquite-extension-system-inventory.md) | опись системы расширений bisquite до cream |
 | [STATUS.md](STATUS.md) | текущее состояние работ (handoff между сессиями) |
