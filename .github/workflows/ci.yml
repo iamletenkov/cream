@@ -158,7 +158,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # cream на OpenWrt 25.12 (ADR-0005): корневая ФС openwrt-builder v0.3.0
+  # cream на OpenWrt 25.12 (ADR-0005): корневая ФС openwrt-builder v0.3.1
   # (musl, busybox, apk) в контейнере, сценарий test/openwrt/scenario.sh.
   openwrt:
     name: OpenWrt 25.12 (amd64)

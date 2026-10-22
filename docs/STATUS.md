@@ -18,7 +18,7 @@
 - **OpenWrt** (план bisquite-bundled-cream Task 27, [ADR 0005](adr/0005-openwrt-family-procd.md), выйдет минором
   1.3.0): `platform.family: openwrt`, раскладка `/opt/cream/var`, configure из init-скриптов procd (`S19`/`S95`),
   `TMPDIR` на диске, `IPKG_INSTROOT=/` в фазе build, поставка `tar.gz`; `make test-openwrt` (корневая ФС
-  openwrt-builder v0.3.0 в контейнере) и приёмка на ВМ PVE — [руководство](guides/openwrt.md).
+  openwrt-builder v0.3.1 в контейнере) и приёмка на ВМ PVE — [руководство](guides/openwrt.md).
 
 ## В работе
 - `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
