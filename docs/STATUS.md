@@ -20,6 +20,9 @@
   `TMPDIR` на диске, `IPKG_INSTROOT=/` в фазе build, поставка `tar.gz`; `make test-openwrt` (корневая ФС
   openwrt-builder v0.3.1 в контейнере) и приёмка на ВМ PVE — [руководство](guides/openwrt.md).
 
+- **План bisquite-bundled-cream закрыт** (2026-10-22): cream 1.3.0, каталог 5.4.1, bisquite 3.0.0 со встроенным
+  cream-бандлом; итог и расхождения — в [плане](plans/2026-10-21-bisquite-bundled-cream.md#итог-финала-2026-10-22-и-что-разошлось).
+
 ## В работе
 - `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
   `--accept-risk <ext>`, `-y`, `--fail-fast`, частичный исход с кодом худшего; `cream hold`/`unhold`.
@@ -28,7 +31,6 @@
 ## Дальше
 1. Проверить PR подъёма пина cream 1.1.4 в cream-extensions, bisquite и Stvor (dispatch выпуска).
 2. Интеграция bisquite: фаза build по [guides/build-phase.md](guides/build-phase.md).
-3. OpenWrt в каталоге и bisquite (Task 28): корень `extensions/openwrt`, скрытый шаг cream в `OpenWrtBuilder`.
 
 ## Бэклог
 - Drop-in стадии переписывает только `install`/`upgrade` расширения: у `early`, включённого cream 1.1.0, строки

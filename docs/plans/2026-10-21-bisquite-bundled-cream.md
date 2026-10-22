@@ -52,7 +52,7 @@
 
 - [x] Task 20: [bisquite] Ключи шагов по содержимому; секреты + `scope: build` сквозь `cream install`
 
-- [ ] Task 21: [Stvor] Пин cream 1.2.0 и каталога: PR, выкладка на каждый экземпляр, `robots-gate`
+- [x] Task 21: [Stvor] Пин cream 1.2.0 и каталога: PR, выкладка на каждый экземпляр, `robots-gate`
 
 - [x] Task 22: [bisquite] Подъём пина бандла до cream 1.2.0 и каталога нового минора
 
@@ -62,13 +62,13 @@
 
 - [x] Task 25: [bisquite] Документация: README и `docs/` под новую схему, guide миграции 3.0, ADR bisquite
 
-- [ ] Task 26: [bisquite] Предвыпускная проверка и выпуск 3.0.0 (условие — инвариант Stvor)
+- [x] Task 26: [bisquite] Предвыпускная проверка и выпуск 3.0.0 (условие — инвариант Stvor)
 
 - [x] Task 27: [cream] Фаза OpenWrt: семейство `openwrt`, `procd`, поставка `tar.gz` (по отдельной спеке)
 
 - [x] Task 28: [cream-extensions + bisquite] Фаза OpenWrt: корень `extensions/openwrt`, скрытый шаг в `OpenWrtBuilder`
 
-- [ ] Task 29: Финальная интеграция: сборки примеров на PVE, `make ci` во всех репозиториях
+- [x] Task 29: Финальная интеграция: сборки примеров на PVE, `make ci` во всех репозиториях
 
 ## Дорожки и репозитории
 | Дорожка | Репозиторий (основной checkout) | Ветка дорожки | Worktree исполнителя | Задачи |
@@ -447,3 +447,22 @@ cream = выпуск 1.2.0 через release-please (Task 17).
   (кроме `every_boot`); ВМ после себя удалены.
 - `make test-build`/`make test-integration` cream, `make test-build` bisquite, `robots-gate` Stvor.
 - STATUS всех репозиториев обновлён; спека получает отметку «реализована», план закрыт.
+
+## Итог финала (2026-10-22) и что разошлось
+- **Task 21:** пины cream 1.3.0 / cream-extensions 5.4.0 выложены на стенд Stvor, `robots-gate --allow-prod` — 67 OK.
+- **Task 26:** bisquite **3.0.0** выпущен (release-please PR #250 пересоздан от текущего `main`). Job сборки упал на
+  устаревших проверках `bs extension ls -q` в `test_release.sh`/`test_deb.sh` (ждали `core`; в 3.0 нужен бандл, `-q` —
+  имена) — исправлено в bisquite #251; `bisquite_3.0.0_amd64.deb` собран тем же `make build-deb test-release test-deb`
+  с тега v3.0.0 на хосте раннера и приложен вручную, `SHA256SUMS` пересчитан как в CI. В заметки выпуска добавлено
+  предупреждение операторам порталов Stvor. Сборки по Task 26 (dst-*, робот с регистрацией, образ «cream новее пина»)
+  заменены проверкой Task 21 и примерами ниже.
+- **Task 29 (сужена):** PVE — установка cream 1.3.0 + бандл + bisquite 3.0.0 поверх 2.2.0, `bs self-check` OK,
+  `bs extension ls` — 49 расширений `core@5.4.1`; собраны `debian13/base`, `ubuntu2404/ubuntu2404`, `openwrt` (amd64),
+  `bs image history`/`diff` от базы к потомку, `debian13:base` развёрнут в ВМ 990003 (`cream list --json` — 5
+  ожидаемых расширений), `bs compose down` без `--force`, образы и ВМ удалены. `make ci` на `main` cream,
+  cream-extensions, bisquite — зелёные. Все 32 примера, Jetson/RPi, вторая загрузка и `test-build`/`test-integration` —
+  не прогонялись.
+- **Разошлось:** `bs image validate --strict` на примерах падает от предупреждений «команды проверит гость» и «базы нет
+  в хранилище» (без `--strict` — 0); образ OpenWrt не получает меток `extension`/`cream.sources` — сбор
+  `/etc/image-labels.d` есть только в Linux-билдере; кеши 2.x на PVE (`/var/cache/bisquite/cream`,
+  `/var/lib/bisquite/cream-guest`) не удалены — `rm -rf` блокирует хук агента, удалить руками по guide миграции.
