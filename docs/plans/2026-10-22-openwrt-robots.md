@@ -20,7 +20,7 @@
 
 - [x] Task 2: [cream-extensions] Ядро `lib/teleport-core.sh` (одна копия в git), снимок кладёт его в оба расширения, `debian/teleport` 4.2.0 без изменения поведения
 
-- [ ] Task 3: [stvor-agent] `initsys` (systemd/procd), пути и имя расширения по семейству, свой `machine-id`, телеметрия без PSI — поверх телеметрии
+- [x] Task 3: [stvor-agent] `initsys` (systemd/procd), пути и имя расширения по семейству, свой `machine-id`, телеметрия без PSI — поверх телеметрии
 
 - [ ] Task 4: [stvor-agent] Ассет `stvor-agent_<v>_linux_<arch>.tar.gz`, e2e на корневой ФС OpenWrt, `SECURITY.md`, выпуск
 
@@ -30,11 +30,11 @@
 
 - [ ] Task 7: [cream-extensions] Регресс `debian/teleport` (живой прогон) и выпуск каталога
 
-- [ ] Task 8: [Stvor] Набор Teleport `openwrt-<arch>` на стенде: `build-teleport-openwrt.sh`, пины glibc и patchelf, `TELEPORT_OPENWRT_SHA256_<ARCH>`, FAIL в preflight/smoke
+- [x] Task 8: [Stvor] Набор Teleport `openwrt-<arch>` на стенде: `build-teleport-openwrt.sh`, пины glibc и patchelf, `TELEPORT_OPENWRT_SHA256_<ARCH>`, FAIL в preflight/smoke
 
-- [ ] Task 9: [Stvor] Набор бутстрапа по семейству, ветка `openwrt` скрипта установки, пины в `settings.py`/`x-runtime-env`, `robot-pin-bump.sh` по группам
+- [x] Task 9: [Stvor] Набор бутстрапа по семейству, ветка `openwrt` скрипта установки, пины в `settings.py`/`x-runtime-env`, `robot-pin-bump.sh` по группам
 
-- [ ] Task 10: [Stvor] `POST` на install-эндпоинте (функция + роутер Traefik), `command_openwrt`, строка OpenWrt на `/robots/new`
+- [x] Task 10: [Stvor] `POST` на install-эндпоинте (функция + роутер Traefik), `command_openwrt`, строка OpenWrt на `/robots/new`
 
 - [ ] Task 11: [Stvor] `robots-gate`/`stand-seed` на OpenWrt-ВМ, runbook 10 и подъёма Teleport, ADR Stvor, подъём пинов
 
@@ -45,6 +45,22 @@
 - [ ] Task 14: [контроллер] arm64: решение по AAVMF на PVE (Р10), приёмка на ВМ `armsr` или перенос на RPi владельца
 
 - [ ] Task 15: Финальная интеграция + `make ci` во всех затронутых репозиториях
+
+## Рулинги исполнения
+- **Т9/Т10 — набор Teleport:** скачивается плоско (как остальные файлы бутстрапа) и передаётся расширению через
+  `TELEPORT_TARBALL=`; отдельный путь `<mirror>/binaries/teleport/<v>/…-openwrt-<arch>-bin.tar.gz` не нужен.
+- **Команда OpenWrt:** `uclient-fetch -qO- --post-data='' --ca-certificate=/etc/ssl/certs/ca-certificates.crt '<url>' | sh`;
+  без ca-bundle — понятный отказ до загрузки. Все загрузки на OpenWrt — только `uclient-fetch` с проверкой CA
+  (busybox-`wget` сертификат не проверяет).
+- **Тесты скрипта:** busybox в образ backend не добавляем — цель `make test-openwrt-shell` в разовом контейнере и
+  задача CI `openwrt-shell`.
+- **Код установки** выдаётся, если набор есть хотя бы у одного семейства (Debian или OpenWrt); Р5 сохраняется.
+- **Порог ОЗУ** — 900 000 КиБ (`MemTotal`) = «номинально 1 ГБ».
+- **Т3:** `machine-id` агента — `0640 root:stvor-telemetry`.
+- **В7 закрыт владельцем 2026-10-22:** свой форк Teleport, только внутри организации, исходники доступны сотрудникам и
+  уполномоченным лицам → AGPL выполнен; пересмотр — при внешних пользователях без доступа к исходникам. Пин arm64
+  можно выкладывать.
+- **Р10:** на PVE установлен `pve-edk2-firmware-aarch64` — arm64-ВМ `armsr` возможна.
 
 ## Правила плана
 1. **Не более 3 исполнителей одновременно** (VM 12 CPU / 29 ГБ, история OOM): дорожка **E** (cream-extensions),
@@ -272,7 +288,7 @@ design-review строки (обе темы).
 - Спросить владельца о `pve-edk2-firmware-aarch64` на PVE-ноде (Р10). Да — ВМ `arch: aarch64` (TCG) из
   `openwrt-25.12.6-custom-armsr-armv8-generic-ext4-combined-efi.qcow2`, сценарий T13 п. 1–6 с набором `openwrt-arm64`.
   Нет / не грузится — перенос приёмки на RPi 4/5 владельца (образы `bcm2711`/`bcm2712` openwrt-builder v0.3.1), задача
-  закрывается после неё. Выпуск arm64-набора на prod — после ответа на В7.
+  закрывается после неё. Выпуск arm64-набора на prod разрешён (В7 закрыт 2026-10-22).
 
 ## Task 15: Финальная интеграция + `make ci`
 - `make ci` в cream-extensions, stvor-agent, bisquite, Stvor на итоговых `main`; Stvor `main` с пинами выпусков;
