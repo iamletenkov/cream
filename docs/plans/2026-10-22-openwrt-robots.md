@@ -5,7 +5,8 @@
 > Классификация — **архитектурная**: четыре репозитория (cream-extensions, stvor-agent, Stvor, bisquite), новая
 > платформа роботов. cream и openwrt-builder **не меняются** (спека §4.1, §4.6). После skeptic (2026-10-22) план
 > упрощён рулингами Р11–Р13: OpenWrt-расширения называются `teleport-openwrt`/`stvor-agent-openwrt` и лежат в общем
-> снимке каталога (второго корня, манифеста и снимка нет); задача «второй снимок» влилась в Task 2, задач — 15.
+> снимке каталога (второго корня, манифеста и снимка нет); задача «второй снимок» влилась в Task 2, задач — 15. 2026-10-23 владелец пересмотрел Р4 спеки (робот переживает
+> `sysupgrade` сам, тем же узлом) — добавлена Task 13a, шаг 6 Task 13 переписан.
 > Цикл на задачу: TDD → `make lint` + тесты по скоупу → reviewer → коммит в ветке задачи → слияние контроллером в
 > ветку дорожки → `make ci` дорожки после волны.
 >
@@ -22,11 +23,11 @@
 
 - [x] Task 3: [stvor-agent] `initsys` (systemd/procd), пути и имя расширения по семейству, свой `machine-id`, телеметрия без PSI — поверх телеметрии
 
-- [ ] Task 4: [stvor-agent] Ассет `stvor-agent_<v>_linux_<arch>.tar.gz`, e2e на корневой ФС OpenWrt, `SECURITY.md`, выпуск
+- [x] Task 4: [stvor-agent] Ассет `stvor-agent_<v>_linux_<arch>.tar.gz`, e2e на корневой ФС OpenWrt, `SECURITY.md`, выпуск
 
 - [x] Task 5: [cream-extensions] Расширение `openwrt/teleport-openwrt`
 
-- [ ] Task 6: [cream-extensions] Расширение `openwrt/stvor-agent-openwrt`
+- [x] Task 6: [cream-extensions] Расширение `openwrt/stvor-agent-openwrt`
 
 - [x] Task 7: [cream-extensions] Регресс `debian/teleport` (живой прогон) и выпуск каталога
 
@@ -36,13 +37,16 @@
 
 - [x] Task 10: [Stvor] `POST` на install-эндпоинте (функция + роутер Traefik), `command_openwrt`, строка OpenWrt на `/robots/new`
 
-- [ ] Task 11: [Stvor] `robots-gate`/`stand-seed` на OpenWrt-ВМ, runbook 10 и подъёма Teleport, ADR Stvor, подъём пинов
+- [x] Task 11: [Stvor] `robots-gate`/`stand-seed` на OpenWrt-ВМ, runbook 10 и подъёма Teleport, ADR Stvor, подъём пинов
 
-- [ ] Task 12: [bisquite] Пример образа OpenWrt-робота и профиль деплоя 1 ГБ / 4 ГБ
+- [x] Task 12: [bisquite] Пример образа OpenWrt-робота и профиль деплоя 1 ГБ / 4 ГБ
 
 - [ ] Task 13: [контроллер] Приёмка amd64: OpenWrt-ВМ на PVE — одна команда, «в сети», SSH через SSO, метки, reboot, `sysupgrade`
 
-- [ ] Task 14: [контроллер] arm64: решение по AAVMF на PVE (Р10), приёмка на ВМ `armsr` или перенос на RPi владельца
+- [ ] Task 13a: [cream-extensions + Stvor] Восстановление после `sysupgrade` тем же узлом: `keep.d` расширений, служба `stvor-restore` (Р4, 2026-10-23)
+
+- [x] Task 14: [контроллер] arm64: решение по AAVMF на PVE (Р10), приёмка на ВМ `armsr` или перенос на RPi владельца
+  — 2026-10-23 приёмка прошла на ВМ `armsr` на PVE (`owrt-arm64-t14`, VMID 990005, Teleport из тарбола форка): одна команда за 88 с под TCG, SSO SSH, метки, телеметрия, reboot тем же узлом (сценарий T13 п. 1–5); фазу 17 гейта на arm64 не гоняли (её уборка выключает Teleport; гейт проверен на amd64); `sysupgrade` на arm64 — в приёмке T13a
 
 - [ ] Task 15: Финальная интеграция + `make ci` во всех затронутых репозиториях
 
@@ -105,7 +109,7 @@
 | 2 | T6 (после T4) | T12 | T9 (локальные пины из сборок E/A) | |
 | 3 | T7 (выпуск каталога) | — | T10 | |
 | 4 | — | — | T11 (пины выпусков) | |
-| 5 | — | — | — | T13, T14, T15 |
+| 5 | T13a (`keep.d`) | — | T13a (`stvor-restore`) | T13 (п. 6 — после T13a), T14, T15 |
 
 Выпуски: stvor-agent (T4) → `cream-extensions` (T7, пин агента в `openwrt/stvor-agent-openwrt/files/pin.env`) → пины
 Stvor (T11). Провал T1 останавливает T5, T8 и всё после них; T2–T4 не зависят от варианта Teleport.
@@ -280,13 +284,43 @@ design-review строки (обе темы).
 3. **stvor-agent**: метка, изменённая в портале, доезжает до узла ≤ интервала агента; телеметрия видна (если 4.1.0 в пинах).
 4. **Перезагрузка** → «в сети» без действий.
 5. Повтор команды с новым кодом — не отказ.
-6. **`sysupgrade`** тем же образом (Р4) → узел офлайн → «Новый секрет» → команда → **тот же узел** (`host_uuid`) онлайн.
+6. **`sysupgrade`** тем же образом с сохранением конфигурации (Р4, после T13a) → без действий на портале служба
+   `stvor-restore` ставит cream и расширения, узел возвращается **тем же** (`host_uuid` и имя в `tctl nodes ls` прежние,
+   второго узла нет), метки агента и телеметрия идут без новых токенов. Затем `sysupgrade -n` (идентичность потеряна) →
+   «Новый секрет» → команда → узел с **новым** `host_uuid` онлайн, старый узел Stvor удалил.
 7. Отказы: ВМ 512 МБ ОЗУ — отказ до изменений; экземпляр без набора arch — сообщение Р5.
 8. Уборка ВМ и `owrt-*`; итог — раздел «Приёмка» в плане.
 
+## Task 13a: [cream-extensions + Stvor] Восстановление после `sysupgrade` тем же узлом (Р4, 2026-10-23)
+Спека §4.3, §4.7, Р4. cream не меняется (ADR 0005 п. 8). Debian не затронут.
+- **cream-extensions, `teleport-openwrt`:** `files/keep.d` дополняется доменом `/etc/cream/teleport-openwrt/` и флагом
+  `/opt/cream/var/ext/teleport-openwrt/agent-enabled`; хук `install` возвращает `0700` каталогу состояния (tar
+  восстанавливает `0755`) — проверить на busybox `tar`. Повторный `install` при маркере и данных не трогает данные и не
+  зовёт `join`.
+- **cream-extensions, `stvor-agent-openwrt`:** свой `keep.d` — `/opt/stvor-agent/{machine-id,state.json,telemetry-token.src}`,
+  `/etc/stvor-agent/token`, `/etc/stvor-agent-telemetry/token`, `/etc/cream/stvor-agent-openwrt/`; права после
+  распаковки — существующий configure `every_boot` (без рекурсивного `chown`). README обоих расширений: архив
+  `sysupgrade` — секрет уровня root, восстанавливать только на ту же машину.
+- **Stvor, `install_script.py` (только OpenWrt-ветка):** после успешной установки — `/etc/stvor/restore.sh` (зеркало и
+  пины sha256 cream tar.gz, снимка, набора Teleport, stvor-agent tar.gz; без кода и секрета), `/etc/init.d/stvor-restore`
+  (procd, `START=99`, повтор раз в минуту до успеха), `/lib/upgrade/keep.d/stvor`. Логика службы — спека §4.7. Повтор
+  команды портала на роботе с маркером, данными и токеном `robot-<id>-*` — без `TELEPORT_FORCE`. Исправить
+  комментарий о `host_uuid` при `join` в `install_script.py:349` и docstring
+  `backend/tests/teleport/test_install_script_openwrt.py:535`: в Teleport 18.10 `join` без живой идентичности даёт
+  новый host ID.
+- **Stvor, «Новый секрет»:** предупреждение на портале, если узел робота в сети; после привязки нового поколения
+  (`bound_host_id`) — удаление `node/<старый bound_host_id>`; выяснить, где «дубль» — в Teleport (истекает ~10 мин)
+  или в инвентаре Stvor. runbook 10 Stvor: раздел о `sysupgrade` и рисках архива.
+- TDD: H-тесты `keep.d` обоих расширений; сценарий на корневой ФС OpenWrt: снять всё, кроме путей `keep.d` → служба
+  восстанавливает без `join` (фейк `cream`/`apk` для Stvor-теста скрипта), повтор безопасен; тест рендера рецепта
+  (нет секрета и кода в `restore.sh`).
+**Приёмка:** `make ci` cream-extensions и Stvor зелёные; выпуск каталога и подъём пина в Stvor; сценарий Task 13 п. 6 (`sysupgrade` тем же узлом,
+затем `sysupgrade -n`) на ВМ PVE **amd64 и arm64** (`armsr`).
+
 ## Task 14: [контроллер] arm64
 - Спросить владельца о `pve-edk2-firmware-aarch64` на PVE-ноде (Р10). Да — ВМ `arch: aarch64` (TCG) из
-  `openwrt-25.12.6-custom-armsr-armv8-generic-ext4-combined-efi.qcow2`, сценарий T13 п. 1–6 с набором `openwrt-arm64`.
+  `openwrt-25.12.6-custom-armsr-armv8-generic-ext4-combined-efi.qcow2`, сценарий T13 п. 1–5 с набором `openwrt-arm64`
+  (п. 6, `sysupgrade`, — в приёмке T13a).
   Нет / не грузится — перенос приёмки на RPi 4/5 владельца (образы `bcm2711`/`bcm2712` openwrt-builder v0.3.1), задача
   закрывается после неё. Выпуск arm64-набора на prod разрешён (В7 закрыт 2026-10-22).
 
@@ -296,5 +330,5 @@ design-review строки (обе темы).
   Stvor» — ссылкой), статус спеки «реализована»; все `owrt-*` на стенде и ВМ на PVE убраны.
 
 ## Приёмка плана
-Задачи 1–15 закрыты; OpenWrt-ВМ amd64 на PVE регистрируется через портал одной командой, видна «в сети», SSH через
-Teleport SSO, метки stvor-agent, перезагрузка и `sysupgrade`-сценарий проходят; arm64 — по T14.
+Задачи 1–15 и 13a закрыты; OpenWrt-ВМ amd64 на PVE регистрируется через портал одной командой, видна «в сети», SSH через
+Teleport SSO, метки stvor-agent, перезагрузка и `sysupgrade` (тот же узел без портала) проходят; arm64 — по T14.
