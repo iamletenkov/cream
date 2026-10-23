@@ -46,7 +46,7 @@
 - [ ] Task 13a: [cream-extensions + Stvor] Восстановление после `sysupgrade` тем же узлом: `keep.d` расширений, служба `stvor-restore` (Р4, 2026-10-23)
 
 - [x] Task 14: [контроллер] arm64: решение по AAVMF на PVE (Р10), приёмка на ВМ `armsr` или перенос на RPi владельца
-  — 2026-10-23 приёмка прошла на ВМ `armsr` на PVE (`owrt-arm64-t14`, VMID 990005, Teleport из тарбола форка): одна команда за 88 с под TCG, SSO SSH, метки, телеметрия, reboot тем же узлом; фазу 17 гейта на arm64 не гоняли (её уборка выключает Teleport; гейт проверен на amd64); `sysupgrade` (п. 6) — после T13a
+  — 2026-10-23 приёмка прошла на ВМ `armsr` на PVE (`owrt-arm64-t14`, VMID 990005, Teleport из тарбола форка): одна команда за 88 с под TCG, SSO SSH, метки, телеметрия, reboot тем же узлом (сценарий T13 п. 1–5); фазу 17 гейта на arm64 не гоняли (её уборка выключает Teleport; гейт проверен на amd64); `sysupgrade` на arm64 — в приёмке T13a
 
 - [ ] Task 15: Финальная интеграция + `make ci` во всех затронутых репозиториях
 
@@ -305,18 +305,22 @@ design-review строки (обе темы).
   пины sha256 cream tar.gz, снимка, набора Teleport, stvor-agent tar.gz; без кода и секрета), `/etc/init.d/stvor-restore`
   (procd, `START=99`, повтор раз в минуту до успеха), `/lib/upgrade/keep.d/stvor`. Логика службы — спека §4.7. Повтор
   команды портала на роботе с маркером, данными и токеном `robot-<id>-*` — без `TELEPORT_FORCE`. Исправить
-  комментарий о `host_uuid` при `join` (около строки 382): в Teleport 18.10 `join` без живой идентичности даёт новый host ID.
+  комментарий о `host_uuid` при `join` в `install_script.py:349` и docstring
+  `backend/tests/teleport/test_install_script_openwrt.py:535`: в Teleport 18.10 `join` без живой идентичности даёт
+  новый host ID.
 - **Stvor, «Новый секрет»:** предупреждение на портале, если узел робота в сети; после привязки нового поколения
   (`bound_host_id`) — удаление `node/<старый bound_host_id>`; выяснить, где «дубль» — в Teleport (истекает ~10 мин)
   или в инвентаре Stvor. runbook 10 Stvor: раздел о `sysupgrade` и рисках архива.
 - TDD: H-тесты `keep.d` обоих расширений; сценарий на корневой ФС OpenWrt: снять всё, кроме путей `keep.d` → служба
   восстанавливает без `join` (фейк `cream`/`apk` для Stvor-теста скрипта), повтор безопасен; тест рендера рецепта
   (нет секрета и кода в `restore.sh`).
-**Приёмка:** `make ci` cream-extensions и Stvor зелёные; выпуск каталога и подъём пина в Stvor; Task 13 п. 6 на ВМ PVE.
+**Приёмка:** `make ci` cream-extensions и Stvor зелёные; выпуск каталога и подъём пина в Stvor; сценарий Task 13 п. 6 (`sysupgrade` тем же узлом,
+затем `sysupgrade -n`) на ВМ PVE **amd64 и arm64** (`armsr`).
 
 ## Task 14: [контроллер] arm64
 - Спросить владельца о `pve-edk2-firmware-aarch64` на PVE-ноде (Р10). Да — ВМ `arch: aarch64` (TCG) из
-  `openwrt-25.12.6-custom-armsr-armv8-generic-ext4-combined-efi.qcow2`, сценарий T13 п. 1–6 с набором `openwrt-arm64`.
+  `openwrt-25.12.6-custom-armsr-armv8-generic-ext4-combined-efi.qcow2`, сценарий T13 п. 1–5 с набором `openwrt-arm64`
+  (п. 6, `sysupgrade`, — в приёмке T13a).
   Нет / не грузится — перенос приёмки на RPi 4/5 владельца (образы `bcm2711`/`bcm2712` openwrt-builder v0.3.1), задача
   закрывается после неё. Выпуск arm64-набора на prod разрешён (В7 закрыт 2026-10-22).
 
