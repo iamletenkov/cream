@@ -78,6 +78,14 @@ configure на стадии, а хук configure отрабатывает на �
 перечисляет **только своё состояние** в своём файле `/lib/upgrade/keep.d/<ext>`; после обновления cream и расширения
 ставятся заново.
 
+## OpenWrt-робот Stvor
+
+Машина на OpenWrt 25.12+ (amd64, arm64) заводится как робот Stvor одной командой портала (строка «OpenWrt» шага
+«Установка»): cream, расширения `teleport-openwrt` и `stvor-agent-openwrt`, регистрация в Teleport. Процедура,
+переустановка и `sysupgrade` тем же узлом — runbook Stvor
+[10_robot-enrollment.md §16](https://github.com/iamletenkov/stvor/blob/main/docs/runbooks/10_robot-enrollment.md);
+спека — [2026-10-20-openwrt.md](../specs/2026-10-20-openwrt.md).
+
 ## Диагностика
 
 ```sh
