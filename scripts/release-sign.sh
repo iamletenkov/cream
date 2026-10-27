@@ -12,11 +12,18 @@
 #       DIR/SHA256SUMS.sig (base64 ASN.1 ECDSA над sha256 — проверяется stdlib и
 #       openssl dgst -verify) и DIR/SHA256SUMS.bundle.json (cosign verify-blob).
 #       Окружение: COSIGN (путь к бинарю), COSIGN_PRIVATE_KEY, COSIGN_PASSWORD.
-#   reuse DIR OLD PUB
-#       Подпись опубликованного релиза (OLD: скачанные SHA256SUMS, .sig,
-#       .bundle.json) переносится в DIR, только если SHA256SUMS совпал байт в
-#       байт и обе подписи проверились ключом PUB; иначе код 1 — подписать
-#       заново (ECDSA не детерминирована, без нужды подпись не меняется).
+#   reconcile DIR OLD PUB OUT
+#       Сверка с опубликованным релизом (OLD — скачанные его файлы из набора
+#       DIR и SHA256SUMS.sig/.bundle.json). Подписанный релиз неизменяем:
+#       - любой опубликованный файл не совпал с пересборкой байт в байт
+#         (в том числе SHA256SUMS) — отказ: не переподписывать, не заменять;
+#       - .sig и .bundle.json опубликованы оба — обязаны проверяться ключом PUB
+#         (иначе отказ), подпись переносится в DIR, действие reuse;
+#       - подписи нет или она неполная — действие sign (опубликованные файлы,
+#         если есть, совпали с пересборкой).
+#       OUT/action — reuse|sign; OUT/upload — недостающие в релизе файлы
+#       (загрузка без --clobber); OUT/clobber — неполная подпись, которую
+#       заменяет новая (только SHA256SUMS.sig / SHA256SUMS.bundle.json).
 #   verify DIR PUB
 #       Обе подписи — cosign verify-blob без сети и DNS (своё сетевое
 #       пространство имён) и openssl dgst -verify.
@@ -128,16 +135,42 @@ cmd_verify() {
 	openssl dgst -sha256 -verify "$pub" -signature "$der" "$dir/SHA256SUMS"
 }
 
-cmd_reuse() {
-	local dir="$1" old="$2" pub="$3"
-	[ -s "$old/SHA256SUMS" ] && [ -s "$old/SHA256SUMS.sig" ] && [ -s "$old/SHA256SUMS.bundle.json" ] ||
-		{ echo "release-sign: опубликованной подписи нет или она неполная — подписать заново"; return 1; }
-	cmp -s "$old/SHA256SUMS" "$dir/SHA256SUMS" ||
-		{ echo "release-sign: опубликованный SHA256SUMS другой — подписать заново"; return 1; }
-	(cmd_verify "$old" "$pub") >/dev/null 2>&1 ||
-		{ echo "release-sign: опубликованная подпись не проверилась — подписать заново"; return 1; }
-	cp "$old/SHA256SUMS.sig" "$old/SHA256SUMS.bundle.json" "$dir/"
-	echo "release-sign: SHA256SUMS не изменился — опубликованная подпись сохранена"
+cmd_reconcile() {
+	local dir="$1" old="$2" pub="$3" out="$4" f n has=0
+	mkdir -p "$out"
+	: >"$out/upload"
+	: >"$out/clobber"
+	[ -s "$dir/SHA256SUMS" ] || die "нет $dir/SHA256SUMS"
+	for f in "$old"/*; do
+		[ -e "$f" ] || continue
+		n="$(basename "$f")"
+		case "$n" in SHA256SUMS.sig | SHA256SUMS.bundle.json) continue ;; esac
+		[ -e "$dir/$n" ] || die "в релизе лишний файл $n — не из этой сборки"
+		cmp -s "$f" "$dir/$n" ||
+			die "опубликованный $n отличается от пересборки — релиз неизменяем, не переподписывается и не заменяется"
+	done
+	[ -e "$old/SHA256SUMS.sig" ] && has=$((has + 1))
+	[ -e "$old/SHA256SUMS.bundle.json" ] && has=$((has + 1))
+	if [ "$has" -eq 2 ]; then
+		[ -e "$old/SHA256SUMS" ] || die "подпись опубликована без SHA256SUMS — релиз неизменяем"
+		(cmd_verify "$old" "$pub") >/dev/null 2>&1 ||
+			die "опубликованная подпись не проверяется ключом $pub — релиз неизменяем, не переподписывается"
+		cp "$old/SHA256SUMS.sig" "$old/SHA256SUMS.bundle.json" "$dir/"
+		echo reuse >"$out/action"
+	else
+		echo sign >"$out/action"
+	fi
+	for f in "$dir"/*; do
+		n="$(basename "$f")"
+		case "$n" in SHA256SUMS.sig | SHA256SUMS.bundle.json) continue ;; esac
+		[ -e "$old/$n" ] || echo "$n" >>"$out/upload"
+	done
+	if [ "$(cat "$out/action")" = sign ]; then
+		for n in SHA256SUMS.sig SHA256SUMS.bundle.json; do
+			if [ -e "$old/$n" ]; then echo "$n" >>"$out/clobber"; else echo "$n" >>"$out/upload"; fi
+		done
+	fi
+	echo "release-sign: $(cat "$out/action"); загрузить: $(tr '\n' ' ' <"$out/upload"); заменить: $(tr '\n' ' ' <"$out/clobber")"
 }
 
 cmd_source() {
@@ -187,26 +220,55 @@ cmd_selftest() {
 	fi
 	COSIGN_PRIVATE_KEY="$(cat "$t/cosign.key")" COSIGN_PASSWORD=selftest cmd_sign "$d"
 	cmd_verify "$d" "$t/cosign.pub"
-	# Частичный релиз: подпись переносится только целой, проверенной и для того же SHA256SUMS.
-	local old="$t/old" fresh="$t/fresh"
-	mkdir -p "$old" "$fresh"
-	cp "$d/SHA256SUMS" "$fresh/"
-	cp "$d/SHA256SUMS" "$d/SHA256SUMS.sig" "$old/"
-	if cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null; then
-		die "selftest: перенесена подпись без SHA256SUMS.bundle.json"
-	fi
-	cp "$d/SHA256SUMS.bundle.json" "$old/"
-	cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null || die "selftest: целая подпись не перенесена"
-	[ -s "$fresh/SHA256SUMS.sig" ] && [ -s "$fresh/SHA256SUMS.bundle.json" ] || die "selftest: reuse не скопировал подпись"
-	rm -f "$fresh"/SHA256SUMS.*
-	if cmd_reuse "$fresh" "$old" "$root/release/keys/stvor-platform.pub" >/dev/null; then
-		die "selftest: перенесена подпись, не проверенная ключом"
-	fi
-	echo "x" >>"$old/SHA256SUMS"
-	if cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null; then
-		die "selftest: перенесена подпись другого SHA256SUMS"
-	fi
-	[ ! -e "$fresh/SHA256SUMS.sig" ] || die "selftest: отказ reuse оставил подпись"
+	# Сверка с опубликованным релизом: подписанный неизменяем.
+	local old="$t/old" fresh="$t/fresh" o="$t/out" pub="$t/cosign.pub"
+	rel() { # rel <файлы из $d…> — опубликованный релиз из этих файлов
+		rm -rf "$old" "$fresh" "$o"
+		mkdir -p "$old" "$fresh"
+		local x
+		for x in "$@"; do cp "$d/$x" "$old/"; done
+		(cd "$d" && cp -- *.deb *.tar.gz BUILDINFO.json SHA256SUMS "$fresh/")
+	}
+	ok() { cmd_reconcile "$fresh" "$old" "$pub" "$o" >/dev/null || die "selftest: $1 — отказ"; }
+	no() { if (cmd_reconcile "$fresh" "$old" "$pub" "$o") >/dev/null 2>&1; then die "selftest: $1 — не отказал"; fi; }
+	lines() { tr '\n' ' ' <"$o/$1"; }
+	# Новый релиз — подпись и всё на загрузку.
+	rel
+	ok "новый релиз"
+	[ "$(cat "$o/action")" = sign ] && [ "$(wc -l <"$o/upload")" -eq 8 ] && [ ! -s "$o/clobber" ] ||
+		die "selftest: новый релиз — $(cat "$o/action") / $(lines upload)"
+	# Частичный: SHA256SUMS и .sig без .bundle.json — подпись заново, .sig заменяется.
+	rel SHA256SUMS SHA256SUMS.sig cream_9.9.9_amd64.deb
+	ok "частичный релиз"
+	[ "$(cat "$o/action")" = sign ] && [ "$(lines clobber)" = "SHA256SUMS.sig " ] &&
+		! grep -qx 'SHA256SUMS' "$o/upload" && grep -qx 'SHA256SUMS.bundle.json' "$o/upload" ||
+		die "selftest: частичный релиз — $(cat "$o/action") / $(lines upload) / $(lines clobber)"
+	# Подписан целиком, не хватает ассета — подпись сохраняется, догружается только он.
+	rel SHA256SUMS SHA256SUMS.sig SHA256SUMS.bundle.json BUILDINFO.json \
+		cream_9.9.9_amd64.deb cream_9.9.9_arm64.deb cream_9.9.9_linux_amd64.tar.gz
+	ok "подписанный релиз без ассета"
+	[ "$(cat "$o/action")" = reuse ] && [ "$(lines upload)" = "cream_9.9.9_linux_arm64.tar.gz " ] && [ ! -s "$o/clobber" ] &&
+		cmp -s "$fresh/SHA256SUMS.sig" "$d/SHA256SUMS.sig" ||
+		die "selftest: подписанный релиз — $(cat "$o/action") / $(lines upload) / $(lines clobber)"
+	# Расхождение с подписанным релизом — отказ (подпись к его SHA256SUMS верна).
+	rel SHA256SUMS.sig SHA256SUMS.bundle.json
+	cp "$d/SHA256SUMS" "$old/"
+	echo "0000  extra" >>"$old/SHA256SUMS"
+	COSIGN_PRIVATE_KEY="$(cat "$t/cosign.key")" COSIGN_PASSWORD=selftest cmd_sign "$old" >/dev/null 2>&1
+	cmd_verify "$old" "$pub" >/dev/null 2>&1 || die "selftest: подпись другого SHA256SUMS не собралась"
+	no "подписанный релиз с другим SHA256SUMS"
+	# Расхождение без подписи и расхождение ассета — отказ.
+	rel SHA256SUMS
+	echo x >>"$old/SHA256SUMS"
+	no "неподписанный релиз с другим SHA256SUMS"
+	rel cream_9.9.9_amd64.deb
+	echo x >>"$old/cream_9.9.9_amd64.deb"
+	no "опубликованный ассет другой"
+	# Подпись целиком, но не проверяется ключом — отказ, не переподписывается.
+	rel SHA256SUMS SHA256SUMS.sig SHA256SUMS.bundle.json
+	pub="$root/release/keys/stvor-platform.pub"
+	no "непроверяемая опубликованная подпись"
+	pub="$t/cosign.pub"
 	# Чужой ключ — отказ.
 	if (cmd_verify "$d" "$root/release/keys/stvor-platform.pub") >/dev/null 2>&1; then
 		die "selftest: подпись одноразовым ключом прошла проверку ключом stvor-platform"
@@ -242,9 +304,9 @@ cmd_selftest() {
 case "${1:-}" in
 buildinfo) [ $# -eq 6 ] || die "usage: buildinfo DIR TAG COMMIT GO EPOCH"; cmd_buildinfo "$2" "$3" "$4" "$5" "$6" ;;
 sign) [ $# -eq 2 ] || die "usage: sign DIR"; cmd_sign "$2" ;;
-reuse) [ $# -eq 4 ] || die "usage: reuse DIR OLD PUB"; cmd_reuse "$2" "$3" "$4" ;;
+reconcile) [ $# -eq 5 ] || die "usage: reconcile DIR OLD PUB OUT"; cmd_reconcile "$2" "$3" "$4" "$5" ;;
 verify) [ $# -eq 3 ] || die "usage: verify DIR PUB"; cmd_verify "$2" "$3" ;;
 source) [ $# -eq 3 ] || die "usage: source DIR TAG"; cmd_source "$2" "$3" ;;
 selftest) cmd_selftest ;;
-*) die "usage: release-sign.sh buildinfo|source|reuse|sign|verify|selftest …" ;;
+*) die "usage: release-sign.sh buildinfo|source|reconcile|sign|verify|selftest …" ;;
 esac
