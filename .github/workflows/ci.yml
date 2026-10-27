@@ -377,7 +377,7 @@ jobs:
   # Подпись SHA256SUMS ключом stvor-platform (cosign своим ключом ECDSA P-256,
   # без Rekor — схема релиза форка Teleport) и загрузка в релиз. Только при
   # загрузке: сухой прогон секретов не получает. Секреты COSIGN_PRIVATE_KEY /
-  # COSIGN_PASSWORD — только в environment release (ветка main, теги v*). Нет
+  # COSIGN_PASSWORD — только в environment release (только ветка main). Нет
   # секрета — job падает, ассеты без подписи в релиз не попадают. Кода тега job
   # не исполняет: только scripts/release-sign.sh из коммита workflow, артефакт
   # сборки и cosign по sha256; проверку источника повторяет сам.
