@@ -15,6 +15,11 @@
 #   verify DIR PUB
 #       Обе подписи — cosign verify-blob без сети и DNS (своё сетевое
 #       пространство имён) и openssl dgst -verify.
+#   source DIR TAG
+#       Тег подписывается, только если его коммит — предок origin/main, а
+#       DIR/BUILDINFO.json собран из этого коммита и для этого тега (окружение
+#       release проверяет ref запуска, а не тег). Запуск — в клоне с полной
+#       историей (origin/main и теги).
 #   selftest
 #       Одноразовый ключ: buildinfo → sign → verify, подделка SHA256SUMS и
 #       отсутствие секрета дают отказ; ключи release/keys/*.pub — ECDSA P-256.
@@ -104,6 +109,21 @@ cmd_verify() {
 	openssl dgst -sha256 -verify "$pub" -signature "$der" "$dir/SHA256SUMS"
 }
 
+cmd_source() {
+	local dir="$1" tag="$2" commit
+	[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "тег должен быть vX.Y.Z: '$tag'"
+	commit="$(git rev-parse --verify -q "refs/tags/$tag^{commit}")" || die "нет тега $tag"
+	git rev-parse --verify -q refs/remotes/origin/main >/dev/null || die "нет origin/main — нужен клон с полной историей"
+	git merge-base --is-ancestor "$commit" refs/remotes/origin/main ||
+		die "коммит тега $tag ($commit) не предок origin/main — не подписывается"
+	[ -s "$dir/BUILDINFO.json" ] || die "нет $dir/BUILDINFO.json"
+	jq -e --arg c "$commit" --arg t "$tag" '.commit == $c and .tag == $t' "$dir/BUILDINFO.json" >/dev/null ||
+		die "BUILDINFO.json не от тега $tag ($commit): $(jq -c '{tag, commit}' "$dir/BUILDINFO.json")"
+	(cd "$dir" && sha256sum -c --quiet SHA256SUMS) || die "ассеты не совпали с SHA256SUMS"
+	grep -q '  BUILDINFO.json$' "$dir/SHA256SUMS" || die "BUILDINFO.json не покрыт SHA256SUMS"
+	echo "release-sign: $tag = $commit, предок origin/main, BUILDINFO.json сходится"
+}
+
 cmd_selftest() {
 	local root t d go commit
 	need_cosign
@@ -143,6 +163,26 @@ cmd_selftest() {
 	if (cmd_verify "$d" "$t/cosign.pub") >/dev/null 2>&1; then
 		die "selftest: изменённый SHA256SUMS прошёл проверку"
 	fi
+	# source: тег на main — да; тег вне main и чужой BUILDINFO — отказ.
+	cmd_buildinfo "$d" v9.9.9 "$commit" "$go" 1700000000
+	local g="$t/git"
+	git init -q -b main "$g"
+	git -C "$g" -c user.name=t -c user.email=t@t commit -q --allow-empty -m main
+	git -C "$g" tag v9.9.9
+	git -C "$g" update-ref refs/remotes/origin/main HEAD
+	git -C "$g" checkout -q -b side
+	git -C "$g" -c user.name=t -c user.email=t@t commit -q --allow-empty -m side
+	git -C "$g" tag v9.9.8
+	if (cd "$g" && cmd_source "$d" v9.9.9) >/dev/null 2>&1; then
+		die "selftest: BUILDINFO.json от другого коммита прошёл source"
+	fi
+	cmd_buildinfo "$d" v9.9.9 "$(git -C "$g" rev-parse v9.9.9)" "$go" 1700000000
+	(cd "$g" && cmd_source "$d" v9.9.9) >/dev/null || die "selftest: тег на main не прошёл source"
+	for a in amd64 arm64; do cp "$d/cream_9.9.9_linux_${a}.tar.gz" "$d/cream_9.9.8_linux_${a}.tar.gz"; done
+	cmd_buildinfo "$d" v9.9.8 "$(git -C "$g" rev-parse v9.9.8)" "$go" 1700000000
+	if (cd "$g" && cmd_source "$d" v9.9.8) >/dev/null 2>&1; then
+		die "selftest: тег вне main прошёл source"
+	fi
 	echo "release-sign selftest: OK"
 }
 
@@ -150,6 +190,7 @@ case "${1:-}" in
 buildinfo) [ $# -eq 6 ] || die "usage: buildinfo DIR TAG COMMIT GO EPOCH"; cmd_buildinfo "$2" "$3" "$4" "$5" "$6" ;;
 sign) [ $# -eq 2 ] || die "usage: sign DIR"; cmd_sign "$2" ;;
 verify) [ $# -eq 3 ] || die "usage: verify DIR PUB"; cmd_verify "$2" "$3" ;;
+source) [ $# -eq 3 ] || die "usage: source DIR TAG"; cmd_source "$2" "$3" ;;
 selftest) cmd_selftest ;;
-*) die "usage: release-sign.sh buildinfo|sign|verify|selftest …" ;;
+*) die "usage: release-sign.sh buildinfo|source|sign|verify|selftest …" ;;
 esac

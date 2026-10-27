@@ -21,9 +21,12 @@ minor, `!` — major. Теги и `CHANGELOG.md` руками не трогае�
    ```
 4. Слить релизный PR (squash). Слияние создаёт тег `vX.Y.Z` и релиз; job
    **Release assets** собирает `make dist-release` на теге (`SOURCE_DATE_EPOCH` —
-   время коммита тега) и `BUILDINFO.json`, job **Sign and upload release**
-   (environment `release`) подписывает `SHA256SUMS` ключом `stvor-platform`,
-   проверяет подпись без сети и прикладывает ассеты.
+   время коммита тега) и `BUILDINFO.json` и передаёт их артефактом; job
+   **Release source check** (без секретов) сверяет, что коммит тега — предок
+   `origin/main` и `BUILDINFO.json` собран из него; job **Sign and upload
+   release** (environment `release`, кода тега не запускает) подписывает
+   `SHA256SUMS` ключом `stvor-platform`, проверяет подпись без сети и
+   прикладывает ассеты.
 
 ## Подпись
 
@@ -35,6 +38,9 @@ Rekor (`scripts/release-sign.sh`, версия cosign и его sha256 — `env`
 - Environment `release` (Settings → Environments): ветка `main` и теги `v*`;
   секреты `COSIGN_PRIVATE_KEY` (PEM ключа `stvor-platform`) и `COSIGN_PASSWORD`.
   Нет секрета — job подписи падает, ассеты в релиз не загружаются.
+- Подписывается только тег, чей коммит — предок `origin/main`, и только
+  сборка с `BUILDINFO.json` от этого коммита: environment проверяет ref
+  запуска, а не тег.
 - Подпись проверяется ключом `release/keys/stvor-platform.pub`: секрет от
   другого ключа — отказ до загрузки.
 - Уже подписанный релиз не меняется: повторная сборка обязана дать тот же
@@ -85,7 +91,8 @@ Actions → Run workflow с `tag=vX.Y.Z`.
 ## Если ассетов нет или они битые
 
 Actions → CI → Run workflow (с ветки `main`) с `tag=vX.Y.Z`: без `upload` —
-сухой прогон (сборка, сверка и подпись `SHA256SUMS`), с `upload=true` — загрузка
-в релиз с заменой файлов; у подписанного релиза — только сверка.
+сухой прогон (сборка, сверка `SHA256SUMS` и источника, без секретов и подписи),
+с `upload=true` — подпись и загрузка в релиз с заменой файлов; у подписанного
+релиза — только сверка.
 Неверная запись в changelog чинится revert-коммитом; история `main` не
 переписывается.

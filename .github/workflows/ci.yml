@@ -14,10 +14,12 @@ name: CI
 # BUILDINFO.json, SHA256SUMS, SHA256SUMS.sig и SHA256SUMS.bundle.json (спека §15).
 #
 # Ручной запуск (workflow_dispatch): без tag — те же проверки на выбранной
-# ветке; с tag — ещё и сборка ассетов этого тега и их подпись (сухой прогон;
-# environment release пускает только main и теги v*), а с upload=true —
-# загрузка в существующий релиз (--clobber). Уже подписанный релиз не меняется:
-# сборка обязана дать тот же SHA256SUMS, проверяется опубликованная подпись.
+# ветке; с tag — ещё и сборка ассетов этого тега и проверка источника (сухой
+# прогон, без секретов), а с upload=true — подпись (environment release: ref
+# запуска main) и загрузка в существующий релиз (--clobber). Подписывается
+# только тег, чей коммит — предок origin/main. Уже подписанный релиз не
+# меняется: сборка обязана дать тот же SHA256SUMS, проверяется опубликованная
+# подпись.
 
 # Ветки проверяются на pull_request, push — только main: там релиз.
 on:
@@ -343,17 +345,51 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Подпись SHA256SUMS ключом stvor-platform (cosign своим ключом ECDSA P-256,
-  # без Rekor — схема релиза форка Teleport) и загрузка в релиз. Секреты
-  # COSIGN_PRIVATE_KEY / COSIGN_PASSWORD — только в environment release (ветка
-  # main, теги v*). Нет секрета — job падает, ассеты без подписи в релиз не
-  # попадают. Сборочного кода job не исполняет: только scripts/release-sign.sh
-  # из коммита workflow и cosign по sha256.
-  release-sign:
-    name: Sign and upload release
+  # Перед подписью, без секретов и без кода тега: коммит тега — предок
+  # origin/main (environment release проверяет ref запуска, а не тег, —
+  # workflow_dispatch с main мог бы подписать любой тег), BUILDINFO.json
+  # собран из этого коммита для этого тега, ассеты сходятся с SHA256SUMS.
+  release-gate:
+    name: Release source check
     needs: [release-please, release-assets]
     if: >-
       !cancelled() && needs.release-assets.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0   # origin/main и теги — для merge-base --is-ancestor
+          persist-credentials: false
+
+      - name: Download build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.TAG }}
+          path: dist/release
+
+      - name: Tag on main, BUILDINFO from tag commit
+        run: bash scripts/release-sign.sh source dist/release "$TAG"
+
+  # Подпись SHA256SUMS ключом stvor-platform (cosign своим ключом ECDSA P-256,
+  # без Rekor — схема релиза форка Teleport) и загрузка в релиз. Только при
+  # загрузке: сухой прогон секретов не получает. Секреты COSIGN_PRIVATE_KEY /
+  # COSIGN_PASSWORD — только в environment release (ветка main, теги v*). Нет
+  # секрета — job падает, ассеты без подписи в релиз не попадают. Кода тега job
+  # не исполняет: только scripts/release-sign.sh из коммита workflow, артефакт
+  # сборки и cosign по sha256; проверку источника повторяет сам.
+  release-sign:
+    name: Sign and upload release
+    needs: [release-please, release-gate]
+    if: >-
+      !cancelled() && needs.release-gate.result == 'success' && (
+        needs.release-please.outputs.release_created == 'true' ||
+        (github.event_name == 'workflow_dispatch' && inputs.upload)
+      )
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -363,11 +399,11 @@ jobs:
       cancel-in-progress: false
     env:
       TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
-      UPLOAD: ${{ needs.release-please.outputs.release_created == 'true' || inputs.upload }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.workflow_sha }}
+          fetch-depth: 0   # origin/main и теги — для merge-base --is-ancestor
           persist-credentials: false
           sparse-checkout: |
             scripts/release-sign.sh
@@ -381,11 +417,10 @@ jobs:
           path: dist/release
 
       - name: Check build
-        working-directory: dist/release
         run: |
           set -euo pipefail
-          [ "$(wc -l <SHA256SUMS)" -eq 5 ] || { echo "release-sign: в SHA256SUMS не 5 строк" >&2; exit 1; }
-          sha256sum -c SHA256SUMS
+          [ "$(wc -l <dist/release/SHA256SUMS)" -eq 5 ] || { echo "release-sign: в SHA256SUMS не 5 строк" >&2; exit 1; }
+          bash scripts/release-sign.sh source dist/release "$TAG"
 
       - name: cosign по sha256
         run: |
@@ -403,7 +438,6 @@ jobs:
       # подписи (выпуски до подписи) получает её с этой сборкой.
       - name: Published release state
         id: published
-        if: env.UPLOAD == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -436,7 +470,7 @@ jobs:
         run: bash scripts/release-sign.sh verify dist/release release/keys/stvor-platform.pub
 
       - name: Upload to GitHub Release
-        if: env.UPLOAD == 'true' && steps.published.outputs.signed != 'true'
+        if: steps.published.outputs.signed != 'true'
         working-directory: dist/release
         env:
           GH_TOKEN: ${{ github.token }}
