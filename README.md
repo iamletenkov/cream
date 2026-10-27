@@ -12,7 +12,20 @@
 ## Установка
 
 Пакеты — в [выпусках GitHub](https://github.com/iamletenkov/cream/releases): `.deb`
-и `tar.gz` для `amd64` и `arm64`, рядом — `SHA256SUMS`.
+и `tar.gz` для `amd64` и `arm64`, рядом — `SHA256SUMS`, его подпись
+`SHA256SUMS.sig` / `SHA256SUMS.bundle.json` ключом `stvor-platform`
+([`release/keys/`](release/keys/)) и `BUILDINFO.json` (коммит, версия Go,
+время сборки `built_at`, образы сборки, суммы бинарей и ассетов).
+
+Проверка подписи (с выпусков, подписанных в CI; без сети и без Rekor):
+
+```bash
+curl -fLO "https://github.com/iamletenkov/cream/releases/download/v$V/SHA256SUMS.sig"
+base64 -d SHA256SUMS.sig > SHA256SUMS.sig.der
+openssl dgst -sha256 -verify release/keys/stvor-platform.pub -signature SHA256SUMS.sig.der SHA256SUMS
+# или: cosign verify-blob --key release/keys/stvor-platform.pub --insecure-ignore-tlog=true \
+#        --signature SHA256SUMS.sig SHA256SUMS
+```
 
 **Пакет `.deb`:**
 
