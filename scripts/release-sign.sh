@@ -12,6 +12,11 @@
 #       DIR/SHA256SUMS.sig (base64 ASN.1 ECDSA над sha256 — проверяется stdlib и
 #       openssl dgst -verify) и DIR/SHA256SUMS.bundle.json (cosign verify-blob).
 #       Окружение: COSIGN (путь к бинарю), COSIGN_PRIVATE_KEY, COSIGN_PASSWORD.
+#   reuse DIR OLD PUB
+#       Подпись опубликованного релиза (OLD: скачанные SHA256SUMS, .sig,
+#       .bundle.json) переносится в DIR, только если SHA256SUMS совпал байт в
+#       байт и обе подписи проверились ключом PUB; иначе код 1 — подписать
+#       заново (ECDSA не детерминирована, без нужды подпись не меняется).
 #   verify DIR PUB
 #       Обе подписи — cosign verify-blob без сети и DNS (своё сетевое
 #       пространство имён) и openssl dgst -verify.
@@ -68,13 +73,27 @@ cmd_buildinfo() {
 		bins="$(jq -c --arg a "$arch" --arg s "$(sha256sum "$tmp/$arch/cream" | cut -d' ' -f1)" \
 			'. + {($a): {cream: $s}}' <<<"$bins")"
 	done
+	# Образы сборки — из ./Makefile собранного коммита (запуск из его корня).
+	[ -f Makefile ] || die "нет ./Makefile — buildinfo запускается из корня собранного коммита"
+	img() { sed -nE "s/^$1[[:space:]]*\\?=[[:space:]]*([^[:space:]]+).*/\\1/p" Makefile | head -n 1; }
+	local go_image nfpm_image debian_image assets
+	go_image="$(img GO_IMAGE)" nfpm_image="$(img NFPM_IMAGE)" debian_image="$(img DEBIAN_IMAGE)"
+	[ -n "$go_image" ] && [ -n "$nfpm_image" ] && [ -n "$debian_image" ] ||
+		die "нет GO_IMAGE, NFPM_IMAGE или DEBIAN_IMAGE в Makefile"
+	# Суммы ассетов (без BUILDINFO.json) — как в BUILDINFO.json stvor-agent.
+	assets="$(cd "$dir" && sha256sum -- *.deb *.tar.gz |
+		jq -Rn '[inputs | select(length>0) | split("  ") | {(.[1]): .[0]}] | add')"
 	jq -n --arg tag "$tag" --arg commit "$commit" --arg version "$version" --arg go "$go" \
-		--argjson epoch "$epoch" --arg time "$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)" \
-		--argjson binaries "$bins" \
+		--argjson epoch "$epoch" --arg built_at "$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)" \
+		--arg go_image "$go_image" --arg nfpm_image "$nfpm_image" --arg debian_image "$debian_image" \
+		--argjson binaries "$bins" --argjson assets "$assets" \
 		'{tag:$tag, commit:$commit, version:$version, go:$go, reproducible:true,
-		  build_time:$time, source_date_epoch:$epoch,
+		  source_date_epoch:$epoch, built_at:$built_at,
+		  images:{go:$go_image, nfpm:$nfpm_image, debian:$debian_image},
+		  arm64:{method:"cross-compile on x86_64 (Go, CGO_ENABLED=0, -trimpath, static)"},
 		  build:"make dist-release VERSION=\($tag) SOURCE_DATE_EPOCH=\($epoch)",
-		  binaries:$binaries}' >"$dir/BUILDINFO.json"
+		  binaries:$binaries,
+		  assets:$assets}' >"$dir/BUILDINFO.json"
 	(cd "$dir" && sha256sum -- *.deb *.tar.gz BUILDINFO.json >SHA256SUMS && sha256sum -c --quiet SHA256SUMS)
 }
 
@@ -107,6 +126,18 @@ cmd_verify() {
 	der="$(mktemp -p "$WORK")"
 	base64 -d "$dir/SHA256SUMS.sig" >"$der"
 	openssl dgst -sha256 -verify "$pub" -signature "$der" "$dir/SHA256SUMS"
+}
+
+cmd_reuse() {
+	local dir="$1" old="$2" pub="$3"
+	[ -s "$old/SHA256SUMS" ] && [ -s "$old/SHA256SUMS.sig" ] && [ -s "$old/SHA256SUMS.bundle.json" ] ||
+		{ echo "release-sign: опубликованной подписи нет или она неполная — подписать заново"; return 1; }
+	cmp -s "$old/SHA256SUMS" "$dir/SHA256SUMS" ||
+		{ echo "release-sign: опубликованный SHA256SUMS другой — подписать заново"; return 1; }
+	(cmd_verify "$old" "$pub") >/dev/null 2>&1 ||
+		{ echo "release-sign: опубликованная подпись не проверилась — подписать заново"; return 1; }
+	cp "$old/SHA256SUMS.sig" "$old/SHA256SUMS.bundle.json" "$dir/"
+	echo "release-sign: SHA256SUMS не изменился — опубликованная подпись сохранена"
 }
 
 cmd_source() {
@@ -142,7 +173,9 @@ cmd_selftest() {
 	done
 	cmd_buildinfo "$d" v9.9.9 "$commit" "$go" 1700000000
 	[ "$(wc -l <"$d/SHA256SUMS")" -eq 5 ] || die "selftest: в SHA256SUMS не 5 строк"
-	jq -e '.build_time == "2023-11-14T22:13:20Z" and (.binaries.arm64.cream | length == 64)' \
+	jq -e '.built_at == "2023-11-14T22:13:20Z" and (.binaries.arm64.cream | length == 64)
+		and (.assets | keys == ["cream_9.9.9_amd64.deb", "cream_9.9.9_arm64.deb",
+		  "cream_9.9.9_linux_amd64.tar.gz", "cream_9.9.9_linux_arm64.tar.gz"])' \
 		"$d/BUILDINFO.json" >/dev/null || die "selftest: BUILDINFO.json не тот"
 	cp "$d/BUILDINFO.json" "$t/bi1"
 	cmd_buildinfo "$d" v9.9.9 "$commit" "$go" 1700000000
@@ -154,6 +187,26 @@ cmd_selftest() {
 	fi
 	COSIGN_PRIVATE_KEY="$(cat "$t/cosign.key")" COSIGN_PASSWORD=selftest cmd_sign "$d"
 	cmd_verify "$d" "$t/cosign.pub"
+	# Частичный релиз: подпись переносится только целой, проверенной и для того же SHA256SUMS.
+	local old="$t/old" fresh="$t/fresh"
+	mkdir -p "$old" "$fresh"
+	cp "$d/SHA256SUMS" "$fresh/"
+	cp "$d/SHA256SUMS" "$d/SHA256SUMS.sig" "$old/"
+	if cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null; then
+		die "selftest: перенесена подпись без SHA256SUMS.bundle.json"
+	fi
+	cp "$d/SHA256SUMS.bundle.json" "$old/"
+	cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null || die "selftest: целая подпись не перенесена"
+	[ -s "$fresh/SHA256SUMS.sig" ] && [ -s "$fresh/SHA256SUMS.bundle.json" ] || die "selftest: reuse не скопировал подпись"
+	rm -f "$fresh"/SHA256SUMS.*
+	if cmd_reuse "$fresh" "$old" "$root/release/keys/stvor-platform.pub" >/dev/null; then
+		die "selftest: перенесена подпись, не проверенная ключом"
+	fi
+	echo "x" >>"$old/SHA256SUMS"
+	if cmd_reuse "$fresh" "$old" "$t/cosign.pub" >/dev/null; then
+		die "selftest: перенесена подпись другого SHA256SUMS"
+	fi
+	[ ! -e "$fresh/SHA256SUMS.sig" ] || die "selftest: отказ reuse оставил подпись"
 	# Чужой ключ — отказ.
 	if (cmd_verify "$d" "$root/release/keys/stvor-platform.pub") >/dev/null 2>&1; then
 		die "selftest: подпись одноразовым ключом прошла проверку ключом stvor-platform"
@@ -189,8 +242,9 @@ cmd_selftest() {
 case "${1:-}" in
 buildinfo) [ $# -eq 6 ] || die "usage: buildinfo DIR TAG COMMIT GO EPOCH"; cmd_buildinfo "$2" "$3" "$4" "$5" "$6" ;;
 sign) [ $# -eq 2 ] || die "usage: sign DIR"; cmd_sign "$2" ;;
+reuse) [ $# -eq 4 ] || die "usage: reuse DIR OLD PUB"; cmd_reuse "$2" "$3" "$4" ;;
 verify) [ $# -eq 3 ] || die "usage: verify DIR PUB"; cmd_verify "$2" "$3" ;;
 source) [ $# -eq 3 ] || die "usage: source DIR TAG"; cmd_source "$2" "$3" ;;
 selftest) cmd_selftest ;;
-*) die "usage: release-sign.sh buildinfo|source|sign|verify|selftest …" ;;
+*) die "usage: release-sign.sh buildinfo|source|reuse|sign|verify|selftest …" ;;
 esac

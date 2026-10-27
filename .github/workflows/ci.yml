@@ -16,10 +16,9 @@ name: CI
 # Ручной запуск (workflow_dispatch): без tag — те же проверки на выбранной
 # ветке; с tag — ещё и сборка ассетов этого тега и проверка источника (сухой
 # прогон, без секретов), а с upload=true — подпись (environment release: ref
-# запуска main) и загрузка в существующий релиз (--clobber). Подписывается
-# только тег, чей коммит — предок origin/main. Уже подписанный релиз не
-# меняется: сборка обязана дать тот же SHA256SUMS, проверяется опубликованная
-# подпись.
+# запуска main) и загрузка полного набора в существующий релиз (--clobber).
+# Подписывается только тег, чей коммит — предок origin/main. Опубликованная
+# подпись сохраняется, если SHA256SUMS тот же байт в байт и она проверилась.
 
 # Ветки проверяются на pull_request, push — только main: там релиз.
 on:
@@ -432,45 +431,35 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/cosign"
           echo "COSIGN=$RUNNER_TEMP/bin/cosign" >> "$GITHUB_ENV"
 
-      # Релиз с подписью неизменяем: повторная сборка тега обязана дать тот же
-      # SHA256SUMS байт в байт, подпись не перевыпускается (ECDSA не
-      # детерминирована) — проверяется и остаётся опубликованная. Релиз без
-      # подписи (выпуски до подписи) получает её с этой сборкой.
-      - name: Published release state
-        id: published
+      # ECDSA не детерминирована: при пересборке тега (тот же SHA256SUMS байт
+      # в байт) опубликованная подпись сохраняется — но только целая и
+      # проверенная ключом stvor-platform. Неполный или оборванный релиз
+      # (нет .sig или .bundle.json, другой SHA256SUMS) подписывается заново.
+      - name: Подпись SHA256SUMS (cosign, ключ stvor-platform, без Rekor)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
-          if grep -qx 'SHA256SUMS.sig' <<<"$names"; then
-            d="$RUNNER_TEMP/published"; mkdir -p "$d"
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$d" --clobber \
-              -p SHA256SUMS -p SHA256SUMS.sig -p SHA256SUMS.bundle.json
-            cmp "$d/SHA256SUMS" dist/release/SHA256SUMS || {
-              echo "::error::релиз $TAG уже подписан, а сборка дала другой SHA256SUMS — релиз не меняется"
-              diff -u "$d/SHA256SUMS" dist/release/SHA256SUMS || true
-              exit 1
-            }
-            cp "$d/SHA256SUMS.sig" "$d/SHA256SUMS.bundle.json" dist/release/
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "релиз $TAG уже подписан, SHA256SUMS совпал — проверяется опубликованная подпись"
-          else
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Подпись SHA256SUMS (cosign, ключ stvor-platform, без Rekor)
-        if: steps.published.outputs.signed != 'true'
-        env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-        run: bash scripts/release-sign.sh sign dist/release
+        run: |
+          set -euo pipefail
+          old="$RUNNER_TEMP/published"; mkdir -p "$old"
+          names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.bundle.json; do
+            if grep -qxF "$f" <<<"$names"; then
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$old" --clobber -p "$f"
+            fi
+          done
+          if bash scripts/release-sign.sh reuse dist/release "$old" release/keys/stvor-platform.pub; then
+            exit 0
+          fi
+          bash scripts/release-sign.sh sign dist/release
 
       - name: Проверка подписи без сети
         run: bash scripts/release-sign.sh verify dist/release release/keys/stvor-platform.pub
 
+      # Всегда полный набор с --clobber: перезапуск после оборванной загрузки
+      # дописывает недостающее; сборка воспроизводима — те же байты.
       - name: Upload to GitHub Release
-        if: steps.published.outputs.signed != 'true'
         working-directory: dist/release
         env:
           GH_TOKEN: ${{ github.token }}

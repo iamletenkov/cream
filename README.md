@@ -15,7 +15,7 @@
 и `tar.gz` для `amd64` и `arm64`, рядом — `SHA256SUMS`, его подпись
 `SHA256SUMS.sig` / `SHA256SUMS.bundle.json` ключом `stvor-platform`
 ([`release/keys/`](release/keys/)) и `BUILDINFO.json` (коммит, версия Go,
-время сборки, суммы бинарей).
+время сборки `built_at`, образы сборки, суммы бинарей и ассетов).
 
 Проверка подписи (с выпусков, подписанных в CI; без сети и без Rekor):
 
