@@ -8,12 +8,16 @@ name: CI
 # Выпуск — release-please: на main после зелёных проверок он ведёт PR
 # «release X.Y.Z» (CHANGELOG.md); слияние этого PR создаёт тег vX.Y.Z и
 # опубликованный релиз. Теги руками не ставят. Job release-assets собирает на
-# теге make dist-release (SOURCE_DATE_EPOCH = время коммита тега) и прикладывает
-# к релизу .deb amd64/arm64, тарболы и SHA256SUMS (спека §15).
+# теге make dist-release (SOURCE_DATE_EPOCH = время коммита тега) и BUILDINFO.json,
+# job release-sign (environment release) подписывает SHA256SUMS ключом
+# stvor-platform и прикладывает к релизу .deb amd64/arm64, тарболы,
+# BUILDINFO.json, SHA256SUMS, SHA256SUMS.sig и SHA256SUMS.bundle.json (спека §15).
 #
 # Ручной запуск (workflow_dispatch): без tag — те же проверки на выбранной
-# ветке; с tag — ещё и сборка ассетов этого тега (сухой прогон), а с
-# upload=true — загрузка их в существующий релиз (--clobber).
+# ветке; с tag — ещё и сборка ассетов этого тега и их подпись (сухой прогон;
+# environment release пускает только main и теги v*), а с upload=true —
+# загрузка в существующий релиз (--clobber). Уже подписанный релиз не меняется:
+# сборка обязана дать тот же SHA256SUMS, проверяется опубликованная подпись.
 
 # Ветки проверяются на pull_request, push — только main: там релиз.
 on:
@@ -36,6 +40,12 @@ on:
 
 # Права — на уровне job, по минимуму; по умолчанию нет никаких.
 permissions: {}
+
+# cosign подписи SHA256SUMS — точная версия, бинарь сверяется по sha256 (тот же
+# пин, что у релиза форка Teleport).
+env:
+  COSIGN_VERSION: v3.1.3
+  COSIGN_SHA256_AMD64: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
 
 # Отменять устаревший прогон можно только на PR: на main отмена посреди
 # release-please оставила бы релиз недоделанным.
@@ -183,9 +193,35 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Подпись релиза без секретов: одноразовый ключ, те же sign/verify, что в
+  # release-sign (проверка без сети, openssl), отказы на подделку и на
+  # отсутствие секрета; release/keys/*.pub — ECDSA P-256.
+  release-sign-selftest:
+    name: Release signing selftest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: cosign по sha256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL --proto '=https' --retry 3 -o "$RUNNER_TEMP/bin/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "$COSIGN_SHA256_AMD64  $RUNNER_TEMP/bin/cosign" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/cosign"
+          echo "COSIGN=$RUNNER_TEMP/bin/cosign" >> "$GITHUB_ENV"
+
+      - name: release-sign.sh selftest
+        run: bash scripts/release-sign.sh selftest
+
   release-please:
     name: Release Please
-    needs: [check, vuln, repro, integration, openwrt]
+    needs: [check, vuln, repro, integration, openwrt, release-sign-selftest]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -209,7 +245,8 @@ jobs:
 
   # Ассеты релиза: после release-please, создавшего релиз, или вручную по tag.
   # На ручном запуске release-please пропущен — !cancelled() не даёт пропуску
-  # снять и этот job.
+  # снять и этот job. Здесь только сборка: секретов подписи job не видит,
+  # ассеты уходят в release-sign артефактом.
   release-assets:
     name: Release assets
     needs: release-please
@@ -220,14 +257,13 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     # Один тег — одна сборка за раз; начатую загрузку не отменять.
     concurrency:
       group: release-assets-${{ needs.release-please.outputs.tag_name || inputs.tag }}
       cancel-in-progress: false
     env:
       TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
-      UPLOAD: ${{ needs.release-please.outputs.release_created == 'true' || inputs.upload }}
     steps:
       - name: Check tag
         run: |
@@ -242,11 +278,24 @@ jobs:
           fetch-depth: 0   # git describe и время коммита тега
           persist-credentials: false
 
+      # Скрипт подписи и ключи — из коммита этого workflow, а не из тега: в
+      # старых тегах (повторная сборка через workflow_dispatch) их нет.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release-sign.sh
+            release/keys
+          sparse-checkout-cone-mode: false
+
       # VERSION — тег (DEB_VERSION = без «v»), SOURCE_DATE_EPOCH — время коммита
       # тега: те же байты, что у make dist-release / repro-check локально.
       - name: make dist-release
         run: |
           epoch="$(git log -1 --format=%ct "refs/tags/$TAG^{commit}")"
+          echo "EPOCH=$epoch" >> "$GITHUB_ENV"
           make dist-release VERSION="$TAG" SOURCE_DATE_EPOCH="$epoch"
           ls -l dist/release
           cat dist/release/SHA256SUMS
@@ -262,15 +311,132 @@ jobs:
           done
           [ "$(wc -l <SHA256SUMS)" -eq 4 ] || { echo "release-assets: в SHA256SUMS не 4 строки" >&2; exit 1; }
           sha256sum -c SHA256SUMS
+
+      # BUILDINFO.json (формат релиза форка Teleport): коммит тега, версия Go
+      # из GO_IMAGE Makefile тега (сверяется с бинарями), время сборки =
+      # SOURCE_DATE_EPOCH, суммы бинарей в тарболах. SHA256SUMS — заново, уже
+      # с BUILDINFO.json: 5 строк. Детерминировано — повтор даёт те же байты.
+      - name: BUILDINFO.json and SHA256SUMS
+        run: |
+          set -euo pipefail
+          go="go$(sed -n 's/^GO_IMAGE *?= *golang://p' Makefile)"
+          commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          bash .release-tools/scripts/release-sign.sh buildinfo dist/release "$TAG" "$commit" "$go" "$EPOCH"
+          [ "$(wc -l <dist/release/SHA256SUMS)" -eq 5 ] || { echo "release-assets: в SHA256SUMS не 5 строк" >&2; exit 1; }
+          cat dist/release/BUILDINFO.json
           {
             echo "### Ассеты $TAG"
             echo '```'
-            cat SHA256SUMS
+            cat dist/release/SHA256SUMS
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
 
-      - name: Upload to GitHub Release
+      - name: Upload build for signing
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ env.TAG }}
+          path: |
+            dist/release/*.deb
+            dist/release/*.tar.gz
+            dist/release/BUILDINFO.json
+            dist/release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  # Подпись SHA256SUMS ключом stvor-platform (cosign своим ключом ECDSA P-256,
+  # без Rekor — схема релиза форка Teleport) и загрузка в релиз. Секреты
+  # COSIGN_PRIVATE_KEY / COSIGN_PASSWORD — только в environment release (ветка
+  # main, теги v*). Нет секрета — job падает, ассеты без подписи в релиз не
+  # попадают. Сборочного кода job не исполняет: только scripts/release-sign.sh
+  # из коммита workflow и cosign по sha256.
+  release-sign:
+    name: Sign and upload release
+    needs: [release-please, release-assets]
+    if: >-
+      !cancelled() && needs.release-assets.result == 'success'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    concurrency:
+      group: release-sign-${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      cancel-in-progress: false
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      UPLOAD: ${{ needs.release-please.outputs.release_created == 'true' || inputs.upload }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release-sign.sh
+            release/keys
+          sparse-checkout-cone-mode: false
+
+      - name: Download build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.TAG }}
+          path: dist/release
+
+      - name: Check build
+        working-directory: dist/release
+        run: |
+          set -euo pipefail
+          [ "$(wc -l <SHA256SUMS)" -eq 5 ] || { echo "release-sign: в SHA256SUMS не 5 строк" >&2; exit 1; }
+          sha256sum -c SHA256SUMS
+
+      - name: cosign по sha256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL --proto '=https' --retry 3 -o "$RUNNER_TEMP/bin/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "$COSIGN_SHA256_AMD64  $RUNNER_TEMP/bin/cosign" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/cosign"
+          echo "COSIGN=$RUNNER_TEMP/bin/cosign" >> "$GITHUB_ENV"
+
+      # Релиз с подписью неизменяем: повторная сборка тега обязана дать тот же
+      # SHA256SUMS байт в байт, подпись не перевыпускается (ECDSA не
+      # детерминирована) — проверяется и остаётся опубликованная. Релиз без
+      # подписи (выпуски до подписи) получает её с этой сборкой.
+      - name: Published release state
+        id: published
         if: env.UPLOAD == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if grep -qx 'SHA256SUMS.sig' <<<"$names"; then
+            d="$RUNNER_TEMP/published"; mkdir -p "$d"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$d" --clobber \
+              -p SHA256SUMS -p SHA256SUMS.sig -p SHA256SUMS.bundle.json
+            cmp "$d/SHA256SUMS" dist/release/SHA256SUMS || {
+              echo "::error::релиз $TAG уже подписан, а сборка дала другой SHA256SUMS — релиз не меняется"
+              diff -u "$d/SHA256SUMS" dist/release/SHA256SUMS || true
+              exit 1
+            }
+            cp "$d/SHA256SUMS.sig" "$d/SHA256SUMS.bundle.json" dist/release/
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "релиз $TAG уже подписан, SHA256SUMS совпал — проверяется опубликованная подпись"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Подпись SHA256SUMS (cosign, ключ stvor-platform, без Rekor)
+        if: steps.published.outputs.signed != 'true'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: bash scripts/release-sign.sh sign dist/release
+
+      - name: Проверка подписи без сети
+        run: bash scripts/release-sign.sh verify dist/release release/keys/stvor-platform.pub
+
+      - name: Upload to GitHub Release
+        if: env.UPLOAD == 'true' && steps.published.outputs.signed != 'true'
         working-directory: dist/release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -279,12 +445,12 @@ jobs:
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "cream_${v}_amd64.deb" "cream_${v}_arm64.deb" \
             "cream_${v}_linux_amd64.tar.gz" "cream_${v}_linux_arm64.tar.gz" \
-            SHA256SUMS
+            BUILDINFO.json SHA256SUMS SHA256SUMS.sig SHA256SUMS.bundle.json
 
   # Выпуск поднимает пин cream у потребителей: в каждом целевом репозитории
   # запускает свой workflow, который берёт SHA256SUMS выпуска, ставит версию
   # и суммы .deb и открывает PR (идемпотентно: пин уже на версии или PR
-  # открыт — второго нет). Идёт после release-assets: до загрузки сумм нет.
+  # открыт — второго нет). Идёт после release-sign: до загрузки сумм и подписи их нет.
   #
   #   cream-extensions  cream-bump.yml        tools/cream-pin.env
   #   bisquite          cream-bump.yml        cream-pin.env и фикстуры контракта
@@ -297,9 +463,9 @@ jobs:
   # потребителей не зависит. GITHUB_TOKEN чужой workflow запустить не может.
   dispatch:
     name: Bump cream in ${{ matrix.repo }}
-    needs: [release-please, release-assets]
+    needs: [release-please, release-sign]
     if: >-
-      !cancelled() && needs.release-assets.result == 'success' && (
+      !cancelled() && needs.release-sign.result == 'success' && (
         needs.release-please.outputs.release_created == 'true' ||
         (github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.upload)
       )

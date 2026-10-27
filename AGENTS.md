@@ -49,11 +49,12 @@ test/integration/     — make test-integration: .deb в контейнере с
 test/build/           — make test-build: фаза build настоящим virt-customize на образе Debian 12
 test/openwrt/         — make test-openwrt: корневая ФС OpenWrt 25.12 (openwrt-builder) в контейнере, сценарий под busybox sh
 packaging/            — nfpm.yaml, maintainer-скрипты, copyright (полные тексты сторонних лицензий)
-scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh, contract-old.sh (фикстуры testdata/contract на релизном cream)
+scripts/              — dist-release.sh (тарболы, SHA256SUMS), check-deb.sh (состав пакета), repro-check.sh, contract-old.sh (фикстуры testdata/contract на релизном cream), release-sign.sh (BUILDINFO.json, cosign-подпись SHA256SUMS)
 LICENSE, NOTICE       — Apache-2.0 и уведомления о стороннем коде
+release/keys/         — публичные ключи подписи выпусков: stvor-platform.pub (текущий), stvor-platform-next.pub (следующий)
 docs/                 — README.md (индекс), getting-started.md, guides/ (по задачам), reference/ (CLI, манифест, коды, --json, пути), architecture.md, development.md, runbooks/ (выпуск), adr/, specs/, plans/, research/, STATUS.md
 .claude/              — агенты, skills, правила, хуки Claude Code
-.github/              — CI (ci, vuln, repro-check, интеграция amd64/arm64), release-please, ассеты релиза
+.github/              — CI (ci, vuln, repro-check, интеграция amd64/arm64), release-please, ассеты и подпись релиза (environment release)
 Makefile              — единственный способ что-либо запускать (`make help`)
 ```
 

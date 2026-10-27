@@ -21,15 +21,38 @@ minor, `!` — major. Теги и `CHANGELOG.md` руками не трогае�
    ```
 4. Слить релизный PR (squash). Слияние создаёт тег `vX.Y.Z` и релиз; job
    **Release assets** собирает `make dist-release` на теге (`SOURCE_DATE_EPOCH` —
-   время коммита тега) и прикладывает ассеты.
+   время коммита тега) и `BUILDINFO.json`, job **Sign and upload release**
+   (environment `release`) подписывает `SHA256SUMS` ключом `stvor-platform`,
+   проверяет подпись без сети и прикладывает ассеты.
+
+## Подпись
+
+Схема — как у релиза форка Teleport: cosign своим ключом ECDSA P-256, без
+Rekor (`scripts/release-sign.sh`, версия cosign и его sha256 — `env` в
+`.github/workflows/ci.yml`). Публичные ключи — `release/keys/stvor-platform.pub`
+(текущий) и `stvor-platform-next.pub` (следующий, офлайн у владельца).
+
+- Environment `release` (Settings → Environments): ветка `main` и теги `v*`;
+  секреты `COSIGN_PRIVATE_KEY` (PEM ключа `stvor-platform`) и `COSIGN_PASSWORD`.
+  Нет секрета — job подписи падает, ассеты в релиз не загружаются.
+- Подпись проверяется ключом `release/keys/stvor-platform.pub`: секрет от
+  другого ключа — отказ до загрузки.
+- Уже подписанный релиз не меняется: повторная сборка обязана дать тот же
+  `SHA256SUMS` байт в байт, проверяется опубликованная подпись. Выпуск без
+  подписи (до этой схемы) подписывается ручным запуском с `upload=true`.
+- Самопроверка без секретов (одноразовый ключ) — job **Release signing
+  selftest** на каждом PR.
 
 ## Проверка
 
 ```bash
 gh release view vX.Y.Z --json assets --jq '.assets[].name'
-# cream_X.Y.Z_amd64.deb, cream_X.Y.Z_arm64.deb, cream_X.Y.Z_linux_{amd64,arm64}.tar.gz, SHA256SUMS
+# cream_X.Y.Z_amd64.deb, cream_X.Y.Z_arm64.deb, cream_X.Y.Z_linux_{amd64,arm64}.tar.gz,
+# BUILDINFO.json, SHA256SUMS, SHA256SUMS.sig, SHA256SUMS.bundle.json
 mkdir -p .scratchpad/release && cd .scratchpad/release && gh release download vX.Y.Z --clobber
 sha256sum -c SHA256SUMS            # все OK
+base64 -d SHA256SUMS.sig > sig.der
+openssl dgst -sha256 -verify ../../release/keys/stvor-platform.pub -signature sig.der SHA256SUMS   # Verified OK
 ```
 
 Воспроизводимость: сборка чистого checkout тега с тем же `SOURCE_DATE_EPOCH`
@@ -37,7 +60,7 @@ sha256sum -c SHA256SUMS            # все OK
 
 ```bash
 make dist-release VERSION=vX.Y.Z SOURCE_DATE_EPOCH=$(git log -1 --format=%ct vX.Y.Z)
-diff dist/release/SHA256SUMS .scratchpad/release/SHA256SUMS   # пусто
+grep -v ' BUILDINFO.json$' .scratchpad/release/SHA256SUMS | diff dist/release/SHA256SUMS -   # пусто
 make repro-check                    # две сборки с разными кешами — SHA256SUMS совпадают
 ```
 
@@ -61,7 +84,8 @@ Actions → Run workflow с `tag=vX.Y.Z`.
 
 ## Если ассетов нет или они битые
 
-Actions → CI → Run workflow с `tag=vX.Y.Z`: без `upload` — сухой прогон (сборка и
-сверка `SHA256SUMS`), с `upload=true` — загрузка в релиз с заменой файлов.
+Actions → CI → Run workflow (с ветки `main`) с `tag=vX.Y.Z`: без `upload` —
+сухой прогон (сборка, сверка и подпись `SHA256SUMS`), с `upload=true` — загрузка
+в релиз с заменой файлов; у подписанного релиза — только сверка.
 Неверная запись в changelog чинится revert-коммитом; история `main` не
 переписывается.
