@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/iamletenkov/cream/compare/v1.3.0...v1.3.1) (2026-10-27)
+
+
+### docs
+
+* **release:** environment release — только ветка main ([#50](https://github.com/iamletenkov/cream/issues/50)) ([aa7f198](https://github.com/iamletenkov/cream/commit/aa7f19803f996a4df5f1d3e70571f73e9da6c9c1))
+
 ## [1.3.0](https://github.com/iamletenkov/cream/compare/v1.2.0...v1.3.0) (2026-10-21)
 
 
