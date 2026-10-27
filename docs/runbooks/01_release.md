@@ -35,7 +35,7 @@ Rekor (`scripts/release-sign.sh`, версия cosign и его sha256 — `env`
 `.github/workflows/ci.yml`). Публичные ключи — `release/keys/stvor-platform.pub`
 (текущий) и `stvor-platform-next.pub` (следующий, офлайн у владельца).
 
-- Environment `release` (Settings → Environments): ветка `main` и теги `v*`;
+- Environment `release` (Settings → Environments): только ветка `main` (теги не добавлять: dispatch по тегу получил бы секреты);
   секреты `COSIGN_PRIVATE_KEY` (PEM ключа `stvor-platform`) и `COSIGN_PASSWORD`.
   Нет секрета — job подписи падает, ассеты в релиз не загружаются.
 - Подписывается только тег, чей коммит — предок `origin/main`, и только
