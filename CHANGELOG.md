@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/iamletenkov/cream/compare/v1.3.1...v1.4.0) (2026-10-28)
+
+
+### Добавлено
+
+* **install:** install --allow-downgrade понижает версию и заменяет сборку той же версии ([#52](https://github.com/iamletenkov/cream/issues/52)) ([3903525](https://github.com/iamletenkov/cream/commit/39035252e043000f7696b29c0e523ca354906b2f))
+
 ## [1.3.1](https://github.com/iamletenkov/cream/compare/v1.3.0...v1.3.1) (2026-10-27)
 
 
