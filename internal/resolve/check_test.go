@@ -141,6 +141,8 @@ func TestCheckSteps(t *testing.T) {
 		{"downgrade", []string{"install local/app", "install --with-deps core/app"}, []string{"ok", "version.downgrade"},
 			[]int{0, 65}},
 		{"bad-flag", []string{"install --frobnicate app"}, []string{"usage.flag"}, []int{64}},
+		// --allow-downgrade — только на живой машине (§6.5): в образе флага нет.
+		{"allow-downgrade-flag", []string{"install --allow-downgrade app"}, []string{"usage.flag"}, []int{64}},
 		{"shell", []string{"install app; reboot"}, []string{"skipped"}, nil},
 		{"secret-stdin", []string{"install --with-deps app TOKEN=- < /run/secrets/app-token"}, []string{"ok"}, nil},
 		{"other-redirect", []string{"install --with-deps app TOKEN=- < /etc/shadow"}, []string{"skipped"}, nil},
@@ -582,5 +584,19 @@ func TestCheckRootDot(t *testing.T) {
 		if got := stepCode(r.Steps[0]); got != "ok" {
 			t.Errorf("%s: %s %+v", p, got, r.Steps[0].Error)
 		}
+	}
+}
+
+// TestCheckDowngradeMessage — текст 65 version.downgrade по §6.5: понижение —
+// только install --allow-downgrade на живой машине, не remove + install.
+func TestCheckDowngradeMessage(t *testing.T) {
+	t.Parallel()
+	r := runCheck(t, nil, "install local/app", "install --with-deps core/app")
+	e := r.Steps[1].Error
+	if e == nil || e.Code != "version.downgrade" {
+		t.Fatalf("шаг 2: %+v", r.Steps[1])
+	}
+	if !strings.Contains(e.Message, "install --allow-downgrade") || strings.Contains(e.Message, "remove") {
+		t.Errorf("текст: %q", e.Message)
 	}
 }

@@ -152,6 +152,7 @@ var manFlags = map[string]map[string]string{
 		"source":             "Look up references without an explicit source in source \\fIS\\fR.",
 		"reinstall":          "Run the install hook even if nothing changed.",
 		"with-deps":          "Add missing dependencies (depends) from the source of the extension that needs them.",
+		"allow-downgrade":    "Allow a lower version, or the same version with another tree digest; it is installed the upgrade way (the upgrade hook with CREAM_PREV_VERSION).",
 		"accept-risk":        "Allow extensions with targets.live: confirm.",
 		"allow-skip":         "Treat hook exit code 20 as status skipped instead of an error.",
 		"params-file":        "Read KEY=VALUE parameters from file \\fIF\\fR (mode 0600, owned by root).",

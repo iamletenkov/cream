@@ -1,0 +1,23 @@
+{
+  "cream": "dev",
+  "command": "install",
+  "phase": "live",
+  "reason": "env",
+  "ok": false,
+  "result": null,
+  "warnings": [
+    {
+      "code": "platform.dev_build",
+      "message": "upgrade-fixture: сборка cream без версии (dev) считается удовлетворяющей cream: >=1.0.0"
+    }
+  ],
+  "error": {
+    "code": "version.downgrade",
+    "message": "upgrade-fixture: установлена 2.0.0, в источнике 1.0.0 — понижение версии не поддерживается (remove, затем install нужного пина)",
+    "details": {
+      "ext": "upgrade-fixture",
+      "found": "1.0.0",
+      "installed": "2.0.0"
+    }
+  }
+}

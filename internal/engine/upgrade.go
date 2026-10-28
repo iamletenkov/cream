@@ -399,7 +399,7 @@ func (e *Engine) upgradeItem(in *Installed, r UpgradeRequest, dirs []source.Sour
 	}
 	m := en.Manifest
 	it.To = m.Version.String()
-	op, err := installDecide(in, en)
+	op, err := installDecide(in, en, false)
 	if err != nil {
 		it.block(upgradeReason(err), err)
 		return it, nil, nil

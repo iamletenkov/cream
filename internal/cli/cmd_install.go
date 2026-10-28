@@ -20,10 +20,10 @@ import (
 // {"extensions": [...]} in install order.
 func (App) installCommands() []Command {
 	var src, paramsFile, phase, fromDir, record string
-	var reinstall, acceptRisk, allowSkip, removeParams, withDeps bool
+	var reinstall, acceptRisk, allowSkip, removeParams, withDeps, allowDowngrade bool
 	return []Command{
 		{Name: "install",
-			Usage: "install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка (в образе — фаза build)\n" +
+			Usage: "install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--allow-downgrade] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]  — установка (в образе — фаза build)\n" +
 				"  install --phase build --from-dir D --record F [--params-file P] [--remove-params-file] [--allow-skip]  — устарело: фаза build из дерева bisquite 2.x",
 			Flags: func(fs *flag.FlagSet) {
 				fs.StringVar(&src, "source", "", "искать ссылки без источника в источнике `S`")
@@ -36,7 +36,8 @@ func (App) installCommands() []Command {
 				fs.StringVar(&fromDir, "from-dir", "", "устарело (cream 2.0 уберёт): фаза build, дерево `D` (incoming/<id>/<имя>)")
 				fs.StringVar(&record, "record", "", "устарело (cream 2.0 уберёт): фаза build, record.json `F` — слой resolve --json")
 				fs.BoolVar(&removeParams, "remove-params-file", false, "устарело (cream 2.0 уберёт): удалить --params-file после чтения")
-				reserveFlags(fs, "allow-downgrade", "require-pinned")
+				fs.BoolVar(&allowDowngrade, "allow-downgrade", false, "разрешить понижение версии и ту же версию с другим отпечатком (путь upgrade)")
+				reserveFlags(fs, "require-pinned")
 			},
 			Run: func(ctx *Context, args []string) (any, error) {
 				// --from-dir, --record, --remove-params-file: the deprecated layer of
@@ -44,12 +45,12 @@ func (App) installCommands() []Command {
 				// phase (spec 2026-10-21 §10.2).
 				if fromDir != "" || record != "" || removeParams {
 					return runInstallBuild(ctx, args, installBuildFlags{phase: phase, source: src,
-						reinstall: reinstall, acceptRisk: acceptRisk, withDeps: withDeps},
+						reinstall: reinstall, acceptRisk: acceptRisk, withDeps: withDeps, allowDowngrade: allowDowngrade},
 						engine.BuildRequest{FromDir: fromDir, Record: record, ParamsFile: paramsFile,
 							RemoveParamsFile: removeParams, AllowSkip: allowSkip})
 				}
 				return runInstall(ctx, args, phase, engine.InstallRequest{Source: src, Reinstall: reinstall,
-					AcceptRisk: acceptRisk, AllowSkip: allowSkip, WithDeps: withDeps,
+					AcceptRisk: acceptRisk, AllowSkip: allowSkip, WithDeps: withDeps, AllowDowngrade: allowDowngrade,
 					Params: config.AssignInput{ParamsFile: paramsFile}})
 			}},
 		upgradeCommand(),
@@ -132,9 +133,9 @@ func runInstall(ctx *Context, args []string, phase string, r engine.InstallReque
 
 // installBuildFlags are the install flags the build phase refuses or checks.
 type installBuildFlags struct {
-	phase                           string
-	source                          string
-	reinstall, acceptRisk, withDeps bool
+	phase                                           string
+	source                                          string
+	reinstall, acceptRisk, withDeps, allowDowngrade bool
 }
 
 // runInstallBuild is `cream install --phase build --from-dir …` (§12.2 п.4;
@@ -145,6 +146,8 @@ func runInstallBuild(ctx *Context, args []string, f installBuildFlags, r engine.
 	switch {
 	case f.phase != "" && f.phase != engine.PhaseBuild && f.phase != engine.PhaseLive:
 		return nil, cerr.New(cerr.ExitUsage, "usage.phase", "--phase %q: ожидается build или live", f.phase)
+	case f.allowDowngrade:
+		return nil, cerr.New(cerr.ExitUsage, "usage.flag", "install: --allow-downgrade — только на живой машине, в фазе build не применяется")
 	case f.phase != engine.PhaseBuild:
 		return nil, ctx.Usagef("install: --from-dir, --record и --remove-params-file — только с --phase build")
 	case r.FromDir == "" || r.Record == "":

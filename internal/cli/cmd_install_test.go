@@ -71,10 +71,13 @@ func installCLIRoot(t *testing.T) string {
 func TestGoldenInstall(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		before   [][]string
-		args     []string
-		next     bool // перед вызовом источник fixtures переключён на upgrade-fixture 2.0.0
+		name   string
+		before [][]string
+		args   []string
+		next   bool // перед вызовом источник fixtures переключён на upgrade-fixture 2.0.0
+		// prevNext: before идёт по источнику с upgrade-fixture 2.0.0, перед вызовом
+		// источник fixtures возвращается к 1.0.0 (понижение).
+		prevNext bool
 		wantExit int
 	}{
 		{name: "install-noop", args: []string{"install", "--json", "noop"}},
@@ -87,15 +90,26 @@ func TestGoldenInstall(t *testing.T) {
 			args: []string{"upgrade", "--json", "upgrade-fixture"}},
 		{name: "upgrade-all", before: [][]string{{"install", "upgrade-fixture"}, {"install", "noop"}}, next: true,
 			args: []string{"upgrade", "--json", "--all"}},
+		{name: "install-downgrade-refused", before: [][]string{{"install", "upgrade-fixture"}}, prevNext: true,
+			args: []string{"install", "--json", "upgrade-fixture"}, wantExit: 65},
+		{name: "install-downgrade", before: [][]string{{"install", "upgrade-fixture"}}, prevNext: true,
+			args: []string{"install", "--json", "--allow-downgrade", "upgrade-fixture"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			root := installCLIRoot(t)
+			if tc.prevNext {
+				installCLISources(t, root, installCLICatalog(t, root, "next", "1.1.0", map[string]string{
+					"upgrade-fixture": cliTestdataDir(t, "catalog-next", "extensions", "upgrade-fixture")}))
+			}
 			for _, b := range tc.before {
 				if out := runCLI(t, cliIn{Root: root}, b...); out.Code != 0 {
 					t.Fatalf("%v: %d\n%s", b, out.Code, out.Stderr)
 				}
+			}
+			if tc.prevNext {
+				installCLISources(t, root, filepath.Join(root, "srv", "catalog"))
 			}
 			if tc.next {
 				dir := installCLICatalog(t, root, "next", "1.1.0", map[string]string{
@@ -122,8 +136,19 @@ func TestInstallCommandText(t *testing.T) {
 	if out := runCLI(t, in, "install", "noop"); out.Code != 0 || out.Stdout != "noop 1.0.0: installed (без изменений)\n" {
 		t.Errorf("повтор: %+v", out)
 	}
-	if out := runCLI(t, in, "install", "--allow-downgrade", "noop"); out.Code != 64 {
+	// --allow-downgrade больше не зарезервирован: повтор той же версии и отпечатка — без изменений.
+	if out := runCLI(t, in, "install", "--allow-downgrade", "noop"); out.Code != 0 ||
+		out.Stdout != "noop 1.0.0: installed (без изменений)\n" {
 		t.Errorf("--allow-downgrade: %+v", out)
+	}
+	// В фазе build флага нет — 64 usage.flag, как у check.
+	for _, args := range [][]string{
+		{"--json", "install", "--phase", "build", "--allow-downgrade", "noop"},
+		{"--json", "install", "--phase", "build", "--allow-downgrade", "--from-dir", "/x", "--record", "/y"},
+	} {
+		if out := runCLI(t, in, args...); out.Code != 64 || !strings.Contains(out.Stdout, `"usage.flag"`) {
+			t.Errorf("%v: %+v", args, out)
+		}
 	}
 	if out := runCLI(t, in, "--json", "install", "--require-pinned", "noop"); out.Code != 64 ||
 		!strings.Contains(out.Stdout, `"usage.reserved"`) {
