@@ -146,14 +146,16 @@ func runInstallBuild(ctx *Context, args []string, f installBuildFlags, r engine.
 	switch {
 	case f.phase != "" && f.phase != engine.PhaseBuild && f.phase != engine.PhaseLive:
 		return nil, cerr.New(cerr.ExitUsage, "usage.phase", "--phase %q: ожидается build или live", f.phase)
+	case f.allowDowngrade:
+		return nil, cerr.New(cerr.ExitUsage, "usage.flag", "install: --allow-downgrade — только на живой машине, в фазе build не применяется")
 	case f.phase != engine.PhaseBuild:
 		return nil, ctx.Usagef("install: --from-dir, --record и --remove-params-file — только с --phase build")
 	case r.FromDir == "" || r.Record == "":
 		return nil, ctx.Usagef("install --phase build: нужны --from-dir и --record")
 	case len(args) > 0:
 		return nil, ctx.Usagef("install --phase build: расширение — из --from-dir, параметры — только в --params-file")
-	case f.source != "" || f.reinstall || f.acceptRisk || f.withDeps || f.allowDowngrade:
-		return nil, ctx.Usagef("install --phase build: --source, --with-deps, --reinstall, --allow-downgrade и --accept-risk не применяются")
+	case f.source != "" || f.reinstall || f.acceptRisk || f.withDeps:
+		return nil, ctx.Usagef("install --phase build: --source, --with-deps, --reinstall и --accept-risk не применяются")
 	}
 	if err := requireRoot(ctx, "install"); err != nil {
 		return nil, err

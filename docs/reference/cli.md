@@ -88,7 +88,7 @@ cream remove [--purge|--forget] [--force] <ext>
 | `--source S` | искать ссылки без источника только в `S` |
 | `--with-deps` | добрать недостающие `depends` из источника того расширения, которому они нужны |
 | `--reinstall` | вызвать хук `install`, даже если ничего не изменилось |
-| `--allow-downgrade` | разрешить понижение версии и ту же версию с другим отпечатком; ставится путём upgrade (хук `upgrade` с `CREAM_PREV_VERSION`), в `history.jsonl` — `op: downgrade`; без флага — 65 `version.downgrade` / `version.same_digest` |
+| `--allow-downgrade` | разрешить понижение версии и ту же версию с другим отпечатком; ставится путём upgrade (хук `upgrade` с `CREAM_PREV_VERSION`), в `history.jsonl` — `op: downgrade`; без флага — 65 `version.downgrade` / `version.same_digest`; в фазе build — 64 `usage.flag` |
 | `--accept-risk` | ставить расширение с `targets.live: confirm` |
 | `--allow-skip` | код 20 хука — статус `skipped` без ошибки (иначе код 68) |
 | `--params-file F` | параметры `KEY=VALUE` из файла (0600, владелец root) |

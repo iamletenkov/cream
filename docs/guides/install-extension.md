@@ -126,7 +126,10 @@ sudo cream upgrade --all
 `sudo cream install --allow-downgrade <ext>` после переключения источника на
 прежний каталог — без флага код 65 `version.downgrade` / `version.same_digest`.
 Понижение идёт путём upgrade: хук `upgrade` с `CREAM_PREV_VERSION`, при сбое —
-`failed-upgrade` и прежняя версия. План (`--dry-run`), закрепление версии
+`failed-upgrade` и прежняя версия. Если после такого сбоя источник вернули к
+прежнему каталогу (версия и отпечаток — как в реестре), `install --allow-downgrade
+<ext>` — обычная установка: хук `install` без `CREAM_PREV_VERSION`, `.prev`
+удаляется. В фазе build флага нет (код 64 `usage.flag`). План (`--dry-run`), закрепление версии
 (`cream hold`), риск (`--accept-risk`) и коды частичного исхода —
 [обновить расширения](upgrade-extensions.md).
 

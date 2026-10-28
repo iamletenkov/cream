@@ -219,7 +219,7 @@ func (c *checker) decide(en checkEntry) (string, error) {
 	switch cmp := semver.Compare(en.m.Version, prev.Manifest.Version); {
 	case cmp < 0:
 		ce := cerr.New(cerr.ExitData, "version.downgrade",
-			"%s: установлена %s, в источнике %s — понижение версии не поддерживается (remove, затем install нужного пина)",
+			"%s: установлена %s, в источнике %s — понижение версии только через install --allow-downgrade на живой машине, в фазе build его нет",
 			en.m.Name, prev.Manifest.Version, en.m.Version)
 		ce.Details = map[string]any{"ext": en.m.Name, "installed": prev.Manifest.Version.String(),
 			"found": en.m.Version.String()}

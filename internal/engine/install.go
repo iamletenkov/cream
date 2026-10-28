@@ -99,6 +99,9 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 	if len(r.Refs) == 0 {
 		return nil, cerr.New(cerr.ExitUsage, "usage.args", "install: нужна ссылка на расширение")
 	}
+	if r.AllowDowngrade && e.Phase() == PhaseBuild {
+		return nil, cerr.New(cerr.ExitUsage, "usage.flag", "install: --allow-downgrade — только на живой машине, в фазе build не применяется")
+	}
 	if len(r.Refs) > 1 && (len(r.Params.Args) > 0 || r.Params.ParamsFile != "") {
 		return nil, cerr.New(cerr.ExitUsage, "usage.args", "install: несколько ссылок — только без параметров")
 	}
@@ -323,7 +326,7 @@ func installDecide(prev *Installed, en catalog.Entry, allowDowngrade bool) (stri
 		return installOpDowngrade, nil
 	case c < 0:
 		ce := cerr.New(cerr.ExitData, "version.downgrade",
-			"%s: установлена %s, в источнике %s — понижение версии только с --allow-downgrade",
+			"%s: установлена %s, в источнике %s — понижение версии не поддерживается (remove, затем install нужного пина)",
 			name, rec.Version, en.Manifest.Version)
 		ce.Details = details
 		return "", ce
@@ -331,7 +334,7 @@ func installDecide(prev *Installed, en catalog.Entry, allowDowngrade bool) (stri
 		return installOpUpgrade, nil
 	case rec.ExtDigest != en.Digest:
 		ce := cerr.New(cerr.ExitData, "version.same_digest",
-			"%s %s: отпечаток дерева в источнике отличается от установленного — пересборка без подъёма версии (замена — с --allow-downgrade)", name, rec.Version)
+			"%s %s: отпечаток дерева в источнике отличается от установленного — пересборка без подъёма версии", name, rec.Version)
 		details["installed_digest"], details["found_digest"] = rec.ExtDigest, en.Digest
 		ce.Details = details
 		return "", ce

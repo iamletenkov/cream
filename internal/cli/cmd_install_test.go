@@ -141,6 +141,15 @@ func TestInstallCommandText(t *testing.T) {
 		out.Stdout != "noop 1.0.0: installed (без изменений)\n" {
 		t.Errorf("--allow-downgrade: %+v", out)
 	}
+	// В фазе build флага нет — 64 usage.flag, как у check.
+	for _, args := range [][]string{
+		{"--json", "install", "--phase", "build", "--allow-downgrade", "noop"},
+		{"--json", "install", "--phase", "build", "--allow-downgrade", "--from-dir", "/x", "--record", "/y"},
+	} {
+		if out := runCLI(t, in, args...); out.Code != 64 || !strings.Contains(out.Stdout, `"usage.flag"`) {
+			t.Errorf("%v: %+v", args, out)
+		}
+	}
 	if out := runCLI(t, in, "--json", "install", "--require-pinned", "noop"); out.Code != 64 ||
 		!strings.Contains(out.Stdout, `"usage.reserved"`) {
 		t.Errorf("--require-pinned: %+v", out)
