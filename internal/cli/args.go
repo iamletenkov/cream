@@ -63,8 +63,7 @@ func (reservedFlag) String() string   { return "false" }
 func (reservedFlag) Set(string) error { return nil }
 func (reservedFlag) IsBoolFlag() bool { return true }
 
-// reserveFlags registers deferred flags (--with-deps, --allow-downgrade,
-// --require-pinned) on a command's flag set.
+// reserveFlags registers deferred flags (--require-pinned) on a command's flag set.
 func reserveFlags(fs *flag.FlagSet, names ...string) {
 	for _, n := range names {
 		fs.Var(reservedFlag{}, n, "зарезервировано в cream/v1, не реализовано в cream 1.0")

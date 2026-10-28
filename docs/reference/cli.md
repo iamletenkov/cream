@@ -76,7 +76,7 @@ cream catalog pack DIR --out FILE
 ## Установка, обновление, удаление
 
 ```
-cream install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]
+cream install [--phase build|live] [--source S] [--with-deps] [--reinstall] [--allow-downgrade] [--accept-risk] [--allow-skip] [--params-file F] <ref>… [KEY=VALUE…] [KEY=-]
 cream upgrade [--dry-run] [-y] [--accept-risk <ext>|all]… [--fail-fast] <ext>… | --all
 cream hold <ext>…
 cream unhold <ext>…
@@ -88,6 +88,7 @@ cream remove [--purge|--forget] [--force] <ext>
 | `--source S` | искать ссылки без источника только в `S` |
 | `--with-deps` | добрать недостающие `depends` из источника того расширения, которому они нужны |
 | `--reinstall` | вызвать хук `install`, даже если ничего не изменилось |
+| `--allow-downgrade` | разрешить понижение версии и ту же версию с другим отпечатком; ставится путём upgrade (хук `upgrade` с `CREAM_PREV_VERSION`), в `history.jsonl` — `op: downgrade`; без флага — 65 `version.downgrade` / `version.same_digest` |
 | `--accept-risk` | ставить расширение с `targets.live: confirm` |
 | `--allow-skip` | код 20 хука — статус `skipped` без ошибки (иначе код 68) |
 | `--params-file F` | параметры `KEY=VALUE` из файла (0600, владелец root) |
@@ -136,8 +137,7 @@ cream remove [--purge|--forget] [--force] <ext>
 | `--forget` | без хука `remove`: только реестр, дерево и файлы cream |
 | `--force` | удалить, хотя от расширения зависят установленные |
 
-Флаги `--allow-downgrade`, `--require-pinned` зарезервированы
-(код 64 `usage.reserved`).
+Флаг `--require-pinned` зарезервирован (код 64 `usage.reserved`).
 
 ## Настройки
 

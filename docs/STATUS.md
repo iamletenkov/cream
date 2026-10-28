@@ -24,6 +24,9 @@
   cream-бандлом; итог и расхождения — в [плане](plans/2026-10-21-bisquite-bundled-cream.md#итог-финала-2026-10-22-и-что-разошлось).
 
 ## В работе
+- `feature/install-allow-downgrade` (выйдет минором 1.4.0): `install --allow-downgrade` — понижение версии и та же
+  версия с другим отпечатком путём upgrade, `op: downgrade` в `history.jsonl`; нужен откату каталога stvor-agent
+  (срез 5, `assign.CreamMinDowngrade`).
 - `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
   `--accept-risk <ext>`, `-y`, `--fail-fast`, частичный исход с кодом худшего; `cream hold`/`unhold`.
   Исправляет падение `upgrade --all` кодом 68 из-за `targets.live: confirm` без новой версии.

@@ -41,6 +41,10 @@ type InstallRequest struct {
 	// WithDeps adds the missing depends of the requested extensions from the
 	// source each was found in (§9.4).
 	WithDeps bool
+	// AllowDowngrade is --allow-downgrade (§6.5): a lower version, or the same
+	// version with another digest, is installed the upgrade way (op downgrade)
+	// instead of 65 version.downgrade / version.same_digest.
+	AllowDowngrade bool
 }
 
 // InstallResult is the result of install/upgrade for one extension: the
@@ -52,13 +56,14 @@ type InstallResult struct {
 
 // installOpts are the flags installEntries needs.
 type installOpts struct {
-	reinstall, acceptRisk, allowSkip bool
+	reinstall, acceptRisk, allowSkip, allowDowngrade bool
 }
 
 // Operations of the registry history.
 const (
-	installOpInstall = "install"
-	installOpUpgrade = "upgrade"
+	installOpInstall   = "install"
+	installOpUpgrade   = "upgrade"
+	installOpDowngrade = "downgrade" // --allow-downgrade: lower version or same version, other digest
 )
 
 // Install installs exactly one reference (InstallAll for several).
@@ -83,7 +88,8 @@ func (e *Engine) Install(ctx context.Context, r InstallRequest) (*InstallResult,
 // key, status failed or skipped, --reinstall — the install hook again;
 // failed-upgrade — the upgrade again. A higher version is an upgrade, a
 // lower one 65 version.downgrade, the same version with another digest
-// 65 version.same_digest. The results come in install order; on an error
+// 65 version.same_digest; with AllowDowngrade both are a downgrade, done
+// the upgrade way (.prev, the upgrade hook with CREAM_PREV_VERSION). The results come in install order; on an error
 // they hold the extensions done before it.
 //
 // In the build phase (Phase()) the same path applies the build rules
@@ -154,7 +160,8 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 	}
 	defer drop()
 	return e.installEntries(ctx, entries, changes, all, dirs,
-		installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip})
+		installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip,
+			allowDowngrade: r.AllowDowngrade})
 }
 
 // installWithDeps adds to entries the depends (by name, transitively) that
@@ -232,11 +239,11 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 			return nil, err
 		}
 		stored[name], build[name] = st, b
-		op, err := installDecide(prev[name], en)
+		op, err := installDecide(prev[name], en, o.allowDowngrade)
 		if err != nil {
 			return nil, err
 		}
-		if p := prev[name]; op == installOpUpgrade && p.Record.Held {
+		if p := prev[name]; op != installOpInstall && p.Record.Held {
 			return nil, heldError(name, p.Record.Version, en.Manifest.Version.String())
 		}
 		byName[name], ops[name] = en, op
@@ -297,8 +304,9 @@ func installReplace(recs []state.Record, rec state.Record) []state.Record {
 // installDecide is the operation for entry en against the installed prev:
 // install (first, or a repeat of the same version and digest) or upgrade
 // (a higher version, or the repeat of a failed upgrade); 65 for a lower
-// version and for the same version with another digest.
-func installDecide(prev *Installed, en catalog.Entry) (string, error) {
+// version and for the same version with another digest, or downgrade for
+// both when allowDowngrade (--allow-downgrade).
+func installDecide(prev *Installed, en catalog.Entry, allowDowngrade bool) (string, error) {
 	if prev == nil {
 		return installOpInstall, nil
 	}
@@ -311,9 +319,11 @@ func installDecide(prev *Installed, en catalog.Entry) (string, error) {
 	}
 	details := map[string]any{"ext": name, "installed": rec.Version, "found": en.Manifest.Version.String()}
 	switch c := semver.Compare(en.Manifest.Version, old); {
+	case c < 0 && allowDowngrade, c == 0 && rec.ExtDigest != en.Digest && allowDowngrade:
+		return installOpDowngrade, nil
 	case c < 0:
 		ce := cerr.New(cerr.ExitData, "version.downgrade",
-			"%s: установлена %s, в источнике %s — понижение версии не поддерживается (remove, затем install нужного пина)",
+			"%s: установлена %s, в источнике %s — понижение версии только с --allow-downgrade",
 			name, rec.Version, en.Manifest.Version)
 		ce.Details = details
 		return "", ce
@@ -321,7 +331,7 @@ func installDecide(prev *Installed, en catalog.Entry) (string, error) {
 		return installOpUpgrade, nil
 	case rec.ExtDigest != en.Digest:
 		ce := cerr.New(cerr.ExitData, "version.same_digest",
-			"%s %s: отпечаток дерева в источнике отличается от установленного — пересборка без подъёма версии", name, rec.Version)
+			"%s %s: отпечаток дерева в источнике отличается от установленного — пересборка без подъёма версии (замена — с --allow-downgrade)", name, rec.Version)
 		details["installed_digest"], details["found_digest"] = rec.ExtDigest, en.Digest
 		ce.Details = details
 		return "", ce
@@ -450,7 +460,8 @@ func (e *Engine) installOne(ctx context.Context, j installJob, o installOpts) (*
 			return nil, err
 		}
 	}
-	upgrade := j.op == installOpUpgrade
+	// A downgrade goes the upgrade way: .prev, the upgrade hook, failed-upgrade.
+	upgrade := j.op == installOpUpgrade || j.op == installOpDowngrade
 	if err := e.installStage(name, j.entry.Dir); err != nil {
 		return nil, err
 	}
@@ -564,7 +575,7 @@ func (e *Engine) installLive(ctx context.Context, rec state.Record, m *manifest.
 		return nil
 	}
 	reason := ReasonInstall
-	if op == installOpUpgrade {
+	if op == installOpUpgrade || op == installOpDowngrade {
 		reason = ReasonUpgrade
 	}
 	return e.Configure(ctx, rec.Name, reason, ConfigureOptions{Wait: true})
