@@ -2,7 +2,7 @@
 name: explorer
 description: Read-only исследование репозитория — существующий код, конвенции, принятые решения (ADR/спеки) по теме. Используй ПЕРЕД planner, чтобы не засорять главный контекст чтением.
 tools: Glob, Grep, LS, Read, Write, WebFetch, WebSearch, mcp__codebase-memory__search_graph, mcp__codebase-memory__search_code, mcp__codebase-memory__trace_path, mcp__codebase-memory__get_code_snippet, mcp__codebase-memory__get_architecture, mcp__codebase-memory__query_graph, mcp__knowledge-graph__aim_memory_search, mcp__context7__resolve-library-id, mcp__context7__query-docs
-model: opus
+model: sonnet
 effort: medium
 omitClaudeMd: true
 ---

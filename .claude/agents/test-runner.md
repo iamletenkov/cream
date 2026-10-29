@@ -2,7 +2,7 @@
 name: test-runner
 description: Прогоняет make-таргеты проверок (lint, test, ci) и возвращает короткую сводку и диагноз каждого падения (код / тест / окружение). Код не правит. Используй, когда вывод длинный или нужен разбор падений.
 tools: Bash, Read, Write, Grep, Glob, mcp__codebase-memory__search_graph, mcp__codebase-memory__get_code_snippet
-model: opus
+model: sonnet
 effort: medium
 omitClaudeMd: true
 ---
