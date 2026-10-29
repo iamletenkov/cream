@@ -13,7 +13,7 @@
 - Финальное ревью (задача 23): секрет в `resolve` только именем (Р28), единые коды ввода-вывода `io.*` (Р29),
   `stage`/`--require-pinned` — 64 `usage.reserved`, окружение хука по списку валидатора, `lock/` 0700.
 - Документация: README, [первые шаги](getting-started.md), [руководства](guides/), [справочник](reference/cli.md),
-  [ADR 0001](adr/0001-contract-cream-v1.md), [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), карта `AGENTS.md`.
+  [ADR 0001](adr/0001-contract-cream-v1.md), [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), карта — [development.md](development.md#карта-репозитория).
 
 - **OpenWrt** (план bisquite-bundled-cream Task 27, [ADR 0005](adr/0005-openwrt-family-procd.md), выйдет минором
   1.3.0): `platform.family: openwrt`, раскладка `/opt/cream/var`, configure из init-скриптов procd (`S19`/`S95`),
