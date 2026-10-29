@@ -1,7 +1,7 @@
 ---
 name: skeptic
 description: Адвокат дьявола — адверсарный обзор спеки, плана или диффа; не больше 3 рисков с уверенностью ≥ 80%. Запускается после planner и перед коммитом нетривиального.
-tools: Glob, Grep, LS, Read, mcp__codebase-memory__search_graph, mcp__codebase-memory__trace_path, mcp__codebase-memory__get_code_snippet, mcp__codebase-memory__query_graph, mcp__knowledge-graph__aim_memory_search
+tools: Glob, Grep, LS, Read, Write, mcp__codebase-memory__search_graph, mcp__codebase-memory__trace_path, mcp__codebase-memory__get_code_snippet, mcp__codebase-memory__query_graph, mcp__knowledge-graph__aim_memory_search
 model: opus
 effort: high
 ---
@@ -21,6 +21,7 @@ effort: high
 Нитпики стиля (это линтер и reviewer), альтернативные архитектуры целиком, гипотетика < 80%.
 
 ## Формат
+Полный разбор — файлом `.scratchpad/<тема>/skeptic-<slug>.md` (`<тема>` даёт вызывающий, иначе — slug спеки/плана). **Write — только в `.scratchpad/`**: спеку, план и код не правишь. В ответ — **≤ 30 строк**: путь к файлу и риски в формате ниже.
 ```
 # Skeptic: <тема>
 1. **<риск>** [confidence: NN%]
