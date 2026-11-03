@@ -84,7 +84,6 @@ make repro-check                    # две сборки с разными ке
 |---|---|---|---|---|
 | cream-extensions | `cream-bump.yml` | `tools/cream-pin.env` | `EXTENSIONS_BUMP_ENABLED` | `EXTENSIONS_DISPATCH_TOKEN` |
 | bisquite | `cream-bump.yml` | `cream-pin.env`, фикстуры `tests/fixtures/cream/<v>/` | `BISQUITE_BUMP_ENABLED` | `BISQUITE_DISPATCH_TOKEN` |
-| stvor | `robot-pins-bump.yml` | `CREAM_*` в `.env.example` | `STVOR_BUMP_ENABLED` | `STVOR_DISPATCH_TOKEN` |
 
 Секрет — fine-grained PAT только на целевой репозиторий с правом Actions: Read
 and write. Включить — `gh variable set EXTENSIONS_BUMP_ENABLED -R iamletenkov/cream --body true`,
