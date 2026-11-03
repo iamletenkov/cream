@@ -491,7 +491,6 @@ jobs:
   #
   #   cream-extensions  cream-bump.yml        tools/cream-pin.env
   #   bisquite          cream-bump.yml        cream-pin.env и фикстуры контракта
-  #   stvor             robot-pins-bump.yml   CREAM_* в .env.example
   #
   # У каждой цели свой выключатель (переменная репозитория = true) и свой
   # токен: fine-grained PAT только на целевой репозиторий с правом Actions:
@@ -520,11 +519,6 @@ jobs:
             workflow: cream-bump.yml
             switch: BISQUITE_BUMP_ENABLED
             secret: BISQUITE_DISPATCH_TOKEN
-          - repo: stvor
-            workflow: robot-pins-bump.yml
-            switch: STVOR_BUMP_ENABLED
-            secret: STVOR_DISPATCH_TOKEN
-            args: -f component=cream
     steps:
       - name: Dispatch ${{ matrix.workflow }}
         env:
@@ -533,7 +527,6 @@ jobs:
           SWITCH: ${{ matrix.switch }}
           SECRET: ${{ matrix.secret }}
           WORKFLOW: ${{ matrix.workflow }}
-          ARGS: ${{ matrix.args }}
           TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
           TARGET_REPO: iamletenkov/${{ matrix.repo }}
         run: |
@@ -550,7 +543,6 @@ jobs:
             echo "::warning::Нет секрета $SECRET — подъём cream $TAG в $TARGET_REPO пропущен"
             exit 0
           fi
-          # ARGS — из матрицы выше, не из ввода; разбиение по словам намеренно.
           # shellcheck disable=SC2086
-          gh workflow run "$WORKFLOW" -R "$TARGET_REPO" --ref main $ARGS -f tag="$TAG"
+          gh workflow run "$WORKFLOW" -R "$TARGET_REPO" --ref main -f tag="$TAG"
           echo "Запущен $WORKFLOW в $TARGET_REPO для $TAG"
