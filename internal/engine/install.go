@@ -360,9 +360,7 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 					stale = append(stale, f)
 				}
 			}
-			if err := place.PlanUnplace(e.L, stale, removed, preserved, placed); err != nil {
-				return nil, err
-			}
+			place.PlanUnplace(e.L, stale, removed, preserved, placed)
 		}
 		for _, f := range m.Files {
 			delete(removed, f.Dst)

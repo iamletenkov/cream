@@ -144,21 +144,16 @@ func CheckAfterRemoval(l paths.Layout, ext string, files []manifest.File, owner 
 // regular stale files vanish (modified ones get the first free backup name),
 // while symlinks and directories remain. placed includes this layer's files,
 // which are copied before Unplace, and the files of earlier layers.
-func PlanUnplace(l paths.Layout, recs []state.FileRec, removed, preserved, placed map[string]bool) error {
+// Inspection failures leave the path unprojected: execution warns and continues.
+func PlanUnplace(l paths.Layout, recs []state.FileRec, removed, preserved, placed map[string]bool) {
 	for _, rec := range recs {
 		st, err := lstatAfterRemoval(l, rec.Dst, removed)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "проверка снятия %s", rec.Dst)
-		}
-		if !st.Mode().IsRegular() {
+		if err != nil || !st.Mode().IsRegular() {
 			continue
 		}
 		data, err := os.ReadFile(onDisk(l, rec.Dst))
 		if err != nil {
-			return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "чтение снимаемого файла %s", rec.Dst)
+			continue
 		}
 		if digest(data) != rec.SHA256 {
 			backup, err := freeModifiedPath(rec.Dst, func(dst string) error {
@@ -169,13 +164,12 @@ func PlanUnplace(l paths.Layout, recs []state.FileRec, removed, preserved, place
 				return err
 			})
 			if err != nil {
-				return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "проверка резервной копии %s", rec.Dst)
+				continue
 			}
 			preserved[backup] = true
 		}
 		removed[rec.Dst] = true
 	}
-	return nil
 }
 
 func plannedPathExists(dst string, files map[string]bool) bool {
