@@ -63,31 +63,8 @@ type Owner func(dst string) (ext string, ok bool)
 // absolute symlink among the parents under a --root other than "/" leads out
 // of the root. The build phase owns the guest tree, so this is accepted.
 func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner) ([]state.FileRec, error) {
-	for _, f := range files {
-		var other string
-		var ok bool
-		if owner != nil {
-			other, ok = owner(f.Dst)
-		}
-		if ok && other != ext {
-			e := cerr.New(cerr.ExitGraph, CodeFileOwner, "файл %s уже принадлежит расширению %s", f.Dst, other)
-			e.Details = map[string]any{"dst": f.Dst, "owner": other}
-			return nil, e
-		}
-		if ok {
-			continue
-		}
-		_, err := os.Lstat(onDisk(l, f.Dst))
-		if err == nil {
-			e := cerr.New(cerr.ExitGraph, CodeFileUnowned, "файл %s уже есть на машине и не принадлежит ни одному расширению", f.Dst)
-			e.Details = map[string]any{"dst": f.Dst}
-			return nil, e
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			e := cerr.Wrap(err, cerr.ExitState, CodeFileStat, "раскладка files %s: проверка %s", ext, f.Dst)
-			e.Details = map[string]any{"dst": f.Dst}
-			return nil, e
-		}
+	if err := Check(l, ext, files, owner); err != nil {
+		return nil, err
 	}
 	src, err := os.OpenRoot(tree)
 	if err != nil {
@@ -103,6 +80,44 @@ func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner)
 		recs = append(recs, rec)
 	}
 	return recs, nil
+}
+
+// Check validates ownership and existing destinations without writing. The
+// engine calls it for every active layer before staging any extension; Place
+// repeats it immediately before copying to catch changes made by earlier hooks.
+func Check(l paths.Layout, ext string, files []manifest.File, owner Owner) error {
+	for _, f := range files {
+		var other string
+		var ok bool
+		if owner != nil {
+			other, ok = owner(f.Dst)
+		}
+		if ok && other != ext {
+			e := cerr.New(cerr.ExitGraph, CodeFileOwner, "расширения %s и %s претендуют на путь %s", ext, other, f.Dst)
+			e.Details = map[string]any{"dst": f.Dst, "owner": other, "ext": ext, "owners": []string{other, ext}}
+			return e
+		}
+		st, err := os.Lstat(onDisk(l, f.Dst))
+		if ok && err == nil && st.IsDir() {
+			e := cerr.New(cerr.ExitGraph, "conflict.file", "%s: на месте файла %s каталог", ext, f.Dst)
+			e.Details = map[string]any{"ext": ext, "dst": f.Dst, "owners": []string{ext}}
+			return e
+		}
+		if ok && (err == nil || errors.Is(err, fs.ErrNotExist)) {
+			continue
+		}
+		if err == nil {
+			e := cerr.New(cerr.ExitGraph, CodeFileUnowned, "%s: файл %s уже есть на машине и не принадлежит ни одному расширению", ext, f.Dst)
+			e.Details = map[string]any{"dst": f.Dst, "ext": ext}
+			return e
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			e := cerr.Wrap(err, cerr.ExitState, CodeFileStat, "раскладка files %s: проверка %s", ext, f.Dst)
+			e.Details = map[string]any{"dst": f.Dst}
+			return e
+		}
+	}
+	return nil
 }
 
 func placeOne(l paths.Layout, src *os.Root, f manifest.File) (state.FileRec, error) {

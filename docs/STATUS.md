@@ -1,46 +1,28 @@
 # Статус cream
 
-**Выпущены 1.0.0–1.1.4** (2026-10-19…21). Документация переложена по задачам: [docs/README.md](README.md) —
-первые шаги, руководства, справочник (сверен с 1.1.4).
+Выпущена **1.4.0** (2026-10-28). Версия и CHANGELOG — через release-please.
+Документация: [README.md](README.md); договорённости — [ADR](adr/README.md).
 
 ## Сделано
-- Формат `cream/v1`, источники archive/path и `catalog pack`, резолвер, исполнитель (`install`/`upgrade`/`remove`,
-  `set`/`show`/`get`/`list`/`config`, `run`/`actions`, `system init`), фаза build (`install --phase build`).
-- Упаковка: `.deb` (nfpm) с гостевыми бинарями, тарболы с `copyright`, `SHA256SUMS`, `repro-check`, `vuln`
-  (toolchain `golang:1.26.9`, Р26); CI-матрица и ассеты релиза через release-please (первая версия 1.0.0, Р31).
-- Проверки: `make test-integration` (systemd PID 1 в контейнере: debian-12, ubuntu-24.04, debian-13) и
-  `make test-build` (настоящий `virt-customize` — и контейнер Debian 13, и 1.48 хоста, Р30).
-- Финальное ревью (задача 23): секрет в `resolve` только именем (Р28), единые коды ввода-вывода `io.*` (Р29),
-  `stage`/`--require-pinned` — 64 `usage.reserved`, окружение хука по списку валидатора, `lock/` 0700.
-- Документация: README, [первые шаги](getting-started.md), [руководства](guides/), [справочник](reference/cli.md),
-  [ADR 0001](adr/0001-contract-cream-v1.md), [ADR 0002](adr/0002-single-dependency-stdlib-cli.md), карта — [development.md](development.md#карта-репозитория).
-
-- **OpenWrt** (план bisquite-bundled-cream Task 27, [ADR 0005](adr/0005-openwrt-family-procd.md), выйдет минором
-  1.3.0): `platform.family: openwrt`, раскладка `/opt/cream/var`, configure из init-скриптов procd (`S19`/`S95`),
-  `TMPDIR` на диске, `IPKG_INSTROOT=/` в фазе build, поставка `tar.gz`; `make test-openwrt` (корневая ФС
-  openwrt-builder v0.3.1 в контейнере) и приёмка на ВМ PVE — [руководство](guides/openwrt.md).
-
-- **План bisquite-bundled-cream закрыт** (2026-10-22): cream 1.3.0, каталог 5.4.1, bisquite 3.0.0 со встроенным
-  cream-бандлом; итог и расхождения — в [плане](plans/2026-10-21-bisquite-bundled-cream.md#итог-финала-2026-10-22-и-что-разошлось).
+- Ядро `cream/v1`: источники, resolver, install/upgrade/remove, конфигурация,
+  действия, system init, фаза build; упаковка `.deb`/`tar.gz`, воспроизводимость.
+- OpenWrt: семейство, procd, состояние под `/opt/cream/var`, `make test-openwrt`
+  ([руководство](guides/openwrt.md)); bundled cream — [закрытый план](plans/2026-10-21-bisquite-bundled-cream.md).
+- `install --allow-downgrade` и журнал `op: downgrade` — выпущено в 1.4.0.
+- `upgrade`: план, dry-run, accept-risk по имени, hold, частичный исход
+  ([ADR 0003](adr/0003-upgrade-plan-hold.md)).
 
 ## В работе
-- `feature/install-allow-downgrade` (выйдет минором 1.4.0): `install --allow-downgrade` — понижение версии и та же
-  версия с другим отпечатком путём upgrade, `op: downgrade` в `history.jsonl`; нужен откату каталога stvor-agent
-  (срез 5, `assign.CreamMinDowngrade`).
-- `fix/upgrade-plan` ([ADR 0003](adr/0003-upgrade-plan-hold.md)): `upgrade` — план до действий, `--dry-run`,
-  `--accept-risk <ext>`, `-y`, `--fail-fast`, частичный исход с кодом худшего; `cream hold`/`unhold`.
-  Исправляет падение `upgrade --all` кодом 68 из-за `targets.live: confirm` без новой версии.
-
-## Дальше
-1. Проверить PR подъёма пина cream 1.1.4 в cream-extensions, bisquite и Stvor (dispatch выпуска).
-2. Интеграция bisquite: фаза build по [guides/build-phase.md](guides/build-phase.md).
+- #57, ветка `feat/with-deps-conflict-preflight`, черновой PR #58: предпроверка
+  files всего графа до записи, `install --dry-run`, прежний отказ 67;
+  minor через `feat`. [План и результаты](plans/2026-11-14-with-deps-conflict-preflight.md).
+- `make ci` зелёный (race, contract-old, amd64/arm64); независимое ревью APPROVED.
+- PVE-приёмка заблокирована хуком среды Stvor: SSH отвергается даже с удалённой
+  командой. ВМ не создавалась. Остались конфликт без записей / успех /
+  kiosk 4.1.1 → 5.0.0 с wallpaper на одной свободной VMID 990001–990010.
 
 ## Бэклог
-- Drop-in стадии переписывает только `install`/`upgrade` расширения: у `early`, включённого cream 1.1.0, строки
-  `shutdown.target` появятся после его upgrade (`system init` переносит только ссылки).
-- `runner` ставит действию `Setpgid`: с `stdin: pass` оно в фоновой группе терминала, чтение с tty даст SIGTTIN.
-- Образы CI и тестов закреплять по digest, а не по тегу.
-- CI на PR release-please: PR, открытый под `GITHUB_TOKEN`, не запускает workflow — проверки релизного PR не идут.
-
-## Сломано
-- Ничего известного.
+- Drop-in стадии обновляется при install/upgrade расширения, не при system init.
+- `runner`: Setpgid с stdin: pass может дать SIGTTIN при чтении tty.
+- Образы CI и тестов закреплять по digest; CI release-please под GITHUB_TOKEN
+  не запускает workflow релизного PR.

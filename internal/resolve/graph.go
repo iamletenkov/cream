@@ -240,12 +240,32 @@ func checkConflicts(g *gnode, set map[string]*gnode) error {
 
 func checkFiles(set map[string]*gnode, names []string) error {
 	owner := map[string]*gnode{}
+	var paths []string
 	for _, name := range names {
 		g := set[name]
 		for _, dst := range g.files() {
+			// Both destinations are files: neither may be a parent of the
+			// other, even within a single extension. Keep discovery order so
+			// the reported pair is deterministic.
+			for _, claimed := range paths {
+				o := owner[claimed]
+				if (!g.requested && !o.requested) ||
+					(!strings.HasPrefix(dst, claimed+"/") && !strings.HasPrefix(claimed, dst+"/")) {
+					continue
+				}
+				ext := g.name()
+				if !g.requested {
+					ext = o.name()
+				}
+				return graphErr(cerr.ExitGraph, "conflict.file", ext,
+					map[string]any{"dst": dst, "other_dst": claimed, "owners": []string{o.name(), g.name()}},
+					"расширения %s и %s претендуют на несовместимые пути %s и %s (файл и его потомок)",
+					o.name(), g.name(), claimed, dst)
+			}
 			o, ok := owner[dst]
 			if !ok {
 				owner[dst] = g
+				paths = append(paths, dst)
 				continue
 			}
 			if o == g || (!g.requested && !o.requested) {

@@ -125,17 +125,12 @@ func (e *Engine) InstallFromDir(ctx context.Context, r BuildRequest) (*InstallRe
 	if err != nil {
 		return nil, err
 	}
-	drop, err := e.policyRcDPut()
-	if err != nil {
-		return nil, err
-	}
 	b := e.buildPhase()
 	var byExt map[string][]config.Change
 	if len(changes) > 0 {
 		byExt = map[string][]config.Change{m.Name: changes}
 	}
 	res, err := b.installEntries(ctx, []catalog.Entry{en}, byExt, all, nil, installOpts{allowSkip: r.AllowSkip})
-	drop()
 	if len(res) == 0 {
 		if err == nil {
 			err = cerr.New(cerr.ExitInternal, "internal", "%s: фаза build не дала результата", m.Name)
