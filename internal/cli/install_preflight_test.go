@@ -104,16 +104,22 @@ func TestInstallFilePreflight(t *testing.T) {
 							if err := os.Remove(filepath.Join(root, "etc/preflight-shared")); err != nil {
 								t.Fatal(err)
 							}
+							// Keep this owner outside the request: an earlier dep
+							// update dropping the file is now a valid transfer.
+							store := state.NewStore(paths.Layout{Root: root}, nil)
+							rec, ok, err := store.Get("dep")
+							if err != nil || !ok {
+								t.Fatalf("owner record: %v %v", ok, err)
+							}
+							rec.Name = "orphan"
 							if tc.status != "" {
-								store := state.NewStore(paths.Layout{Root: root}, nil)
-								rec, ok, err := store.Get("dep")
-								if err != nil || !ok {
-									t.Fatalf("owner record: %v %v", ok, err)
-								}
 								rec.Status = tc.status
-								if err := store.Put(*rec); err != nil {
-									t.Fatal(err)
-								}
+							}
+							if err := store.Put(*rec); err != nil {
+								t.Fatal(err)
+							}
+							if err := store.Delete("dep"); err != nil {
+								t.Fatal(err)
 							}
 						}
 					}
@@ -142,8 +148,15 @@ func TestInstallFilePreflight(t *testing.T) {
 					if out.Code != 67 || !strings.Contains(out.Stderr, tc.code) || !strings.Contains(out.Stderr, "/etc/preflight-shared") {
 						t.Errorf("refusal: %d %s", out.Code, out.Stderr)
 					}
-					if (tc.pair || tc.installed) && (!strings.Contains(out.Stderr, "app") || !strings.Contains(out.Stderr, "dep")) {
+					owner := "dep"
+					if tc.broken {
+						owner = "orphan"
+					}
+					if (tc.pair || tc.installed) && (!strings.Contains(out.Stderr, "app") || !strings.Contains(out.Stderr, owner)) {
 						t.Errorf("missing claimant names: %s", out.Stderr)
+					}
+					if tc.broken && strings.Count(out.Stderr, "/etc/preflight-shared") != 1 {
+						t.Errorf("duplicate path in error: %s", out.Stderr)
 					}
 					if !reflect.DeepEqual(before, preflightSnapshot(t, root)) {
 						t.Error("refusal wrote to disk")

@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/iamletenkov/cream/internal/cerr"
 	"github.com/iamletenkov/cream/internal/fsx"
@@ -32,7 +33,7 @@ const (
 	CodeFileUnowned = "conflict.file_unowned"
 	// CodeFileModified (warning): a file changed since placement was kept as <dst>.cream-modified.
 	CodeFileModified = "file.modified"
-	// CodeFileStat (exit 74): dst could not be checked on disk (Lstat failed, not ENOENT).
+	// CodeFileStat (exit 74): dst or a parent could not be checked (including a dangling parent).
 	CodeFileStat = "file.stat"
 	// CodeFileNotRegular (warning): the recorded dst is not a regular file any more; left alone.
 	CodeFileNotRegular = "file.not_regular"
@@ -86,7 +87,21 @@ func Place(l paths.Layout, ext, tree string, files []manifest.File, owner Owner)
 // engine calls it for every active layer before staging any extension; Place
 // repeats it immediately before copying to catch changes made by earlier hooks.
 func Check(l paths.Layout, ext string, files []manifest.File, owner Owner) error {
+	return CheckAfterRemoval(l, ext, files, owner, nil, nil)
+}
+
+// CheckAfterRemoval is Check against the state after earlier graph layers
+// unplace their stale files. Only regular or already missing paths can vanish:
+// Unplace preserves directories and symlinks. removed never grants ownership.
+func CheckAfterRemoval(l paths.Layout, ext string, files []manifest.File, owner Owner, removed, preserved map[string]bool) error {
 	for _, f := range files {
+		for backup := range preserved {
+			if f.Dst == backup || strings.HasPrefix(f.Dst, backup+"/") || strings.HasPrefix(backup, f.Dst+"/") {
+				e := cerr.New(cerr.ExitGraph, CodeFileUnowned, "%s: путь %s будет занят сохранённым изменённым файлом", ext, f.Dst)
+				e.Details = map[string]any{"ext": ext, "dst": f.Dst}
+				return e
+			}
+		}
 		var other string
 		var ok bool
 		if owner != nil {
@@ -97,7 +112,12 @@ func Check(l paths.Layout, ext string, files []manifest.File, owner Owner) error
 			e.Details = map[string]any{"dst": f.Dst, "owner": other, "ext": ext, "owners": []string{other, ext}}
 			return e
 		}
-		st, err := os.Lstat(onDisk(l, f.Dst))
+		if parent, err := checkParents(l, f.Dst, removed); err != nil {
+			e := cerr.Wrap(err, cerr.ExitState, CodeFileStat, "раскладка files %s: проверка родителя %s для %s", ext, parent, f.Dst)
+			e.Details = map[string]any{"ext": ext, "dst": f.Dst, "parent": parent}
+			return e
+		}
+		st, err := lstatAfterRemoval(l, f.Dst, removed)
 		if ok && err == nil && st.IsDir() {
 			e := cerr.New(cerr.ExitGraph, "conflict.file", "%s: на месте файла %s каталог", ext, f.Dst)
 			e.Details = map[string]any{"ext": ext, "dst": f.Dst, "owners": []string{ext}}
@@ -118,6 +138,89 @@ func Check(l paths.Layout, ext string, files []manifest.File, owner Owner) error
 		}
 	}
 	return nil
+}
+
+// PlanUnplace models the predictable effects of Unplace without writing:
+// regular stale files vanish (modified ones get the first free backup name),
+// while symlinks and directories remain. placed includes this layer's files,
+// which are copied before Unplace, and the files of earlier layers.
+func PlanUnplace(l paths.Layout, recs []state.FileRec, removed, preserved, placed map[string]bool) error {
+	for _, rec := range recs {
+		st, err := lstatAfterRemoval(l, rec.Dst, removed)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "проверка снятия %s", rec.Dst)
+		}
+		if !st.Mode().IsRegular() {
+			continue
+		}
+		data, err := os.ReadFile(onDisk(l, rec.Dst))
+		if err != nil {
+			return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "чтение снимаемого файла %s", rec.Dst)
+		}
+		if digest(data) != rec.SHA256 {
+			backup, err := freeModifiedPath(rec.Dst, func(dst string) error {
+				if plannedPathExists(dst, placed) || plannedPathExists(dst, preserved) {
+					return nil
+				}
+				_, err := lstatAfterRemoval(l, dst, removed)
+				return err
+			})
+			if err != nil {
+				return cerr.Wrap(err, cerr.ExitState, CodeFileStat, "проверка резервной копии %s", rec.Dst)
+			}
+			preserved[backup] = true
+		}
+		removed[rec.Dst] = true
+	}
+	return nil
+}
+
+func plannedPathExists(dst string, files map[string]bool) bool {
+	for file := range files {
+		if file == dst || strings.HasPrefix(file, dst+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func lstatAfterRemoval(l paths.Layout, dst string, removed map[string]bool) (fs.FileInfo, error) {
+	for p := dst; p != "/" && p != "."; p = filepath.Dir(p) {
+		if !removed[p] {
+			continue
+		}
+		st, err := os.Lstat(onDisk(l, p))
+		if errors.Is(err, fs.ErrNotExist) || (err == nil && st.Mode().IsRegular()) {
+			return nil, fs.ErrNotExist
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return os.Lstat(onDisk(l, dst))
+}
+
+// Lstat(dst) returns ENOENT for a missing destination AND for a dangling
+// symlink among its parents. Walk the parents to distinguish them read-only.
+func checkParents(l paths.Layout, dst string, removed map[string]bool) (string, error) {
+	for p := filepath.Dir(dst); p != "/" && p != "."; p = filepath.Dir(p) {
+		st, err := lstatAfterRemoval(l, p, removed)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return p, err
+		}
+		if st.Mode()&fs.ModeSymlink != 0 {
+			if _, err := os.Stat(onDisk(l, p)); err != nil {
+				return p, err
+			}
+		}
+	}
+	return "", nil
 }
 
 func placeOne(l paths.Layout, src *os.Root, f manifest.File) (state.FileRec, error) {
@@ -220,9 +323,13 @@ func unplaceOne(l paths.Layout, r state.FileRec, w *cerr.Warnings) error {
 // freeModifiedName is <p>.cream-modified, or <p>.cream-modified.N with the
 // first free N when earlier copies exist: an older kept copy is never replaced.
 func freeModifiedName(p string) (string, error) {
+	return freeModifiedPath(p, func(dst string) error { _, err := os.Lstat(dst); return err })
+}
+
+func freeModifiedPath(p string, stat func(string) error) (string, error) {
 	name := p + ModifiedSuffix
 	for n := 1; ; n++ {
-		_, err := os.Lstat(name)
+		err := stat(name)
 		if errors.Is(err, fs.ErrNotExist) {
 			return name, nil
 		}

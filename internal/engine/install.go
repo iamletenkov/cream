@@ -320,17 +320,54 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 	for _, in := range all {
 		recs = append(recs, in.Record)
 	}
-	owner := installOwner(recs)
+	// Model only earlier layers: a later owner cannot release a file before
+	// this layer runs. The real registry remains unchanged until execution.
+	planned := slices.Clone(recs)
+	removed := map[string]bool{}
+	preserved := map[string]bool{}
+	placed := map[string]bool{}
 	for _, layer := range layers {
 		if layer.Mode == resolve.ModeNone {
 			continue
 		}
-		if err := checkRecordedFilePaths(layer.Name, byName[layer.Name].Manifest.Files, recs); err != nil {
+		m := byName[layer.Name].Manifest
+		if err := checkRecordedFilePaths(layer.Name, m.Files, planned); err != nil {
 			return nil, err
 		}
-		if err := place.Check(e.L, layer.Name, byName[layer.Name].Manifest.Files, owner); err != nil {
+		if err := place.CheckAfterRemoval(e.L, layer.Name, m.Files, installOwner(planned), removed, preserved); err != nil {
 			return nil, err
 		}
+		p := prev[layer.Name]
+		if ops[layer.Name] == installOpInstall && p != nil && p.Record.Status == state.StatusInstalled && !o.reinstall {
+			scoped, err := installScopeChanged(config.Open(e.L, layer.Name, m.Config), m, stored[layer.Name])
+			if err != nil {
+				return nil, err
+			}
+			if !scoped {
+				// An unchanged install does not unplace stale registry entries.
+				continue
+			}
+		}
+		next := state.Record{Name: layer.Name}
+		for _, f := range m.Files {
+			next.Files = append(next.Files, state.FileRec{Dst: f.Dst})
+			placed[f.Dst] = true
+		}
+		if p != nil {
+			var stale []state.FileRec
+			for _, f := range p.Record.Files {
+				if !slices.ContainsFunc(m.Files, func(n manifest.File) bool { return n.Dst == f.Dst }) {
+					stale = append(stale, f)
+				}
+			}
+			if err := place.PlanUnplace(e.L, stale, removed, preserved, placed); err != nil {
+				return nil, err
+			}
+		}
+		for _, f := range m.Files {
+			delete(removed, f.Dst)
+		}
+		planned = installReplace(planned, next)
 	}
 	if o.dryRun {
 		out := make([]InstallResult, 0, len(layers))
@@ -727,7 +764,10 @@ func checkRecordedFilePaths(ext string, files []manifest.File, recs []state.Reco
 					continue
 				}
 				e := cerr.New(cerr.ExitGraph, place.CodeFileOwner,
-					"расширения %s и %s претендуют на несовместимые пути %s и %s", rec.Name, ext, claimed.Dst, f.Dst)
+					"расширения %s и %s претендуют на путь %s", rec.Name, ext, f.Dst)
+				if claimed.Dst != f.Dst {
+					e.Message = fmt.Sprintf("расширения %s и %s претендуют на несовместимые пути %s и %s", rec.Name, ext, claimed.Dst, f.Dst)
+				}
 				e.Details = map[string]any{"ext": ext, "dst": f.Dst, "owner": rec.Name,
 					"owner_dst": claimed.Dst, "owners": []string{rec.Name, ext}}
 				return e
