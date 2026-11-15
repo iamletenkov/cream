@@ -45,6 +45,8 @@ type InstallRequest struct {
 	// version with another digest, is installed the upgrade way (op downgrade)
 	// instead of 65 version.downgrade / version.same_digest.
 	AllowDowngrade bool
+	// DryRun checks the entire graph and destinations without writing.
+	DryRun bool
 }
 
 // InstallResult is the result of install/upgrade for one extension: the
@@ -57,6 +59,7 @@ type InstallResult struct {
 // installOpts are the flags installEntries needs.
 type installOpts struct {
 	reinstall, acceptRisk, allowSkip, allowDowngrade bool
+	dryRun                                           bool
 }
 
 // Operations of the registry history.
@@ -122,25 +125,17 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 		refs = append(refs, ref)
 	}
 
-	g, err := e.Locks.Global(ctx)
+	// Probe before even creating lock/global. Its warnings are published only
+	// when returning the probe; a real run collects fresh warnings under lock.
+	probe := *e
+	probe.Warn = &cerr.Warnings{}
+	entries, all, dirs, err := probe.installInputs(refs, r.WithDeps)
 	if err != nil {
+		e.installProbeWarnings(probe.Warn)
 		return nil, err
-	}
-	defer g.Release()
-	dirs, err := e.installSourceDirs()
-	if err != nil {
-		return nil, err
-	}
-	entries := make([]catalog.Entry, 0, len(refs))
-	for _, ref := range refs {
-		en, err := catalog.Lookup(dirs, ref, e.Cream, e.Warn)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, en)
 	}
 	var changes map[string][]config.Change
-	if len(entries) == 1 && (len(r.Params.Args) > 0 || r.Params.ParamsFile != "") {
+	if len(refs) == 1 && (len(r.Params.Args) > 0 || r.Params.ParamsFile != "") {
 		m := entries[0].Manifest
 		ch, err := config.ParseAssignments(r.Params, m.Config)
 		if err != nil {
@@ -148,23 +143,75 @@ func (e *Engine) InstallAll(ctx context.Context, r InstallRequest) ([]InstallRes
 		}
 		changes = map[string][]config.Change{m.Name: ch}
 	}
-	all, err := e.Installed()
+	o := installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip,
+		allowDowngrade: r.AllowDowngrade, dryRun: true}
+	out, err := probe.installEntries(ctx, entries, changes, all, dirs, o)
+	if err != nil || r.DryRun {
+		e.installProbeWarnings(probe.Warn)
+		return out, err
+	}
+	g, err := e.Locks.Global(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if r.WithDeps {
-		if entries, err = e.installWithDeps(dirs, entries, all); err != nil {
-			return nil, err
+	defer g.Release()
+	fresh, all, dirs, err := e.installInputs(refs, r.WithDeps)
+	if err != nil {
+		return nil, err
+	}
+	// Parameters (including a secret from stdin) were parsed exactly once.
+	// Refuse a changed source rather than applying them against another schema.
+	if !sameInstallInputs(entries, fresh) {
+		return nil, cerr.New(cerr.ExitLock, "lock.changed", "источники установки изменились во время предпроверки — повторите команду")
+	}
+	o.dryRun = false
+	return e.installEntries(ctx, fresh, changes, all, dirs, o)
+}
+
+func (e *Engine) installProbeWarnings(w *cerr.Warnings) {
+	if e.Warn != nil {
+		for _, warning := range w.List() {
+			e.Warn.AddDetails(warning.Code, warning.Details, "%s", warning.Message)
 		}
 	}
-	drop, err := e.buildGuard()
-	if err != nil {
-		return nil, err
+}
+
+func sameInstallInputs(before, after []catalog.Entry) bool {
+	if len(before) != len(after) {
+		return false
 	}
-	defer drop()
-	return e.installEntries(ctx, entries, changes, all, dirs,
-		installOpts{reinstall: r.Reinstall, acceptRisk: r.AcceptRisk, allowSkip: r.AllowSkip,
-			allowDowngrade: r.AllowDowngrade})
+	for i, en := range before {
+		other := after[i]
+		if en.Manifest.Name != other.Manifest.Name || en.Digest != other.Digest ||
+			installSourceRef(en.Source) != installSourceRef(other.Source) {
+			return false
+		}
+	}
+	return true
+}
+
+// installInputs reads sources and the entire registry without creating files.
+func (e *Engine) installInputs(refs []catalog.Ref, withDeps bool) ([]catalog.Entry, []Installed, []source.SourceDir, error) {
+	dirs, err := e.installSourceDirs()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	entries := make([]catalog.Entry, 0, len(refs))
+	for _, ref := range refs {
+		en, err := catalog.Lookup(dirs, ref, e.Cream, e.Warn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		entries = append(entries, en)
+	}
+	all, err := e.Installed()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if withDeps {
+		entries, err = e.installWithDeps(dirs, entries, all)
+	}
+	return entries, all, dirs, err
 }
 
 // installWithDeps adds to entries the depends (by name, transitively) that
@@ -273,6 +320,69 @@ func (e *Engine) installEntries(ctx context.Context, entries []catalog.Entry, ch
 	for _, in := range all {
 		recs = append(recs, in.Record)
 	}
+	// Model only earlier layers: a later owner cannot release a file before
+	// this layer runs. The real registry remains unchanged until execution.
+	planned := slices.Clone(recs)
+	removed := map[string]bool{}
+	preserved := map[string]bool{}
+	placed := map[string]bool{}
+	for _, layer := range layers {
+		if layer.Mode == resolve.ModeNone {
+			continue
+		}
+		m := byName[layer.Name].Manifest
+		if err := checkRecordedFilePaths(layer.Name, m.Files, planned); err != nil {
+			return nil, err
+		}
+		if err := place.CheckAfterRemoval(e.L, layer.Name, m.Files, installOwner(planned), removed, preserved); err != nil {
+			return nil, err
+		}
+		p := prev[layer.Name]
+		if ops[layer.Name] == installOpInstall && p != nil && p.Record.Status == state.StatusInstalled && !o.reinstall {
+			scoped, err := installScopeChanged(config.Open(e.L, layer.Name, m.Config), m, stored[layer.Name])
+			if err != nil {
+				return nil, err
+			}
+			if !scoped {
+				// An unchanged install does not unplace stale registry entries.
+				continue
+			}
+		}
+		next := state.Record{Name: layer.Name}
+		for _, f := range m.Files {
+			next.Files = append(next.Files, state.FileRec{Dst: f.Dst})
+			placed[f.Dst] = true
+		}
+		if p != nil {
+			var stale []state.FileRec
+			for _, f := range p.Record.Files {
+				if !slices.ContainsFunc(m.Files, func(n manifest.File) bool { return n.Dst == f.Dst }) {
+					stale = append(stale, f)
+				}
+			}
+			place.PlanUnplace(e.L, stale, removed, preserved, placed)
+		}
+		for _, f := range m.Files {
+			delete(removed, f.Dst)
+		}
+		planned = installReplace(planned, next)
+	}
+	if o.dryRun {
+		out := make([]InstallResult, 0, len(layers))
+		for _, layer := range layers {
+			if layer.Mode == resolve.ModeNone {
+				continue
+			}
+			out = append(out, InstallResult{Record: state.Record{Name: layer.Name, Version: layer.Version,
+				Kind: string(byName[layer.Name].Manifest.Kind), Status: "planned", Phase: phase}})
+		}
+		return out, nil
+	}
+	drop, err := e.buildGuard()
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
 	out := make([]InstallResult, 0, len(layers))
 	for _, layer := range layers {
 		if layer.Mode == resolve.ModeNone {
@@ -636,6 +746,33 @@ func installOwner(recs []state.Record) place.Owner {
 		ext, ok := owners[dst]
 		return ext, ok
 	}
+}
+
+// checkRecordedFilePaths also sees records without readable trees, which the
+// dependency graph omits. Overlapping foreign claims block installation, but
+// ownership itself stays exact: owning /a never grants ownership of /a/b.
+func checkRecordedFilePaths(ext string, files []manifest.File, recs []state.Record) error {
+	for _, rec := range recs {
+		if rec.Name == ext {
+			continue
+		}
+		for _, claimed := range rec.Files {
+			for _, f := range files {
+				if claimed.Dst != f.Dst && !strings.HasPrefix(f.Dst, claimed.Dst+"/") && !strings.HasPrefix(claimed.Dst, f.Dst+"/") {
+					continue
+				}
+				e := cerr.New(cerr.ExitGraph, place.CodeFileOwner,
+					"расширения %s и %s претендуют на путь %s", rec.Name, ext, f.Dst)
+				if claimed.Dst != f.Dst {
+					e.Message = fmt.Sprintf("расширения %s и %s претендуют на несовместимые пути %s и %s", rec.Name, ext, claimed.Dst, f.Dst)
+				}
+				e.Details = map[string]any{"ext": ext, "dst": f.Dst, "owner": rec.Name,
+					"owner_dst": claimed.Dst, "owners": []string{rec.Name, ext}}
+				return e
+			}
+		}
+	}
+	return nil
 }
 
 // installUnplaceStale removes files of the previous installation the new
