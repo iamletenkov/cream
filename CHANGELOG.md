@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/iamletenkov/cream/compare/v1.4.0...v1.5.0) (2026-11-15)
+
+
+### Добавлено
+
+* **install:** проверять конфликты файлов всего графа до установки ([6793b0d](https://github.com/iamletenkov/cream/commit/6793b0d67fc830d87603309dfbba87897d0694bc))
+* **install:** проверять файлы всего графа до записи ([106dd2c](https://github.com/iamletenkov/cream/commit/106dd2c662190002e3f5526bb506f7ca9dc3638b))
+
+
+### Исправлено
+
+* **install:** пропускать неопределённые снятия при предпроверке ([ae3433b](https://github.com/iamletenkov/cream/commit/ae3433b69b5aae078a063556155340fc9bc4ed2d))
+* **install:** учитывать передачу файлов между слоями графа ([a6205d4](https://github.com/iamletenkov/cream/commit/a6205d4f4d0f20f3c2c37d239fa4ea7e82b67672))
+
 ## [1.4.0](https://github.com/iamletenkov/cream/compare/v1.3.1...v1.4.0) (2026-10-28)
 
 
